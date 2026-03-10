@@ -1,0 +1,12 @@
+[package]
+name = "kubesim-py"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+kubesim-core = { workspace = true }
+kubesim-engine = { workspace = true }
+pyo3 = { workspace = true }

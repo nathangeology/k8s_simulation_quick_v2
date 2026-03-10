@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kubesim-core",
+    "crates/kubesim-engine",
+    "crates/kubesim-scheduler",
+    "crates/kubesim-ec2",
+    "crates/kubesim-metrics",
+    "crates/kubesim-py",
+    "crates/kubesim-workload",
+    "crates/kubesim-karpenter",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+kubesim-core = { path = "crates/kubesim-core" }
+kubesim-engine = { path = "crates/kubesim-engine" }
+kubesim-scheduler = { path = "crates/kubesim-scheduler" }
+kubesim-ec2 = { path = "crates/kubesim-ec2" }
+kubesim-metrics = { path = "crates/kubesim-metrics" }
+kubesim-workload = { path = "crates/kubesim-workload" }
+kubesim-karpenter = { path = "crates/kubesim-karpenter" }
+kubesim-py = { path = "crates/kubesim-py" }
+
+smallvec = "1"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+thiserror = "2"
+pyo3 = { version = "0.22", features = ["extension-module"] }

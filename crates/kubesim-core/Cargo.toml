@@ -1,0 +1,9 @@
+[package]
+name = "kubesim-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smallvec = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }

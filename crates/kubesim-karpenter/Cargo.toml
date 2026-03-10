@@ -1,0 +1,9 @@
+[package]
+name = "kubesim-karpenter"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kubesim-core = { workspace = true }
+kubesim-ec2 = { workspace = true }
+thiserror = { workspace = true }

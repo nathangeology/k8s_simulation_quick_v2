@@ -1,0 +1,10 @@
+[package]
+name = "kubesim-workload"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+kubesim-core = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
