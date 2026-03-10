@@ -97,7 +97,9 @@ name = "kubesim-metrics"
 version = "0.1.0"
 dependencies = [
  "kubesim-core",
+ "kubesim-engine",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
