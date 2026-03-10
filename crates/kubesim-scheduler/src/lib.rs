@@ -11,8 +11,8 @@
 pub use kubesim_core;
 
 use kubesim_core::{
-    AffinityType, ClusterState, Node, NodeId, Pod, PodAffinityTerm, PodId, Resources, Taint,
-    WhenUnsatisfiable,
+    AffinityType, ClusterState, Node, NodeId, Pod, PodAffinityTerm, PodId, PodPhase, Resources,
+    Taint, WhenUnsatisfiable,
 };
 use std::collections::HashMap;
 
@@ -452,6 +452,138 @@ pub enum ScoringStrategy {
     LeastAllocated,
 }
 
+// ── Preemption ──────────────────────────────────────────────────
+
+/// A preemption candidate: a node and the set of victims to evict.
+#[derive(Debug, Clone)]
+pub struct PreemptionCandidate {
+    pub node_id: NodeId,
+    pub victims: Vec<PodId>,
+    pub num_pdb_violations: u32,
+}
+
+/// Result of a preemption evaluation.
+#[derive(Debug)]
+pub enum PreemptResult {
+    /// Preemption found: evict victims, then bind preemptor to node.
+    Preempt(PreemptionCandidate),
+    /// No viable preemption candidate.
+    NoCandidate,
+}
+
+/// Count PDB violations for a proposed victim set.
+fn count_pdb_violations(state: &ClusterState, victims: &[PodId]) -> u32 {
+    let mut violations = 0u32;
+    for pdb in &state.pdbs {
+        // Count currently matching running pods
+        let total_matching = state.pods.iter()
+            .filter(|(_, p)| p.phase == PodPhase::Running && p.labels.matches(&pdb.selector))
+            .count() as u32;
+        // Count victims matching this PDB
+        let victim_matching = victims.iter()
+            .filter(|vid| state.pods.get(**vid).map_or(false, |p| p.labels.matches(&pdb.selector)))
+            .count() as u32;
+        let remaining = total_matching.saturating_sub(victim_matching);
+        if remaining < pdb.min_available {
+            violations += 1;
+        }
+    }
+    violations
+}
+
+/// Find the minimal victim set on a node: lower-priority pods whose removal
+/// frees enough resources for the preemptor.
+fn find_victims(state: &ClusterState, pod: &Pod, node: &Node, _node_id: NodeId) -> Option<Vec<PodId>> {
+    // Collect lower-priority pods on this node, sorted by priority ascending (evict lowest first)
+    let mut candidates: Vec<(PodId, i32, Resources)> = node.pods.iter()
+        .filter_map(|&pid| {
+            let p = state.pods.get(pid)?;
+            if p.priority < pod.priority {
+                Some((pid, p.priority, p.requests))
+            } else {
+                None
+            }
+        })
+        .collect();
+    candidates.sort_by_key(|&(_, pri, _)| pri);
+
+    let needed = pod.requests;
+    let available = node.allocatable.saturating_sub(&node.allocated);
+    if needed.fits_in(&available) {
+        return Some(vec![]); // Already fits, no victims needed
+    }
+
+    let mut freed = available;
+    let mut victims = Vec::new();
+    for (pid, _, res) in &candidates {
+        victims.push(*pid);
+        freed = freed.saturating_add(res);
+        if needed.fits_in(&freed) {
+            return Some(victims);
+        }
+    }
+    None // Even evicting all lower-priority pods isn't enough
+}
+
+/// Evaluate preemption for a pod across all nodes. Returns the best candidate
+/// minimizing: (1) PDB violations, (2) number of victims, (3) total victim priority.
+fn evaluate_preemption(
+    state: &ClusterState,
+    pod: &Pod,
+    filters: &[Box<dyn FilterPlugin>],
+) -> PreemptResult {
+    let mut best: Option<PreemptionCandidate> = None;
+
+    for (nid, node) in state.nodes.iter() {
+        if !node.conditions.ready {
+            continue;
+        }
+        // Check non-resource filters (skip NodeResourcesFit since preemption changes resources)
+        let mut passes_other_filters = true;
+        for filter in filters {
+            if filter.name() == "NodeResourcesFit" {
+                continue;
+            }
+            if let FilterResult::Reject(_) = filter.filter(state, pod, node) {
+                passes_other_filters = false;
+                break;
+            }
+        }
+        if !passes_other_filters {
+            continue;
+        }
+
+        let victims = match find_victims(state, pod, node, nid) {
+            Some(v) => v,
+            None => continue,
+        };
+
+        let pdb_violations = count_pdb_violations(state, &victims);
+        let num_victims = victims.len() as u32;
+        let total_priority: i64 = victims.iter()
+            .filter_map(|vid| state.pods.get(*vid).map(|p| p.priority as i64))
+            .sum();
+
+        let is_better = match &best {
+            None => true,
+            Some(b) => {
+                let b_total_pri: i64 = b.victims.iter()
+                    .filter_map(|vid| state.pods.get(*vid).map(|p| p.priority as i64))
+                    .sum();
+                (pdb_violations, num_victims, total_priority) < (b.num_pdb_violations, b.victims.len() as u32, b_total_pri)
+            }
+        };
+        if is_better {
+            best = Some(PreemptionCandidate { node_id: nid, victims, num_pdb_violations: pdb_violations });
+        }
+    }
+
+    match best {
+        Some(c) => PreemptResult::Preempt(c),
+        None => PreemptResult::NoCandidate,
+    }
+}
+
 // ── Scheduler ───────────────────────────────────────────────────
 
 /// The result of scheduling a single pod.
@@ -459,6 +591,11 @@ pub enum ScoringStrategy {
 pub enum ScheduleResult {
     /// Pod was bound to this node.
     Bound(NodeId),
+    /// Pod was bound after preempting lower-priority victims.
+    Preempted {
+        node_id: NodeId,
+        victims: Vec<PodId>,
+    },
     /// No feasible node found.
     Unschedulable(Vec<String>),
 }
@@ -502,7 +639,18 @@ impl Scheduler {
         }
 
         if feasible.is_empty() {
-            return ScheduleResult::Unschedulable(reasons);
+            // Attempt preemption
+            match evaluate_preemption(state, pod, &self.profile.filters) {
+                PreemptResult::Preempt(candidate) => {
+                    return ScheduleResult::Preempted {
+                        node_id: candidate.node_id,
+                        victims: candidate.victims,
+                    };
+                }
+                PreemptResult::NoCandidate => {
+                    return ScheduleResult::Unschedulable(reasons);
+                }
+            }
         }
 
         // Score phase
@@ -540,6 +688,13 @@ impl Scheduler {
         for pod_id in queue {
             match self.schedule_one(state, pod_id) {
                 ScheduleResult::Bound(node_id) => {
+                    state.bind_pod(pod_id, node_id);
+                    bound += 1;
+                }
+                ScheduleResult::Preempted { node_id, victims } => {
+                    for vid in &victims {
+                        state.evict_pod(*vid);
+                    }
                     state.bind_pod(pod_id, node_id);
                     bound += 1;
                 }

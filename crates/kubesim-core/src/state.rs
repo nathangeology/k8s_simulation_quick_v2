@@ -9,6 +9,7 @@ pub struct ClusterState {
     pub pods: Arena<Pod>,
     pub time: SimTime,
     pub pending_queue: Vec<PodId>,
+    pub pdbs: Vec<PodDisruptionBudget>,
 }
 
 impl Default for ClusterState {
@@ -24,6 +25,7 @@ impl ClusterState {
             pods: Arena::new(),
             time: SimTime(0),
             pending_queue: Vec::new(),
+            pdbs: Vec::new(),
         }
     }
 
@@ -82,5 +84,26 @@ impl ClusterState {
     /// Available (allocatable - allocated) resources on a node.
     pub fn available_resources(&self, node_id: NodeId) -> Option<Resources> {
         self.nodes.get(node_id).map(|n| n.allocatable.saturating_sub(&n.allocated))
+    }
+
+    /// Evict a running pod: unbind from node, set to Pending, re-add to pending queue.
+    /// Returns true if the pod was evicted.
+    pub fn evict_pod(&mut self, pod_id: PodId) -> bool {
+        let (node_id, requests) = match self.pods.get(pod_id) {
+            Some(p) if p.phase == PodPhase::Running => match p.node {
+                Some(nid) => (nid, p.requests),
+                None => return false,
+            },
+            _ => return false,
+        };
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.allocated = node.allocated.saturating_sub(&requests);
+            node.pods.retain(|id| *id != pod_id);
+        }
+        let pod = self.pods.get_mut(pod_id).unwrap();
+        pod.phase = PodPhase::Pending;
+        pod.node = None;
+        self.pending_queue.push(pod_id);
+        true
     }
 }

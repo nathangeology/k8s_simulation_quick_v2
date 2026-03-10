@@ -216,6 +216,16 @@ pub struct SchedulingConstraints {
     pub topology_spread: Vec<TopologySpreadConstraint>,
 }
 
+// ── Pod Disruption Budget ───────────────────────────────────────
+
+/// A PodDisruptionBudget constraining voluntary evictions for pods matching a selector.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PodDisruptionBudget {
+    pub selector: LabelSelector,
+    /// Minimum number of pods that must remain available.
+    pub min_available: u32,
+}
+
 // ── Node ────────────────────────────────────────────────────────
 
 /// A simulated Kubernetes node.
