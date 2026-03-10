@@ -5,12 +5,12 @@
 //! 2. **Score**: rank remaining nodes, pick the highest
 //!
 //! Built-in plugins:
-//! - Filters: `NodeResourcesFit`, `TaintToleration`
-//! - Scorers: `MostAllocated`, `LeastAllocated`
+//! - Filters: `NodeResourcesFit`, `TaintToleration`, `NodeAffinity`
+//! - Scorers: `MostAllocated`, `LeastAllocated`, `NodeAffinityScore`
 
 pub use kubesim_core;
 
-use kubesim_core::{ClusterState, Node, NodeId, Pod, PodId, Resources, Taint};
+use kubesim_core::{AffinityType, ClusterState, Node, NodeId, Pod, PodId, Resources, Taint};
 
 // ── Plugin traits ───────────────────────────────────────────────
 
@@ -77,6 +77,25 @@ fn is_tolerated(taint: &Taint, tolerations: &[kubesim_core::Toleration]) -> bool
     tolerations.iter().any(|t| t.tolerates(taint))
 }
 
+/// Rejects nodes that don't satisfy required node affinity terms.
+pub struct NodeAffinity;
+
+impl FilterPlugin for NodeAffinity {
+    fn name(&self) -> &str { "NodeAffinity" }
+
+    fn filter(&self, _state: &ClusterState, pod: &Pod, node: &Node) -> FilterResult {
+        for term in &pod.scheduling_constraints.node_affinity {
+            if let AffinityType::Required = term.affinity_type {
+                let all_match = term.match_labels.0.iter().all(|(k, v)| node.labels.get(k) == Some(v.as_str()));
+                if !all_match {
+                    return FilterResult::Reject("node affinity required term not matched".into());
+                }
+            }
+        }
+        FilterResult::Pass
+    }
+}
+
 // ── Built-in scorers ────────────────────────────────────────────
 
 /// Favours nodes with higher utilisation (bin-packing). Score 0–100.
@@ -117,6 +136,29 @@ impl ScorePlugin for LeastAllocated {
     fn weight(&self) -> i64 { self.weight }
 }
 
+/// Scores nodes based on preferred node affinity terms. Each matching preferred
+/// term adds its weight to the score.
+pub struct NodeAffinityScore;
+
+impl ScorePlugin for NodeAffinityScore {
+    fn name(&self) -> &str { "NodeAffinityScore" }
+
+    fn score(&self, _state: &ClusterState, pod: &Pod, node: &Node) -> i64 {
+        let mut total: i64 = 0;
+        for term in &pod.scheduling_constraints.node_affinity {
+            if let AffinityType::Preferred { weight } = term.affinity_type {
+                let all_match = term.match_labels.0.iter().all(|(k, v)| node.labels.get(k) == Some(v.as_str()));
+                if all_match {
+                    total += weight as i64;
+                }
+            }
+        }
+        total
+    }
+
+    fn weight(&self) -> i64 { 1 }
+}
+
 /// Average utilisation percentage across CPU and memory (0–100).
 fn utilisation_score(used: &Resources, capacity: &Resources) -> i64 {
     let cpu_pct = if capacity.cpu_millis > 0 {
@@ -150,8 +192,8 @@ impl SchedulerProfile {
         };
         Self {
             name: name.into(),
-            filters: vec![Box::new(NodeResourcesFit), Box::new(TaintToleration)],
-            scorers: vec![scorer],
+            filters: vec![Box::new(NodeResourcesFit), Box::new(TaintToleration), Box::new(NodeAffinity)],
+            scorers: vec![scorer, Box::new(NodeAffinityScore)],
         }
     }
 }
