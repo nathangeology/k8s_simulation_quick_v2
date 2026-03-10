@@ -5,12 +5,13 @@
 //! 2. **Score**: rank remaining nodes, pick the highest
 //!
 //! Built-in plugins:
-//! - Filters: `NodeResourcesFit`, `TaintToleration`
-//! - Scorers: `MostAllocated`, `LeastAllocated`
+//! - Filters: `NodeResourcesFit`, `TaintToleration`, `PodTopologySpreadFilter`
+//! - Scorers: `MostAllocated`, `LeastAllocated`, `PodTopologySpreadScore`
 
 pub use kubesim_core;
 
-use kubesim_core::{ClusterState, Node, NodeId, Pod, PodId, Resources, Taint};
+use kubesim_core::{ClusterState, Node, NodeId, Pod, PodId, Resources, Taint, WhenUnsatisfiable};
+use std::collections::HashMap;
 
 // ── Plugin traits ───────────────────────────────────────────────
 
@@ -132,6 +133,123 @@ fn utilisation_score(used: &Resources, capacity: &Resources) -> i64 {
     (cpu_pct + mem_pct) / 2
 }
 
+// ── Topology spread helpers ─────────────────────────────────────
+
+/// Count matching pods per topology domain for a given topology key and label selector.
+fn domain_counts(state: &ClusterState, topology_key: &str, selector: &kubesim_core::LabelSelector) -> HashMap<String, i32> {
+    let mut counts: HashMap<String, i32> = HashMap::new();
+    // Ensure every domain that exists in the cluster is represented (even if 0).
+    for (_nid, node) in state.nodes.iter() {
+        if let Some(domain) = node.labels.get(topology_key) {
+            counts.entry(domain.to_string()).or_insert(0);
+        }
+    }
+    // Count matching pods per domain.
+    for (_pid, pod) in state.pods.iter() {
+        if pod.phase != kubesim_core::PodPhase::Running {
+            continue;
+        }
+        if !pod.labels.matches(selector) {
+            continue;
+        }
+        if let Some(node_id) = pod.node {
+            if let Some(node) = state.nodes.get(node_id) {
+                if let Some(domain) = node.labels.get(topology_key) {
+                    *counts.entry(domain.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    counts
+}
+
+// ── PodTopologySpread filter ────────────────────────────────────
+
+/// Rejects nodes that would violate maxSkew for DoNotSchedule constraints.
+pub struct PodTopologySpreadFilter;
+
+impl FilterPlugin for PodTopologySpreadFilter {
+    fn name(&self) -> &str { "PodTopologySpreadFilter" }
+
+    fn filter(&self, state: &ClusterState, pod: &Pod, node: &Node) -> FilterResult {
+        for constraint in &pod.scheduling_constraints.topology_spread {
+            if constraint.when_unsatisfiable != WhenUnsatisfiable::DoNotSchedule {
+                continue;
+            }
+            let domain = match node.labels.get(&constraint.topology_key) {
+                Some(d) => d.to_string(),
+                None => return FilterResult::Reject(format!(
+                    "node missing topology key {}", constraint.topology_key
+                )),
+            };
+            let counts = domain_counts(state, &constraint.topology_key, &constraint.label_selector);
+            let min_count = counts.values().copied().min().unwrap_or(0);
+            let my_count = counts.get(&domain).copied().unwrap_or(0);
+            // After placing the pod, this domain would have my_count + 1.
+            // Skew = (my_count + 1) - min_count. But min might be in another domain.
+            // Worst case: min stays the same (pod goes to a different domain).
+            let new_count = my_count + 1;
+            // The global min after placement: min is unchanged unless this domain WAS the min.
+            let new_min = if my_count == min_count {
+                // This domain was at the min; after +1 it might no longer be.
+                // New min = min of (other domains' counts, my_count + 1)
+                counts.values().copied().map(|c| if c == my_count { new_count.min(c) } else { c }).min().unwrap_or(new_count)
+            } else {
+                min_count
+            };
+            let skew = new_count - new_min;
+            if skew > constraint.max_skew as i32 {
+                return FilterResult::Reject(format!(
+                    "topology {} skew {} exceeds maxSkew {}", constraint.topology_key, skew, constraint.max_skew
+                ));
+            }
+        }
+        FilterResult::Pass
+    }
+}
+
+// ── PodTopologySpread scorer ────────────────────────────────────
+
+/// Prefers nodes that minimize skew for ScheduleAnyway constraints. Score 0–100.
+pub struct PodTopologySpreadScore {
+    pub weight: i64,
+}
+
+impl PodTopologySpreadScore {
+    pub fn new(weight: i64) -> Self { Self { weight } }
+}
+
+impl ScorePlugin for PodTopologySpreadScore {
+    fn name(&self) -> &str { "PodTopologySpreadScore" }
+
+    fn score(&self, state: &ClusterState, pod: &Pod, node: &Node) -> i64 {
+        let mut total_skew: i32 = 0;
+        let mut num_constraints: i32 = 0;
+        for constraint in &pod.scheduling_constraints.topology_spread {
+            if constraint.when_unsatisfiable != WhenUnsatisfiable::ScheduleAnyway {
+                continue;
+            }
+            let domain = match node.labels.get(&constraint.topology_key) {
+                Some(d) => d.to_string(),
+                None => continue,
+            };
+            let counts = domain_counts(state, &constraint.topology_key, &constraint.label_selector);
+            let min_count = counts.values().copied().min().unwrap_or(0);
+            let my_count = counts.get(&domain).copied().unwrap_or(0) + 1;
+            total_skew += (my_count - min_count).max(0);
+            num_constraints += 1;
+        }
+        if num_constraints == 0 {
+            return 0;
+        }
+        // Lower skew = higher score. Cap skew contribution at 100.
+        let avg_skew = total_skew as f64 / num_constraints as f64;
+        (100.0 - avg_skew.min(100.0)) as i64
+    }
+
+    fn weight(&self) -> i64 { self.weight }
+}
+
 // ── Scheduler profile ───────────────────────────────────────────
 
 /// A named scheduler profile with configurable filter and score plugins.
@@ -150,7 +268,7 @@ impl SchedulerProfile {
         };
         Self {
             name: name.into(),
-            filters: vec![Box::new(NodeResourcesFit), Box::new(TaintToleration)],
+            filters: vec![Box::new(NodeResourcesFit), Box::new(TaintToleration), Box::new(PodTopologySpreadFilter)],
             scorers: vec![scorer],
         }
     }
