@@ -5,12 +5,14 @@
 //! 2. **Score**: rank remaining nodes, pick the highest
 //!
 //! Built-in plugins:
-//! - Filters: `NodeResourcesFit`, `TaintToleration`, `NodeAffinity`
-//! - Scorers: `MostAllocated`, `LeastAllocated`, `NodeAffinityScore`
+//! - Filters: `NodeResourcesFit`, `TaintToleration`, `NodeAffinity`, `InterPodAffinity`
+//! - Scorers: `MostAllocated`, `LeastAllocated`, `NodeAffinityScore`, `InterPodAffinity`
 
 pub use kubesim_core;
 
-use kubesim_core::{AffinityType, ClusterState, Node, NodeId, Pod, PodId, Resources, Taint};
+use kubesim_core::{
+    AffinityType, ClusterState, Node, NodeId, Pod, PodAffinityTerm, PodId, Resources, Taint,
+};
 
 // ── Plugin traits ───────────────────────────────────────────────
 
@@ -174,6 +176,155 @@ fn utilisation_score(used: &Resources, capacity: &Resources) -> i64 {
     (cpu_pct + mem_pct) / 2
 }
 
+// ── InterPodAffinity helpers ────────────────────────────────────
+
+/// Returns the topology value for a node given a topology key, if present.
+fn node_topology_value<'a>(node: &'a Node, key: &str) -> Option<&'a str> {
+    node.labels.get(key)
+}
+
+/// Check whether any running pod on nodes sharing the same topology domain
+/// matches the given label selector.
+fn topology_has_matching_pod(
+    state: &ClusterState,
+    topology_key: &str,
+    topology_value: &str,
+    term: &PodAffinityTerm,
+) -> bool {
+    for (_nid, node) in state.nodes.iter() {
+        if node_topology_value(node, topology_key) != Some(topology_value) {
+            continue;
+        }
+        for &pid in &node.pods {
+            if let Some(p) = state.pods.get(pid) {
+                if p.labels.matches(&term.label_selector) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Count matching pods in a topology domain.
+fn count_matching_pods_in_domain(
+    state: &ClusterState,
+    topology_key: &str,
+    topology_value: &str,
+    term: &PodAffinityTerm,
+) -> i64 {
+    let mut count = 0i64;
+    for (_nid, node) in state.nodes.iter() {
+        if node_topology_value(node, topology_key) != Some(topology_value) {
+            continue;
+        }
+        for &pid in &node.pods {
+            if let Some(p) = state.pods.get(pid) {
+                if p.labels.matches(&term.label_selector) {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+// ── InterPodAffinity filter ─────────────────────────────────────
+
+/// Filter: rejects nodes where required pod affinity/anti-affinity is violated.
+///
+/// For required affinity: the candidate node's topology domain must contain
+/// at least one matching pod.
+/// For required anti-affinity: the candidate node's topology domain must NOT
+/// contain any matching pod.
+pub struct InterPodAffinityFilter;
+
+impl FilterPlugin for InterPodAffinityFilter {
+    fn name(&self) -> &str { "InterPodAffinity" }
+
+    fn filter(&self, state: &ClusterState, pod: &Pod, node: &Node) -> FilterResult {
+        for term in &pod.scheduling_constraints.pod_affinity {
+            if !matches!(term.affinity_type, AffinityType::Required) {
+                continue;
+            }
+            let topo_val = match node_topology_value(node, &term.topology_key) {
+                Some(v) => v,
+                None => {
+                    // Node lacks the topology key — cannot satisfy affinity,
+                    // and anti-affinity is vacuously satisfied.
+                    if term.anti {
+                        continue;
+                    } else {
+                        return FilterResult::Reject(format!(
+                            "node missing topology key {}",
+                            term.topology_key
+                        ));
+                    }
+                }
+            };
+            let has_match =
+                topology_has_matching_pod(state, &term.topology_key, topo_val, term);
+            if term.anti && has_match {
+                return FilterResult::Reject(format!(
+                    "anti-affinity violated in topology {}={}",
+                    term.topology_key, topo_val
+                ));
+            }
+            if !term.anti && !has_match {
+                return FilterResult::Reject(format!(
+                    "affinity unsatisfied in topology {}={}",
+                    term.topology_key, topo_val
+                ));
+            }
+        }
+        FilterResult::Pass
+    }
+}
+
+// ── InterPodAffinity scorer ─────────────────────────────────────
+
+/// Score: weighted preference based on matching pod distribution in topology domains.
+///
+/// For preferred affinity: higher score when more matching pods share the domain.
+/// For preferred anti-affinity: higher score when fewer matching pods share the domain.
+pub struct InterPodAffinityScore {
+    pub weight: i64,
+}
+
+impl InterPodAffinityScore {
+    pub fn new(weight: i64) -> Self { Self { weight } }
+}
+
+impl ScorePlugin for InterPodAffinityScore {
+    fn name(&self) -> &str { "InterPodAffinity" }
+
+    fn score(&self, state: &ClusterState, pod: &Pod, node: &Node) -> i64 {
+        let mut total = 0i64;
+        for term in &pod.scheduling_constraints.pod_affinity {
+            let term_weight = match term.affinity_type {
+                AffinityType::Preferred { weight } => weight as i64,
+                AffinityType::Required => continue,
+            };
+            let topo_val = match node_topology_value(node, &term.topology_key) {
+                Some(v) => v,
+                None => continue,
+            };
+            let count =
+                count_matching_pods_in_domain(state, &term.topology_key, topo_val, term);
+            if term.anti {
+                // Fewer matching pods → higher score
+                total -= count * term_weight;
+            } else {
+                // More matching pods → higher score
+                total += count * term_weight;
+            }
+        }
+        total
+    }
+
+    fn weight(&self) -> i64 { self.weight }
+}
+
 // ── Scheduler profile ───────────────────────────────────────────
 
 /// A named scheduler profile with configurable filter and score plugins.
@@ -192,8 +343,13 @@ impl SchedulerProfile {
         };
         Self {
             name: name.into(),
-            filters: vec![Box::new(NodeResourcesFit), Box::new(TaintToleration), Box::new(NodeAffinity)],
-            scorers: vec![scorer, Box::new(NodeAffinityScore)],
+            filters: vec![
+                Box::new(NodeResourcesFit),
+                Box::new(TaintToleration),
+                Box::new(NodeAffinity),
+                Box::new(InterPodAffinityFilter),
+            ],
+            scorers: vec![scorer, Box::new(NodeAffinityScore), Box::new(InterPodAffinityScore::new(1))],
         }
     }
 }
