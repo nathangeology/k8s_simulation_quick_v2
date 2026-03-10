@@ -114,6 +114,7 @@ name = "kubesim-scheduler"
 version = "0.1.0"
 dependencies = [
  "kubesim-core",
+ "smallvec",
  "thiserror",
 ]
 
