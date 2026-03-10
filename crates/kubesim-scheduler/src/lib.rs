@@ -5,14 +5,16 @@
 //! 2. **Score**: rank remaining nodes, pick the highest
 //!
 //! Built-in plugins:
-//! - Filters: `NodeResourcesFit`, `TaintToleration`, `NodeAffinity`, `InterPodAffinity`
-//! - Scorers: `MostAllocated`, `LeastAllocated`, `NodeAffinityScore`, `InterPodAffinity`
+//! - Filters: `NodeResourcesFit`, `TaintToleration`, `NodeAffinity`, `InterPodAffinity`, `PodTopologySpreadFilter`
+//! - Scorers: `MostAllocated`, `LeastAllocated`, `NodeAffinityScore`, `InterPodAffinity`, `PodTopologySpreadScore`
 
 pub use kubesim_core;
 
 use kubesim_core::{
     AffinityType, ClusterState, Node, NodeId, Pod, PodAffinityTerm, PodId, Resources, Taint,
+    WhenUnsatisfiable,
 };
+use std::collections::HashMap;
 
 // ── Plugin traits ───────────────────────────────────────────────
 
@@ -325,6 +327,94 @@ impl ScorePlugin for InterPodAffinityScore {
     fn weight(&self) -> i64 { self.weight }
 }
 
+
+// ── Topology spread helpers ─────────────────────────────────────
+
+/// Count matching pods per topology domain for a given topology key and label selector.
+fn domain_counts(state: &ClusterState, topology_key: &str, selector: &kubesim_core::LabelSelector) -> HashMap<String, i32> {
+    let mut counts: HashMap<String, i32> = HashMap::new();
+    for (_nid, node) in state.nodes.iter() {
+        if let Some(domain) = node.labels.get(topology_key) {
+            counts.entry(domain.to_string()).or_insert(0);
+        }
+    }
+    for (_pid, pod) in state.pods.iter() {
+        if pod.phase != kubesim_core::PodPhase::Running { continue; }
+        if !pod.labels.matches(selector) { continue; }
+        if let Some(node_id) = pod.node {
+            if let Some(node) = state.nodes.get(node_id) {
+                if let Some(domain) = node.labels.get(topology_key) {
+                    *counts.entry(domain.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    counts
+}
+
+// ── PodTopologySpread filter ────────────────────────────────────
+
+pub struct PodTopologySpreadFilter;
+
+impl FilterPlugin for PodTopologySpreadFilter {
+    fn name(&self) -> &str { "PodTopologySpreadFilter" }
+
+    fn filter(&self, state: &ClusterState, pod: &Pod, node: &Node) -> FilterResult {
+        for constraint in &pod.scheduling_constraints.topology_spread {
+            if constraint.when_unsatisfiable != WhenUnsatisfiable::DoNotSchedule { continue; }
+            let domain = match node.labels.get(&constraint.topology_key) {
+                Some(d) => d.to_string(),
+                None => return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key)),
+            };
+            let counts = domain_counts(state, &constraint.topology_key, &constraint.label_selector);
+            let min_count = counts.values().copied().min().unwrap_or(0);
+            let my_count = counts.get(&domain).copied().unwrap_or(0);
+            let new_count = my_count + 1;
+            let new_min = if my_count == min_count {
+                counts.values().copied().map(|c| if c == my_count { new_count.min(c) } else { c }).min().unwrap_or(new_count)
+            } else { min_count };
+            let skew = new_count - new_min;
+            if skew > constraint.max_skew as i32 {
+                return FilterResult::Reject(format!("topology {} skew {} exceeds maxSkew {}", constraint.topology_key, skew, constraint.max_skew));
+            }
+        }
+        FilterResult::Pass
+    }
+}
+
+// ── PodTopologySpread scorer ────────────────────────────────────
+
+pub struct PodTopologySpreadScore { pub weight: i64 }
+
+impl PodTopologySpreadScore {
+    pub fn new(weight: i64) -> Self { Self { weight } }
+}
+
+impl ScorePlugin for PodTopologySpreadScore {
+    fn name(&self) -> &str { "PodTopologySpreadScore" }
+
+    fn score(&self, state: &ClusterState, pod: &Pod, node: &Node) -> i64 {
+        let mut total_skew: i32 = 0;
+        let mut num_constraints: i32 = 0;
+        for constraint in &pod.scheduling_constraints.topology_spread {
+            if constraint.when_unsatisfiable != WhenUnsatisfiable::ScheduleAnyway { continue; }
+            let domain = match node.labels.get(&constraint.topology_key) {
+                Some(d) => d.to_string(),
+                None => continue,
+            };
+            let counts = domain_counts(state, &constraint.topology_key, &constraint.label_selector);
+            let min_count = counts.values().copied().min().unwrap_or(0);
+            let my_count = counts.get(&domain).copied().unwrap_or(0) + 1;
+            total_skew += (my_count - min_count).max(0);
+            num_constraints += 1;
+        }
+        if num_constraints == 0 { return 0; }
+        let avg_skew = total_skew as f64 / num_constraints as f64;
+        (100.0 - avg_skew.min(100.0)) as i64
+    }
+
+    fn weight(&self) -> i64 { self.weight }
+}
 // ── Scheduler profile ───────────────────────────────────────────
 
 /// A named scheduler profile with configurable filter and score plugins.
@@ -348,8 +438,9 @@ impl SchedulerProfile {
                 Box::new(TaintToleration),
                 Box::new(NodeAffinity),
                 Box::new(InterPodAffinityFilter),
+                Box::new(PodTopologySpreadFilter),
             ],
-            scorers: vec![scorer, Box::new(NodeAffinityScore), Box::new(InterPodAffinityScore::new(1))],
+            scorers: vec![scorer, Box::new(NodeAffinityScore), Box::new(InterPodAffinityScore::new(1)), Box::new(PodTopologySpreadScore::new(1))],
         }
     }
 }
