@@ -6,7 +6,7 @@
 //!
 //! Built-in plugins:
 //! - Filters: `NodeResourcesFit`, `TaintToleration`, `NodeAffinity`, `InterPodAffinity`, `PodTopologySpreadFilter`
-//! - Scorers: `MostAllocated`, `LeastAllocated`, `NodeAffinityScore`, `InterPodAffinity`, `PodTopologySpreadScore`
+//! - Scorers: `MostAllocated`, `LeastAllocated`, `BalancedAllocation`, `NodeAffinityScore`, `InterPodAffinity`, `PodTopologySpreadScore`
 
 pub use kubesim_core;
 
@@ -161,6 +161,35 @@ impl ScorePlugin for NodeAffinityScore {
     }
 
     fn weight(&self) -> i64 { 1 }
+}
+
+/// Penalises nodes with imbalanced CPU vs memory utilisation.
+/// Score 0–100: 100 = perfectly balanced, 0 = maximally imbalanced.
+/// Mirrors upstream `BalancedAllocation` from `noderesources/balanced_allocation.go`.
+pub struct BalancedAllocation {
+    pub weight: i64,
+}
+
+impl BalancedAllocation {
+    pub fn new(weight: i64) -> Self { Self { weight } }
+}
+
+impl ScorePlugin for BalancedAllocation {
+    fn name(&self) -> &str { "BalancedAllocation" }
+
+    fn score(&self, _state: &ClusterState, pod: &Pod, node: &Node) -> i64 {
+        let used = node.allocated.saturating_add(&pod.requests);
+        let cpu_frac = if node.allocatable.cpu_millis > 0 {
+            used.cpu_millis as f64 / node.allocatable.cpu_millis as f64
+        } else { 0.0 };
+        let mem_frac = if node.allocatable.memory_bytes > 0 {
+            used.memory_bytes as f64 / node.allocatable.memory_bytes as f64
+        } else { 0.0 };
+        let diff = (cpu_frac - mem_frac).abs();
+        ((1.0 - diff) * 100.0).max(0.0) as i64
+    }
+
+    fn weight(&self) -> i64 { self.weight }
 }
 
 /// Average utilisation percentage across CPU and memory (0–100).
@@ -440,7 +469,7 @@ impl SchedulerProfile {
                 Box::new(InterPodAffinityFilter),
                 Box::new(PodTopologySpreadFilter),
             ],
-            scorers: vec![scorer, Box::new(NodeAffinityScore), Box::new(InterPodAffinityScore::new(1)), Box::new(PodTopologySpreadScore::new(1))],
+            scorers: vec![scorer, Box::new(BalancedAllocation::new(1)), Box::new(NodeAffinityScore), Box::new(InterPodAffinityScore::new(1)), Box::new(PodTopologySpreadScore::new(1))],
         }
     }
 }
