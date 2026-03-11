@@ -1,97 +1,18 @@
 study:
-  name: q0allkmwpeiiy
-  runs: 4811
-  time_mode: wall_clock
+  name: '000'
+  runs: 1
+  time_mode: logical
   cluster:
     node_pools:
     - instance_types:
-      - r5.large
-      - c5.large
-      - m5.large
-      - p3.2xlarge
-      min_nodes: 9
-      max_nodes: 43
-    - instance_types:
-      - p3.2xlarge
-      - m5.2xlarge
-      - c5.2xlarge
-      - c6i.large
-      - m6i.xlarge
-      - g4dn.xlarge
-      min_nodes: 7
-      max_nodes: 129
-      karpenter:
-        consolidation:
-          policy: WhenUnderutilized
-    - instance_types:
-      - r5.large
-      - c5.2xlarge
-      min_nodes: 9
-      max_nodes: 76
+      - m5.xlarge
+      min_nodes: 1
+      max_nodes: 11
   workloads:
   - type: web_app
-    count: 10
+    count: 1
     replicas:
-      min: 6
-      max: 42
-    churn: low
-    traffic: diurnal
-    memory_request:
-      dist: uniform
-      min: 4096Mi
-      max: 4097Mi
-    scaling:
-      type: hpa
-      metric: cpu
-      target: 70%
-  - type: ml_training
-    count: 9
-    replicas:
-      fixed: 1
-    priority: high
-    duration:
-      dist: exponential
-      mean: 193m
-    cpu_request:
-      dist: normal
-      mean: 6647m
-      std: 785m
-  - type: web_app
-    count: 14
-    replicas:
-      min: 6
+      min: 2
       max: 11
     churn: low
     traffic: diurnal
-    cpu_request:
-      dist: normal
-      mean: 100m
-      std: 1843m
-    pdb:
-      min_available: 25%
-  - type: web_app
-    count: 14
-    replicas:
-      min: 6
-      max: 11
-    churn: low
-    traffic: diurnal
-    cpu_request:
-      dist: normal
-      mean: 100m
-      std: 1843m
-    pdb:
-      min_available: 25%
-  - type: web_app
-    count: 14
-    replicas:
-      min: 6
-      max: 11
-    churn: low
-    traffic: diurnal
-    cpu_request:
-      dist: normal
-      mean: 100m
-      std: 1843m
-    pdb:
-      min_available: 25%
