@@ -8,14 +8,17 @@ import sys
 def main() -> int:
     if len(sys.argv) < 2:
         print("Usage: kubesim <command> [args...]")
-        print("Commands: translate, run, train")
+        print("Commands: translate, validate-kwok, run, train")
         return 1
 
     cmd = sys.argv[1]
 
     if cmd == "translate":
-        from kubesim.validation.cli import main as translate_main
+        from kubesim.validation.cli import translate_main
         return translate_main(sys.argv[2:])
+    elif cmd == "validate-kwok":
+        from kubesim.validation.cli import validate_kwok_main
+        return validate_kwok_main(sys.argv[2:])
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         return 1
