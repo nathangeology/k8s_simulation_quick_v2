@@ -4,9 +4,12 @@
 //! - **WhenEmpty**: nodes with zero running pods are terminated immediately.
 //! - **WhenUnderutilized**: nodes whose pods can all fit on other existing nodes
 //!   are cordoned, drained, and terminated.
+//! - **Replace** (v1.x): nodes whose pods don't fit elsewhere but could run on a
+//!   cheaper instance type are replaced.
 
 use kubesim_core::*;
-use kubesim_engine::{Event, EventHandler, ScheduledEvent};
+use kubesim_ec2::Catalog;
+use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
 
 use crate::nodepool::NodePool;
 use crate::version::{ConsolidationStrategy, VersionProfile};
@@ -133,6 +136,83 @@ fn find_underutilized_nodes(state: &ClusterState) -> Vec<ConsolidationAction> {
     actions
 }
 
+/// Find nodes that can't be deleted (pods don't fit elsewhere) but could be
+/// replaced with a cheaper instance type from the EC2 catalog.
+///
+/// For each candidate node (ready, not cordoned, has pods), if `pods_can_reschedule`
+/// fails, check whether a cheaper instance type exists that fits all the node's pods.
+fn find_replace_candidates(
+    state: &ClusterState,
+    catalog: &Catalog,
+    pool: &NodePool,
+) -> Vec<ConsolidationAction> {
+    let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
+        catalog.all().iter().collect()
+    } else {
+        pool.instance_types.iter()
+            .filter_map(|name| catalog.get(name))
+            .collect()
+    };
+
+    let mut actions = Vec::new();
+
+    let mut candidates: Vec<(NodeId, &Node)> = state
+        .nodes
+        .iter()
+        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
+        .collect();
+    candidates.sort_by(|a, b| b.1.cost_per_hour.partial_cmp(&a.1.cost_per_hour).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (nid, node) in candidates {
+        // Skip if pods can already be rescheduled (delete path handles these)
+        if pods_can_reschedule(state, nid).is_some() {
+            continue;
+        }
+
+        // Compute total resource demand of pods on this node
+        let mut total_cpu: u64 = 0;
+        let mut total_mem: u64 = 0;
+        let mut total_gpu: u32 = 0;
+        let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
+        for &pid in &pod_ids {
+            if let Some(p) = state.pods.get(pid) {
+                total_cpu += p.requests.cpu_millis;
+                total_mem += p.requests.memory_bytes;
+                total_gpu = total_gpu.max(p.requests.gpu);
+            }
+        }
+
+        // Find cheapest instance type that fits all pods and is cheaper than current node
+        let current_cost = node.cost_per_hour;
+        let mut best: Option<(&kubesim_ec2::InstanceType, f64)> = None;
+
+        for it in &allowed {
+            let it_cpu = (it.vcpu as u64) * 1000;
+            let it_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+            if it_cpu < total_cpu || it_mem < total_mem || it.gpu_count < total_gpu {
+                continue;
+            }
+            let price = it.on_demand_price_per_hour;
+            if price >= current_cost {
+                continue;
+            }
+            if best.as_ref().map_or(true, |(_, bp)| price < *bp) {
+                best = Some((it, price));
+            }
+        }
+
+        if let Some((it, _)) = best {
+            actions.push(ConsolidationAction::Replace {
+                node_id: nid,
+                pod_ids,
+                replacement_instance_type: it.instance_type.clone(),
+            });
+        }
+    }
+
+    actions
+}
+
 /// Run one consolidation evaluation, returning actions to take.
 /// Respects the disruption budget: at most `max_disrupted` nodes may be
 /// disrupted in a single pass.
@@ -141,20 +221,26 @@ pub fn evaluate(
     policy: ConsolidationPolicy,
     max_disrupted: u32,
 ) -> Vec<ConsolidationAction> {
-    evaluate_versioned(state, policy, max_disrupted, None)
+    evaluate_versioned(state, policy, max_disrupted, None, None)
 }
 
 /// Version-aware consolidation evaluation.
 /// When `profile` is `None`, uses v1.x default behavior.
+/// When `catalog` is provided and replace_consolidation is enabled, evaluates
+/// the replace path for nodes that can't be consolidated by deletion.
 pub fn evaluate_versioned(
     state: &ClusterState,
     policy: ConsolidationPolicy,
     max_disrupted: u32,
     profile: Option<&VersionProfile>,
+    catalog: Option<(&Catalog, &NodePool)>,
 ) -> Vec<ConsolidationAction> {
     let strategy = profile
         .map(|p| p.consolidation_strategy)
         .unwrap_or(ConsolidationStrategy::MultiNode);
+    let replace_enabled = profile
+        .map(|p| p.replace_consolidation)
+        .unwrap_or(true);
 
     let mut actions: Vec<ConsolidationAction> = Vec::new();
     let mut budget = max_disrupted;
@@ -169,21 +255,20 @@ pub fn evaluate_versioned(
     }
 
     if policy == ConsolidationPolicy::WhenUnderutilized && budget > 0 {
-        match strategy {
-            ConsolidationStrategy::SingleNode => {
-                // v0.35: only delete nodes whose pods fit elsewhere (no replacement)
-                for action in find_underutilized_nodes(state) {
-                    if budget == 0 {
-                        break;
-                    }
-                    actions.push(action);
-                    budget -= 1;
-                }
+        // Delete path: nodes whose pods fit on existing nodes
+        for action in find_underutilized_nodes(state) {
+            if budget == 0 {
+                break;
             }
-            ConsolidationStrategy::MultiNode => {
-                // v1.x: same single-node delete, plus future multi-node replacement
-                // (multi-node replacement is a stub — full implementation is future work)
-                for action in find_underutilized_nodes(state) {
+            actions.push(action);
+            budget -= 1;
+        }
+
+        // Replace path (v1.x only): nodes that can't be deleted but can be
+        // swapped for a cheaper instance type
+        if budget > 0 && replace_enabled && strategy == ConsolidationStrategy::MultiNode {
+            if let Some((cat, pool)) = catalog {
+                for action in find_replace_candidates(state, cat, pool) {
                     if budget == 0 {
                         break;
                     }
@@ -213,6 +298,8 @@ pub struct ConsolidationHandler {
     pub loop_interval_ns: u64,
     /// Version profile controlling consolidation strategy.
     pub version_profile: Option<VersionProfile>,
+    /// EC2 catalog for replace-path instance selection.
+    pub catalog: Option<Catalog>,
 }
 
 impl ConsolidationHandler {
@@ -222,12 +309,19 @@ impl ConsolidationHandler {
             policy,
             loop_interval_ns: 30_000_000_000, // 30s default
             version_profile: None,
+            catalog: None,
         }
     }
 
     /// Create a handler with a specific Karpenter version profile.
     pub fn with_version(mut self, profile: VersionProfile) -> Self {
         self.version_profile = Some(profile);
+        self
+    }
+
+    /// Attach an EC2 catalog for consolidation replace-path evaluation.
+    pub fn with_catalog(mut self, catalog: Catalog) -> Self {
+        self.catalog = Some(catalog);
         self
     }
 }
@@ -245,7 +339,8 @@ impl EventHandler for ConsolidationHandler {
 
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref());
+        let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref);
         let mut follow_ups = Vec::new();
 
         for action in actions {
@@ -309,7 +404,7 @@ impl EventHandler for ConsolidationHandler {
                     // Launch cheaper replacement
                     follow_ups.push(ScheduledEvent {
                         time: SimTime(time.0 + 4),
-                        event: Event::NodeLaunching(kubesim_engine::NodeSpec {
+                        event: Event::NodeLaunching(NodeSpec {
                             instance_type: replacement_instance_type,
                         }),
                     });
