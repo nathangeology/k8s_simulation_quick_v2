@@ -122,6 +122,11 @@ name = "kubesim-engine"
 version = "0.1.0"
 dependencies = [
  "kubesim-core",
+ "kubesim-ec2",
+ "kubesim-karpenter",
+ "kubesim-metrics",
+ "kubesim-scheduler",
+ "smallvec",
  "thiserror",
 ]
 
