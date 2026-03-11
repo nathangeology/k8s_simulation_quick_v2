@@ -8,7 +8,7 @@ import sys
 def main() -> int:
     if len(sys.argv) < 2:
         print("Usage: kubesim <command> [args...]")
-        print("Commands: translate, validate-kwok, validate-eks, compare, run, train")
+        print("Commands: translate, validate-kwok, validate-eks, compare, run, train, run-adversarial")
         return 1
 
     cmd = sys.argv[1]
@@ -25,6 +25,9 @@ def main() -> int:
     elif cmd == "compare":
         from kubesim.validation.cli import compare_main
         return compare_main(sys.argv[2:])
+    elif cmd == "run-adversarial":
+        from kubesim.run_adversarial import main as adv_main
+        return adv_main(sys.argv[2:])
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         return 1
