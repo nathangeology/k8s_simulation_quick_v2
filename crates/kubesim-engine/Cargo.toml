@@ -6,3 +6,10 @@ edition.workspace = true
 [dependencies]
 kubesim-core = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+kubesim-scheduler = { workspace = true }
+kubesim-karpenter = { workspace = true }
+kubesim-ec2 = { workspace = true }
+kubesim-metrics = { workspace = true }
+smallvec = { workspace = true }
