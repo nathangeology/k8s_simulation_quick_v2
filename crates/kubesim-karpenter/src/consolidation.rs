@@ -406,6 +406,8 @@ impl EventHandler for ConsolidationHandler {
                         time: SimTime(time.0 + 4),
                         event: Event::NodeLaunching(NodeSpec {
                             instance_type: replacement_instance_type,
+                            labels: kubesim_core::LabelSet(self.pool.labels.clone()),
+                            taints: self.pool.taints.clone(),
                         }),
                     });
                 }
