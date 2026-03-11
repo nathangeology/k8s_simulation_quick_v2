@@ -66,6 +66,7 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
         taints: Default::default(),
         cost_per_hour: cost,
         lifecycle: NodeLifecycle::OnDemand,
+        cordoned: false,
     }
 }
 

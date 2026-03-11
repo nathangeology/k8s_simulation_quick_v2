@@ -240,6 +240,8 @@ pub struct Node {
     pub taints: SmallVec<[Taint; 4]>,
     pub cost_per_hour: f64,
     pub lifecycle: NodeLifecycle,
+    /// Whether the node is cordoned (unschedulable).
+    pub cordoned: bool,
 }
 
 // ── Pod ─────────────────────────────────────────────────────────
