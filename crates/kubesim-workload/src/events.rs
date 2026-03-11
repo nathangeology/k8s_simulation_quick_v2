@@ -39,6 +39,10 @@ pub enum Event {
     KarpenterConsolidationLoop {
         time: SimTime,
     },
+    /// Spot interruption check tick (independent of provisioning loop).
+    SpotInterruptionCheck {
+        time: SimTime,
+    },
     /// Traffic level change (for traffic-pattern-driven workloads).
     TrafficChange {
         time: SimTime,
@@ -68,6 +72,7 @@ impl Event {
             | Event::HpaEvaluation { time, .. }
             | Event::KarpenterProvisioningLoop { time }
             | Event::KarpenterConsolidationLoop { time }
+            | Event::SpotInterruptionCheck { time }
             | Event::TrafficChange { time, .. }
             | Event::MetricsSnapshot { time } => *time,
             Event::ConfigureScheduler { .. } | Event::ConfigureDeletionCost { .. } => SimTime(0),

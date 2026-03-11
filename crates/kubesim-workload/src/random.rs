@@ -137,6 +137,7 @@ pub fn generate_random_scenario(config: &RandomScenarioConfig) -> Vec<Event> {
     // Karpenter loops
     events.push(Event::KarpenterProvisioningLoop { time: SimTime(0) });
     events.push(Event::KarpenterConsolidationLoop { time: SimTime(0) });
+    events.push(Event::SpotInterruptionCheck { time: SimTime(0) });
 
     // Metrics snapshot
     events.push(Event::MetricsSnapshot { time: SimTime(60_000_000_000) });

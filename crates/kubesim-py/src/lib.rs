@@ -177,6 +177,9 @@ fn run_single(
             WorkloadEvent::KarpenterConsolidationLoop { time } => {
                 engine.schedule(*time, EngineEvent::KarpenterConsolidationLoop);
             }
+            WorkloadEvent::SpotInterruptionCheck { time } => {
+                engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
+            }
             _ => {}
         }
     }
@@ -576,6 +579,9 @@ impl StepSimulation {
                 }
                 WorkloadEvent::KarpenterConsolidationLoop { time } => {
                     engine.schedule(*time, EngineEvent::KarpenterConsolidationLoop);
+                }
+                WorkloadEvent::SpotInterruptionCheck { time } => {
+                    engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
                 }
                 _ => {}
             }
