@@ -13,6 +13,7 @@ kubesim-scheduler = { workspace = true }
 kubesim-workload = { workspace = true }
 kubesim-metrics = { workspace = true }
 kubesim-ec2 = { workspace = true }
+kubesim-karpenter = { workspace = true }
 pyo3 = { workspace = true }
 rayon = { workspace = true }
 serde_json = { workspace = true }
