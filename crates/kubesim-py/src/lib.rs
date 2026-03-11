@@ -6,10 +6,10 @@ use rayon::prelude::*;
 
 use kubesim_core::{
     ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeLifecycle, OwnerId, Pod, PodPhase,
-    QoSClass, Resources, SchedulingConstraints, SimTime,
+    PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime,
 };
 use kubesim_ec2::Catalog;
-use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, TimeMode};
+use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
 use kubesim_metrics::{MetricsCollector, MetricsConfig as RustMetricsConfig};
 use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
 use kubesim_workload::{
@@ -181,6 +181,24 @@ fn run_single(
             WorkloadEvent::SpotInterruptionCheck { time } => {
                 engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
             }
+            WorkloadEvent::ReplicaSetSubmitted {
+                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy,
+            } => {
+                let owner = OwnerId(*owner_id);
+                state.add_replica_set(ReplicaSet {
+                    owner_id: owner,
+                    desired_replicas: *desired_replicas,
+                    pod_template: PodTemplate {
+                        requests: *requests,
+                        limits: *limits,
+                        priority: *priority,
+                        labels: LabelSet::default(),
+                        scheduling_constraints: SchedulingConstraints::default(),
+                    },
+                    deletion_cost_strategy: *deletion_cost_strategy,
+                });
+                engine.schedule(*time, EngineEvent::ReplicaSetReconcile(owner));
+            }
             _ => {}
         }
     }
@@ -190,6 +208,7 @@ fn run_single(
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
     };
     engine.add_handler(Box::new(handler));
+    engine.add_handler(Box::new(ReplicaSetController));
 
     // Wire DeletionCostController if variant specifies a strategy
     if let Some(strategy) = variant.and_then(|v| v.deletion_cost_strategy) {
@@ -592,6 +611,24 @@ impl StepSimulation {
                 WorkloadEvent::SpotInterruptionCheck { time } => {
                     engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
                 }
+                WorkloadEvent::ReplicaSetSubmitted {
+                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy,
+                } => {
+                    let owner = OwnerId(*owner_id);
+                    state.add_replica_set(ReplicaSet {
+                        owner_id: owner,
+                        desired_replicas: *desired_replicas,
+                        pod_template: PodTemplate {
+                            requests: *requests,
+                            limits: *limits,
+                            priority: *priority,
+                            labels: LabelSet::default(),
+                            scheduling_constraints: SchedulingConstraints::default(),
+                        },
+                        deletion_cost_strategy: *deletion_cost_strategy,
+                    });
+                    engine.schedule(*time, EngineEvent::ReplicaSetReconcile(owner));
+                }
                 _ => {}
             }
         }
@@ -604,6 +641,7 @@ impl StepSimulation {
             metrics: MetricsCollector::new(RustMetricsConfig::default()),
         };
         engine.add_handler(Box::new(handler));
+        engine.add_handler(Box::new(ReplicaSetController));
 
         self.engine = Some(engine);
         self.state = Some(state);
