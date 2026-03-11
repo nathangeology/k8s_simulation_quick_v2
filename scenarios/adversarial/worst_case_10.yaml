@@ -1,0 +1,155 @@
+study:
+  name: v5bfsxv-
+  runs: 7274
+  time_mode: wall_clock
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.large
+      min_nodes: 3
+      max_nodes: 27
+    - instance_types:
+      - m5.4xlarge
+      - m5.xlarge
+      - c5.4xlarge
+      min_nodes: 1
+      max_nodes: 12
+    - instance_types:
+      - c5.2xlarge
+      min_nodes: 10
+      max_nodes: 118
+      karpenter:
+        consolidation:
+          policy: WhenUnderutilized
+  workloads:
+  - type: ml_training
+    count: 3
+    replicas:
+      fixed: 1
+    priority: high
+    gpu_request:
+      dist: choice
+      values:
+      - 1
+      - 2
+      - 4
+      - 8
+  - type: batch_job
+    count: 5
+    priority: low
+    duration:
+      dist: lognormal
+      mean: 1h
+      std: 6h
+    memory_request:
+      dist: normal
+      mean: 21420Mi
+      std: 4932Mi
+    cpu_request:
+      dist: uniform
+      min: 200m
+      max: 32000m
+  - type: ml_training
+    count: 3
+    replicas:
+      fixed: 1
+    priority: high
+    memory_request:
+      dist: normal
+      mean: 17371Mi
+      std: 7296Mi
+    gpu_request:
+      dist: choice
+      values:
+      - 1
+      - 2
+      - 4
+      - 8
+  - type: web_app
+    count: 6
+    replicas:
+      min: 10
+      max: 34
+    churn: low
+    traffic: diurnal
+  - type: web_app
+    count: 15
+    replicas:
+      min: 7
+      max: 49
+    churn: low
+    traffic: diurnal
+    cpu_request:
+      dist: normal
+      mean: 835m
+      std: 735m
+    topology_spread:
+      max_skew: 3
+      topology_key: kubernetes.io/hostname
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+    pdb:
+      min_available: '2'
+    memory_request:
+      dist: normal
+      mean: 10051Mi
+      std: 385Mi
+  - type: saas_microservice
+    count: 10
+    replicas:
+      min: 8
+      max: 23
+    churn: low
+    pdb:
+      min_available: 25%
+    topology_spread:
+      max_skew: 1
+      topology_key: topology.kubernetes.io/zone
+    cpu_request:
+      dist: uniform
+      min: 50m
+      max: 16339m
+  - type: web_app
+    count: 7
+    replicas:
+      min: 9
+      max: 40
+    churn: low
+    traffic: diurnal
+    pdb:
+      min_available: 80%
+    topology_spread:
+      max_skew: 4
+      topology_key: topology.kubernetes.io/zone
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+    memory_request:
+      dist: uniform
+      min: 871Mi
+      max: 92233Mi
+    cpu_request:
+      dist: uniform
+      min: 1035m
+      max: 22539m
+  - type: web_app
+    count: 15
+    replicas:
+      min: 4
+      max: 13
+    churn: low
+    traffic: diurnal
+  variants:
+  - name: most_allocated
+    scheduler:
+      scoring: MostAllocated
+      weight: 1
+  - name: least_allocated
+    scheduler:
+      scoring: LeastAllocated
+      weight: 1
+  metrics:
+    compare: []

@@ -6,4 +6,5 @@
 __pycache__/
 target/
 .venv/
-target/
+*.so
+.hypothesis/

@@ -1,0 +1,125 @@
+study:
+  name: keb6azgv7rr66
+  runs: 5331
+  time_mode: wall_clock
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.4xlarge
+      - m6i.2xlarge
+      min_nodes: 1
+      max_nodes: 150
+      karpenter:
+        consolidation:
+          policy: WhenEmpty
+    - instance_types:
+      - m5.4xlarge
+      - m6i.2xlarge
+      min_nodes: 9
+      max_nodes: 11
+  workloads:
+  - type: batch_job
+    count: 10
+    priority: low
+    duration:
+      dist: exponential
+      mean: 130m
+    cpu_request:
+      dist: normal
+      mean: 5131m
+      std: 1879m
+    memory_request:
+      dist: uniform
+      min: 4095Mi
+      max: 82413Mi
+  - type: saas_microservice
+    count: 5
+    replicas:
+      min: 10
+      max: 14
+    churn: medium
+    scaling:
+      type: hpa
+      metric: rps
+      target: 1000
+    pdb:
+      min_available: 80%
+    memory_request:
+      dist: normal
+      mean: 14781Mi
+      std: 6549Mi
+    topology_spread:
+      max_skew: 3
+      topology_key: topology.kubernetes.io/zone
+    cpu_request:
+      dist: normal
+      mean: 7902m
+      std: 128m
+  - type: batch_job
+    count: 24
+    priority: low
+    cpu_request:
+      dist: normal
+      mean: 7772m
+      std: 835m
+    duration:
+      dist: exponential
+      mean: 111m
+  - type: web_app
+    count: 6
+    replicas:
+      min: 4
+      max: 48
+    churn: low
+    traffic: diurnal
+    pdb:
+      min_available: 25%
+    memory_request:
+      dist: uniform
+      min: 4095Mi
+      max: 82413Mi
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+    topology_spread:
+      max_skew: 5
+      topology_key: topology.kubernetes.io/zone
+    cpu_request:
+      dist: uniform
+      min: 1000m
+      max: 22589m
+  - type: web_app
+    count: 12
+    replicas:
+      min: 10
+      max: 49
+    churn: low
+    traffic: diurnal
+    pdb:
+      min_available: 50%
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+  - type: batch_job
+    count: 4
+    priority: low
+  - type: batch_job
+    count: 2
+    priority: low
+  variants:
+  - name: most_allocated
+    scheduler:
+      scoring: MostAllocated
+      weight: 1
+  - name: least_allocated
+    scheduler:
+      scoring: LeastAllocated
+      weight: 1
+  metrics:
+    compare: []
+  traffic_pattern:
+    type: spike
+    peak_multiplier: 9.005106414609758
+    duration: 24h

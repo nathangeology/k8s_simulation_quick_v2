@@ -1,0 +1,122 @@
+study:
+  name: '000'
+  runs: 1
+  time_mode: logical
+  cluster:
+    node_pools:
+    - instance_types:
+      - c6i.large
+      - r5.2xlarge
+      - m6i.2xlarge
+      - c6i.2xlarge
+      min_nodes: 5
+      max_nodes: 21
+    - instance_types:
+      - p3.8xlarge
+      - m6i.xlarge
+      - m5.4xlarge
+      min_nodes: 8
+      max_nodes: 143
+      karpenter:
+        consolidation:
+          policy: WhenEmpty
+    - instance_types:
+      - p3.8xlarge
+      - m6i.xlarge
+      - m5.4xlarge
+      min_nodes: 4
+      max_nodes: 25
+  workloads:
+  - type: saas_microservice
+    count: 15
+    replicas:
+      min: 7
+      max: 98
+    churn: low
+    topology_spread:
+      max_skew: 1
+      topology_key: kubernetes.io/hostname
+    scaling:
+      type: hpa
+      metric: rps
+      target: 1000
+    memory_request:
+      dist: normal
+      mean: 3287Mi
+      std: 8191Mi
+    cpu_request:
+      dist: uniform
+      min: 886m
+      max: 15276m
+    pdb:
+      min_available: '2'
+  - type: batch_job
+    count: 28
+    priority: low
+    memory_request:
+      dist: uniform
+      min: 2859Mi
+      max: 62290Mi
+    duration:
+      dist: exponential
+      mean: 135m
+    cpu_request:
+      dist: uniform
+      min: 99m
+      max: 8636m
+  - type: ml_training
+    count: 4
+    replicas:
+      fixed: 1
+    priority: high
+  - type: web_app
+    count: 9
+    replicas:
+      min: 10
+      max: 15
+    churn: low
+    traffic: diurnal
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+    topology_spread:
+      max_skew: 1
+      topology_key: kubernetes.io/hostname
+  - type: batch_job
+    count: 4
+    priority: low
+    cpu_request:
+      dist: uniform
+      min: 99m
+      max: 8636m
+    memory_request:
+      dist: normal
+      mean: 5304Mi
+      std: 7497Mi
+  - type: saas_microservice
+    count: 15
+    replicas:
+      min: 5
+      max: 92
+    churn: low
+    memory_request:
+      dist: normal
+      mean: 5304Mi
+      std: 7497Mi
+  - type: ml_training
+    count: 9
+    replicas:
+      fixed: 1
+    priority: high
+  variants:
+  - name: most_allocated
+    scheduler:
+      scoring: MostAllocated
+      weight: 1
+  - name: least_allocated
+    scheduler:
+      scoring: LeastAllocated
+      weight: 1
+  metrics:
+    compare: []
