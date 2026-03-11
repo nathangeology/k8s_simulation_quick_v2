@@ -109,14 +109,3 @@ study:
     replicas:
       fixed: 1
     priority: high
-  variants:
-  - name: most_allocated
-    scheduler:
-      scoring: MostAllocated
-      weight: 1
-  - name: least_allocated
-    scheduler:
-      scoring: LeastAllocated
-      weight: 1
-  metrics:
-    compare: []

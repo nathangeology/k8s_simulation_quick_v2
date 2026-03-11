@@ -148,17 +148,6 @@ study:
     topology_spread:
       max_skew: 3
       topology_key: kubernetes.io/hostname
-  variants:
-  - name: most_allocated
-    scheduler:
-      scoring: MostAllocated
-      weight: 1
-  - name: least_allocated
-    scheduler:
-      scoring: LeastAllocated
-      weight: 1
-  metrics:
-    compare: []
   traffic_pattern:
     type: steady
     peak_multiplier: 5.241014891351867
