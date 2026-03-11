@@ -206,9 +206,16 @@ impl Engine {
 
     /// Drain the entire event queue, processing all events.
     /// Returns the number of events processed.
+    /// Stops after `max_events` (default 1_000_000) as a safety valve.
     pub fn run_to_completion(&mut self, state: &mut ClusterState) -> u64 {
+        self.run_to_completion_with_limit(state, 1_000_000)
+    }
+
+    /// Drain the event queue with an explicit event limit.
+    /// Returns the number of events processed.
+    pub fn run_to_completion_with_limit(&mut self, state: &mut ClusterState, max_events: u64) -> u64 {
         let mut count = 0u64;
-        while self.step(state) {
+        while count < max_events && self.step(state) {
             count += 1;
         }
         count

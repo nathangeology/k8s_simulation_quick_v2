@@ -494,11 +494,13 @@ impl EventHandler for ConsolidationHandler {
             }
         }
 
-        // Re-schedule next consolidation loop
-        follow_ups.push(ScheduledEvent {
-            time: SimTime(time.0 + self.loop_interval_ns),
-            event: Event::KarpenterConsolidationLoop,
-        });
+        // Re-schedule next consolidation loop only if there are nodes to evaluate
+        if total_nodes > 0 {
+            follow_ups.push(ScheduledEvent {
+                time: SimTime(time.0 + self.loop_interval_ns),
+                event: Event::KarpenterConsolidationLoop,
+            });
+        }
 
         follow_ups
     }
