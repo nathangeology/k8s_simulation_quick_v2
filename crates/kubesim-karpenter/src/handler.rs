@@ -66,6 +66,8 @@ impl EventHandler for ProvisioningHandler {
                 time: SimTime(time.0 + 1),
                 event: Event::NodeLaunching(NodeSpec {
                     instance_type: decision.instance_type.clone(),
+                    labels: kubesim_core::LabelSet(self.pool.labels.clone()),
+                    taints: self.pool.taints.clone(),
                 }),
             });
         }

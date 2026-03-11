@@ -14,6 +14,10 @@ pub struct DeploymentId(pub u32);
 #[derive(Debug, Clone)]
 pub struct NodeSpec {
     pub instance_type: String,
+    /// Labels propagated from the NodePool.
+    pub labels: kubesim_core::LabelSet,
+    /// Taints propagated from the NodePool.
+    pub taints: Vec<kubesim_core::Taint>,
 }
 
 /// Specification for submitting a new pod (carried by PodSubmitted event).
