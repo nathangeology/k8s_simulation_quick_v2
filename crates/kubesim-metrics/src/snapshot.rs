@@ -58,6 +58,14 @@ pub struct MetricsSnapshot {
     pub pending_count: u32,
     /// Effective detail level used for this snapshot.
     pub detail_level: String,
+    /// Shannon entropy of pod distribution across nodes (raw, in nats).
+    pub pod_placement_entropy: f64,
+    /// Normalized Shannon entropy (H/ln(N)), 0=concentrated, 1=uniform.
+    pub pod_placement_entropy_normalized: f64,
+    /// Shannon entropy of CPU allocation across nodes (raw, in nats).
+    pub cpu_weighted_entropy: f64,
+    /// Normalized CPU-weighted entropy (H/ln(N)).
+    pub cpu_weighted_entropy_normalized: f64,
 }
 
 #[cfg(test)]
