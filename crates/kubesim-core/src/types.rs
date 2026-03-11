@@ -277,6 +277,12 @@ pub enum DeletionCostStrategy {
     /// Set deletion-cost = -(pods_remaining_on_node) so RS prefers deleting
     /// from nearly-empty nodes during scale-in.
     PreferEmptyingNodes,
+    /// Random node ordering (baseline).
+    Random,
+    /// Rank by node capacity descending — larger nodes' pods deleted first.
+    LargestFirst,
+    /// Rank by unallocated_cpu / pod_count descending — targets inefficiently packed nodes.
+    UnallocatedVcpu,
 }
 
 // ── ReplicaSet ──────────────────────────────────────────────────
