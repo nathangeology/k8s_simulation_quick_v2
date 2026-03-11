@@ -157,6 +157,7 @@ mod tests {
             cost_per_hour: 0.076,
             lifecycle: NodeLifecycle::Spot { interruption_prob: prob },
             cordoned: false,
+            created_at: SimTime(0),
         }
     }
 

@@ -38,7 +38,7 @@ impl EventHandler for SimGlueHandler {
     fn handle(
         &mut self,
         event: &Event,
-        _time: SimTime,
+        time: SimTime,
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent> {
         match event {
@@ -85,6 +85,7 @@ impl EventHandler for SimGlueHandler {
                         cost_per_hour: it.on_demand_price_per_hour,
                         lifecycle: NodeLifecycle::OnDemand,
                         cordoned: false,
+                        created_at: time,
                     };
                     state.add_node(node);
                     // Schedule pending pods onto available nodes

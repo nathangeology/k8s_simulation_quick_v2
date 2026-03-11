@@ -242,6 +242,8 @@ pub struct Node {
     pub lifecycle: NodeLifecycle,
     /// Whether the node is cordoned (unschedulable).
     pub cordoned: bool,
+    /// When this node was created (for age-based consolidation sorting).
+    pub created_at: SimTime,
 }
 
 // ── Pod ─────────────────────────────────────────────────────────
