@@ -1,6 +1,8 @@
 //! YAML scenario loader — parses scenario files and emits initial DES events.
 
 use kubesim_core::{Resources, SimTime};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::path::Path;
 
 use crate::events::Event;
@@ -23,11 +25,21 @@ pub fn load_scenario(path: &Path) -> Result<(ScenarioFile, Vec<Event>), LoadErro
     load_scenario_from_str(&contents)
 }
 
-/// Load a scenario from a YAML string.
+/// Load a scenario from a YAML string (default seed 42).
 pub fn load_scenario_from_str(yaml: &str) -> Result<(ScenarioFile, Vec<Event>), LoadError> {
+    load_scenario_from_str_seeded(yaml, 42)
+}
+
+/// Load a scenario from a YAML string with an explicit RNG seed.
+///
+/// The seed controls how parameterized distributions (uniform, poisson, etc.)
+/// in workload `count` and resource request fields are expanded into concrete
+/// pod submission events.
+pub fn load_scenario_from_str_seeded(yaml: &str, seed: u64) -> Result<(ScenarioFile, Vec<Event>), LoadError> {
     let scenario: ScenarioFile = serde_yaml::from_str(yaml)?;
     validate(&scenario.study)?;
-    let events = emit_events(&scenario.study);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let events = emit_events(&scenario.study, &mut rng);
     Ok((scenario, events))
 }
 
@@ -60,7 +72,7 @@ fn validate(study: &Study) -> Result<(), LoadError> {
 /// - HpaEvaluation events for HPA-scaled workloads
 /// - KarpenterProvisioningLoop / ConsolidationLoop if karpenter is configured
 /// - TrafficChange events for traffic patterns
-fn emit_events(study: &Study) -> Vec<Event> {
+fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
     let mut events = Vec::new();
     let mut owner_counter: u32 = 0;
 
@@ -88,10 +100,7 @@ fn emit_events(study: &Study) -> Vec<Event> {
 
     // Emit initial pods for each workload
     for workload in &study.workloads {
-        let count = match &workload.count {
-            ValueOrDist::Fixed(n) => *n,
-            ValueOrDist::Dist(_) => 1, // deterministic fallback; RNG-based expansion at runtime
-        };
+        let count = sample_count(&workload.count, rng);
 
         let replicas = workload
             .replicas
@@ -104,13 +113,12 @@ fn emit_events(study: &Study) -> Vec<Event> {
             .map(|p| p.to_i32())
             .unwrap_or(0);
 
-        let requests = resolve_resources(workload);
-
         for _ in 0..count {
             let owner_id = owner_counter;
             owner_counter += 1;
 
             for _ in 0..replicas {
+                let requests = sample_resources(workload, rng);
                 events.push(Event::PodSubmitted {
                     time: SimTime(0),
                     workload_name: workload.workload_type.clone(),
@@ -148,24 +156,61 @@ fn emit_events(study: &Study) -> Vec<Event> {
     events
 }
 
-/// Resolve default resource requests from workload archetype or explicit fields.
-fn resolve_resources(workload: &WorkloadDef) -> Resources {
+/// Sample a concrete count from a ValueOrDist using the RNG.
+fn sample_count(v: &ValueOrDist, rng: &mut StdRng) -> u32 {
+    match v {
+        ValueOrDist::Fixed(n) => *n,
+        ValueOrDist::Dist(d) => sample_dist_u32(d, rng).max(1),
+    }
+}
+
+/// Sample a u32 from a Distribution.
+fn sample_dist_u32(d: &Distribution, rng: &mut StdRng) -> u32 {
+    match d {
+        Distribution::Uniform { min, max } => {
+            let lo = min.to_f64().unwrap_or(1.0) as u32;
+            let hi = max.to_f64().unwrap_or(lo as f64) as u32;
+            rng.gen_range(lo..=hi)
+        }
+        Distribution::Poisson { lambda } => {
+            // Knuth algorithm for small lambda
+            let l = (-lambda).exp();
+            let mut k = 0u32;
+            let mut p = 1.0f64;
+            loop {
+                k += 1;
+                p *= rng.gen::<f64>();
+                if p <= l { break; }
+            }
+            k - 1
+        }
+        Distribution::Normal { mean, std } => {
+            let m = mean.to_f64().unwrap_or(1.0);
+            let s = std.to_f64().unwrap_or(0.0);
+            box_muller_clamped(rng, m, s, 0.0, m * 4.0) as u32
+        }
+        _ => 1,
+    }
+}
+
+/// Sample resource requests per-pod from distributions (or archetype defaults).
+fn sample_resources(workload: &WorkloadDef, rng: &mut StdRng) -> Resources {
     let cpu = workload
         .cpu_request
         .as_ref()
-        .and_then(|d| dist_mean_cpu(d))
+        .map(|d| sample_cpu(d, rng))
         .unwrap_or_else(|| archetype_cpu(&workload.workload_type));
 
     let mem = workload
         .memory_request
         .as_ref()
-        .and_then(|d| dist_mean_mem(d))
+        .map(|d| sample_mem(d, rng))
         .unwrap_or_else(|| archetype_mem(&workload.workload_type));
 
     let gpu = workload
         .gpu_request
         .as_ref()
-        .and_then(|d| dist_mean_gpu(d))
+        .map(|d| sample_gpu(d, rng))
         .unwrap_or(0);
 
     Resources {
@@ -174,6 +219,61 @@ fn resolve_resources(workload: &WorkloadDef) -> Resources {
         gpu,
         ephemeral_bytes: 0,
     }
+}
+
+fn sample_cpu(d: &Distribution, rng: &mut StdRng) -> u64 {
+    match d {
+        Distribution::Uniform { min, max } => {
+            let lo = min.to_cpu_millis().unwrap_or(100);
+            let hi = max.to_cpu_millis().unwrap_or(lo);
+            rng.gen_range(lo..=hi)
+        }
+        Distribution::Normal { mean, std } => {
+            let m = mean.to_cpu_millis().unwrap_or(500) as f64;
+            let s = std.to_cpu_millis().unwrap_or(0) as f64;
+            box_muller_clamped(rng, m, s, 1.0, m * 4.0) as u64
+        }
+        _ => dist_mean_cpu(d).unwrap_or(500),
+    }
+}
+
+fn sample_mem(d: &Distribution, rng: &mut StdRng) -> u64 {
+    match d {
+        Distribution::Uniform { min, max } => {
+            let lo = min.to_memory_bytes().unwrap_or(64 * 1024 * 1024);
+            let hi = max.to_memory_bytes().unwrap_or(lo);
+            rng.gen_range(lo..=hi)
+        }
+        Distribution::Normal { mean, std } => {
+            let m = mean.to_memory_bytes().unwrap_or(512 * 1024 * 1024) as f64;
+            let s = std.to_memory_bytes().unwrap_or(0) as f64;
+            box_muller_clamped(rng, m, s, 1.0, m * 4.0) as u64
+        }
+        _ => dist_mean_mem(d).unwrap_or(512 * 1024 * 1024),
+    }
+}
+
+fn sample_gpu(d: &Distribution, rng: &mut StdRng) -> u32 {
+    match d {
+        Distribution::Uniform { min, max } => {
+            let lo = min.to_f64().unwrap_or(0.0) as u32;
+            let hi = max.to_f64().unwrap_or(lo as f64) as u32;
+            rng.gen_range(lo..=hi)
+        }
+        Distribution::Choice { values } if !values.is_empty() => {
+            let idx = rng.gen_range(0..values.len());
+            values[idx].to_f64().unwrap_or(0.0) as u32
+        }
+        _ => dist_mean_gpu(d).unwrap_or(0),
+    }
+}
+
+/// Box-Muller normal sample clamped to [lo, hi].
+fn box_muller_clamped(rng: &mut StdRng, mean: f64, std: f64, lo: f64, hi: f64) -> f64 {
+    let u1: f64 = rng.gen::<f64>().max(1e-10);
+    let u2: f64 = rng.gen();
+    let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+    (mean + std * z).clamp(lo, hi)
 }
 
 fn dist_mean_cpu(d: &Distribution) -> Option<u64> {

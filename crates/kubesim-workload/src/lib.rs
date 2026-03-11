@@ -12,7 +12,7 @@ mod trace;
 mod random;
 
 pub use events::Event;
-pub use loader::{load_scenario, load_scenario_from_str, variant_events, LoadError};
+pub use loader::{load_scenario, load_scenario_from_str, load_scenario_from_str_seeded, variant_events, LoadError};
 pub use scenario::*;
 pub use trace::{load_trace, load_trace_from_str, TraceFormat};
 pub use random::{

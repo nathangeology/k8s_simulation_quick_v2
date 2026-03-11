@@ -13,7 +13,7 @@ use kubesim_engine::{Engine, Event as EngineEvent, PodSpec, TimeMode};
 use kubesim_metrics::{MetricsCollector, MetricsConfig as RustMetricsConfig};
 use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
 use kubesim_workload::{
-    load_scenario_from_str, ScenarioFile, Variant,
+    load_scenario_from_str, load_scenario_from_str_seeded, ScenarioFile, Variant,
     Event as WorkloadEvent, TimeMode as ScenarioTimeMode,
     generate_random_scenario, RandomScenarioConfig,
     RangeU32, InstanceWeight, ArchetypeWeights,
@@ -291,7 +291,8 @@ impl Simulation {
             config.to_string()
         };
 
-        let (scenario, workload_events) = load_scenario_from_str(&yaml)
+        let s = seed.unwrap_or(42);
+        let (scenario, workload_events) = load_scenario_from_str_seeded(&yaml, s)
             .map_err(|e| PyValueError::new_err(format!("failed to parse scenario: {e}")))?;
 
         let tm = match time_mode {
@@ -303,7 +304,7 @@ impl Simulation {
             scenario,
             workload_events,
             time_mode: tm,
-            seed: seed.unwrap_or(42),
+            seed: s,
         })
     }
 
@@ -374,7 +375,8 @@ fn batch_run<'py>(
         config.to_string()
     };
 
-    let (scenario, workload_events) = load_scenario_from_str(&yaml)
+    // Parse scenario once for validation and variant info; events regenerated per-seed
+    let (scenario, _) = load_scenario_from_str(&yaml)
         .map_err(|e| PyValueError::new_err(format!("failed to parse scenario: {e}")))?;
 
     let time_mode = scenario_time_to_engine(scenario.study.time_mode);
@@ -394,11 +396,15 @@ fn batch_run<'py>(
         .collect();
 
     // Run in parallel, releasing the GIL
+    // Each seed generates its own workload events from the distributions
     let results: Vec<(u64, String, SimRunResult)> = py.allow_threads(|| {
         pool.install(|| {
             work.par_iter().map(|&(seed, vi)| {
                 let v = &scenario.study.variants[vi];
-                let r = run_single(&workload_events, Some(v), time_mode, seed);
+                let events = load_scenario_from_str_seeded(&yaml, seed)
+                    .expect("scenario already validated")
+                    .1;
+                let r = run_single(&events, Some(v), time_mode, seed);
                 (seed, v.name.clone(), r)
             }).collect()
         })
@@ -501,7 +507,8 @@ impl StepSimulation {
         } else {
             config.to_string()
         };
-        let (scenario, workload_events) = load_scenario_from_str(&yaml)
+        let s = _seed.unwrap_or(42);
+        let (scenario, workload_events) = load_scenario_from_str_seeded(&yaml, s)
             .map_err(|e| PyValueError::new_err(format!("failed to parse scenario: {e}")))?;
         let tm = match time_mode {
             Some(s) => parse_time_mode(s)?,
