@@ -535,7 +535,7 @@ fn evaluate_preemption(
     let mut best: Option<PreemptionCandidate> = None;
 
     for (nid, node) in state.nodes.iter() {
-        if !node.conditions.ready {
+        if !node.conditions.ready || node.cordoned {
             continue;
         }
         // Check non-resource filters (skip NodeResourcesFit since preemption changes resources)
@@ -622,7 +622,7 @@ impl Scheduler {
         let mut reasons: Vec<String> = Vec::new();
 
         for (nid, node) in state.nodes.iter() {
-            if !node.conditions.ready {
+            if !node.conditions.ready || node.cordoned {
                 continue;
             }
             let mut passed = true;
@@ -724,6 +724,7 @@ mod tests {
             taints: smallvec::smallvec![],
             cost_per_hour: 0.192,
             lifecycle: NodeLifecycle::OnDemand,
+            cordoned: false,
         }
     }
 

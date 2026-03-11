@@ -27,7 +27,12 @@ pub struct NodePool {
     pub labels: Vec<(String, String)>,
     /// Taints applied to every node launched from this pool.
     pub taints: Vec<kubesim_core::Taint>,
+    /// Maximum percentage of nodes that may be disrupted simultaneously (0–100).
+    #[serde(default = "default_disruption_pct")]
+    pub max_disrupted_pct: u32,
 }
+
+fn default_disruption_pct() -> u32 { 10 }
 
 /// Current usage tracked against a NodePool's limits.
 #[derive(Debug, Clone, Default)]
