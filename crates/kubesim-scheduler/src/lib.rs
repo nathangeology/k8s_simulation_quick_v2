@@ -653,21 +653,23 @@ impl Scheduler {
             }
         }
 
-        // Score phase
-        let best = feasible
-            .iter()
-            .map(|&(nid, node)| {
-                let total: i64 = self
-                    .profile
-                    .scorers
-                    .iter()
-                    .map(|s| s.score(state, pod, node) * s.weight())
-                    .sum();
-                (nid, total)
-            })
-            .max_by_key(|&(_, score)| score)
-            .map(|(nid, _)| nid)
-            .unwrap(); // feasible is non-empty
+        // Score phase — normalize each scorer's output to [0,100] before weighting.
+        // This matches upstream kube-scheduler's NormalizeScore extension point:
+        // map [min, max] → [0, 100] via min-max scaling.
+        let mut node_totals: Vec<(NodeId, i64)> = feasible.iter().map(|&(nid, _)| (nid, 0i64)).collect();
+
+        for scorer in &self.profile.scorers {
+            let raw: Vec<i64> = feasible.iter().map(|&(_, node)| scorer.score(state, pod, node)).collect();
+            let min = raw.iter().copied().min().unwrap_or(0);
+            let max = raw.iter().copied().max().unwrap_or(0);
+            let range = max - min;
+            for (i, &raw_val) in raw.iter().enumerate() {
+                let normalized = if range > 0 { (raw_val - min) * 100 / range } else { 100 };
+                node_totals[i].1 += normalized * scorer.weight();
+            }
+        }
+
+        let best = node_totals.iter().max_by_key(|&&(_, score)| score).map(|&(nid, _)| nid).unwrap();
 
         ScheduleResult::Bound(best)
     }
