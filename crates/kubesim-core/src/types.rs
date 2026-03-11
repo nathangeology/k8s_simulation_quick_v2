@@ -16,6 +16,9 @@ pub type PodId = Handle<Pod>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OwnerId(pub u32);
 
+/// Unique identifier for a ReplicaSet (generational arena handle).
+pub type ReplicaSetId = Handle<ReplicaSet>;
+
 /// Simulation time in nanoseconds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 pub struct SimTime(pub u64);
@@ -261,4 +264,38 @@ pub struct Pod {
     pub qos_class: QoSClass,
     pub priority: i32,
     pub labels: LabelSet,
+}
+
+// ── Deletion cost strategy ──────────────────────────────────────
+
+/// Strategy for setting pod-deletion-cost annotations on RS-owned pods.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeletionCostStrategy {
+    /// No deletion-cost annotation.
+    None,
+    /// Set deletion-cost = -(pods_remaining_on_node) so RS prefers deleting
+    /// from nearly-empty nodes during scale-in.
+    PreferEmptyingNodes,
+}
+
+// ── ReplicaSet ──────────────────────────────────────────────────
+
+/// A simulated Kubernetes ReplicaSet that manages pod lifecycle.
+#[derive(Debug, Clone)]
+pub struct ReplicaSet {
+    pub owner_id: OwnerId,
+    pub desired_replicas: u32,
+    pub pod_template: PodTemplate,
+    pub deletion_cost_strategy: DeletionCostStrategy,
+}
+
+/// Template for pods created by a ReplicaSet.
+#[derive(Debug, Clone)]
+pub struct PodTemplate {
+    pub requests: Resources,
+    pub limits: Resources,
+    pub priority: i32,
+    pub labels: LabelSet,
+    pub scheduling_constraints: SchedulingConstraints,
 }

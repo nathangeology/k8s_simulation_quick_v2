@@ -7,6 +7,7 @@ use crate::types::*;
 pub struct ClusterState {
     pub nodes: Arena<Node>,
     pub pods: Arena<Pod>,
+    pub replica_sets: Arena<ReplicaSet>,
     pub time: SimTime,
     pub pending_queue: Vec<PodId>,
     pub pdbs: Vec<PodDisruptionBudget>,
@@ -23,6 +24,7 @@ impl ClusterState {
         Self {
             nodes: Arena::new(),
             pods: Arena::new(),
+            replica_sets: Arena::new(),
             time: SimTime(0),
             pending_queue: Vec::new(),
             pdbs: Vec::new(),
@@ -84,6 +86,26 @@ impl ClusterState {
     /// Available (allocatable - allocated) resources on a node.
     pub fn available_resources(&self, node_id: NodeId) -> Option<Resources> {
         self.nodes.get(node_id).map(|n| n.allocatable.saturating_sub(&n.allocated))
+    }
+
+    /// Add a ReplicaSet, returning its handle.
+    pub fn add_replica_set(&mut self, rs: ReplicaSet) -> ReplicaSetId {
+        self.replica_sets.insert(rs)
+    }
+
+    /// Count running/pending pods owned by the given OwnerId.
+    pub fn count_owned_pods(&self, owner: OwnerId) -> u32 {
+        self.pods.iter()
+            .filter(|(_, p)| p.owner == owner && matches!(p.phase, PodPhase::Running | PodPhase::Pending))
+            .count() as u32
+    }
+
+    /// Collect PodIds of running pods owned by the given OwnerId.
+    pub fn running_pods_for_owner(&self, owner: OwnerId) -> Vec<PodId> {
+        self.pods.iter()
+            .filter(|(_, p)| p.owner == owner && p.phase == PodPhase::Running)
+            .map(|(id, _)| id)
+            .collect()
     }
 
     /// Evict a running pod: unbind from node, set to Pending, re-add to pending queue.
