@@ -121,8 +121,12 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState) -> Vec<ScheduledEvent>
         let mut running = state.running_pods_for_owner(owner_id);
 
         // Apply deletion-cost strategy before sorting
-        if rs.deletion_cost_strategy == DeletionCostStrategy::PreferEmptyingNodes {
-            update_deletion_costs(state, &running);
+        if rs.deletion_cost_strategy != DeletionCostStrategy::None {
+            // Costs are set by DeletionCostController for all strategies;
+            // for PreferEmptyingNodes we also do an inline update for backward compat.
+            if rs.deletion_cost_strategy == DeletionCostStrategy::PreferEmptyingNodes {
+                update_deletion_costs(state, &running);
+            }
         }
 
         // Sort: (a) deletion_cost ASC, (b) fewer co-located replicas, (c) newer first (higher index)

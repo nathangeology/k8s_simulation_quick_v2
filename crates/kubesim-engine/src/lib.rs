@@ -5,7 +5,9 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 pub mod replicaset;
+pub mod deletion_cost;
 pub use replicaset::ReplicaSetController;
+pub use deletion_cost::DeletionCostController;
 
 // ── Events ──────────────────────────────────────────────────────
 
@@ -55,6 +57,7 @@ pub enum Event {
     ScaleDown(DeploymentId, u32),
     ScaleUp(DeploymentId, u32),
     ReplicaSetReconcile(OwnerId),
+    DeletionCostReconcile,
     MetricsSnapshot,
 }
 
