@@ -8,3 +8,6 @@ kubesim-core = { workspace = true }
 kubesim-engine = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+smallvec = { workspace = true }

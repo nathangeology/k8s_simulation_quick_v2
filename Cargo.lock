@@ -133,6 +133,7 @@ dependencies = [
  "kubesim-ec2",
  "kubesim-engine",
  "serde",
+ "smallvec",
  "thiserror",
 ]
 
@@ -144,6 +145,7 @@ dependencies = [
  "kubesim-engine",
  "serde",
  "serde_json",
+ "smallvec",
 ]
 
 [[package]]

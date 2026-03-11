@@ -7,3 +7,6 @@ edition.workspace = true
 smallvec = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+smallvec = { workspace = true }

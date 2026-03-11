@@ -229,3 +229,139 @@ impl EventHandler for ConsolidationHandler {
         follow_ups
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nodepool::NodePoolLimits;
+
+    fn test_node(cpu: u64, mem: u64) -> Node {
+        Node {
+            instance_type: "m5.xlarge".into(),
+            allocatable: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
+            allocated: Resources::default(),
+            pods: smallvec::smallvec![],
+            conditions: NodeConditions { ready: true, ..Default::default() },
+            labels: LabelSet::default(),
+            taints: smallvec::smallvec![],
+            cost_per_hour: 0.192,
+            lifecycle: NodeLifecycle::OnDemand,
+            cordoned: false,
+        }
+    }
+
+    fn test_pod(cpu: u64, mem: u64) -> Pod {
+        Pod {
+            requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
+            limits: Resources::default(),
+            phase: PodPhase::Pending,
+            node: None,
+            scheduling_constraints: SchedulingConstraints::default(),
+            deletion_cost: None,
+            owner: OwnerId(0),
+            qos_class: QoSClass::Burstable,
+            priority: 0,
+            labels: LabelSet::default(),
+        }
+    }
+
+    fn test_pool() -> NodePool {
+        NodePool {
+            name: "default".into(),
+            instance_types: vec![],
+            limits: NodePoolLimits::default(),
+            labels: vec![],
+            taints: vec![],
+            max_disrupted_pct: 10,
+        }
+    }
+
+    #[test]
+    fn when_empty_terminates_empty_nodes() {
+        let mut state = ClusterState::new();
+        state.add_node(test_node(4000, 8_000_000_000)); // empty node
+
+        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 10);
+        assert_eq!(actions.len(), 1);
+        assert!(matches!(actions[0], ConsolidationAction::TerminateEmpty(_)));
+    }
+
+    #[test]
+    fn when_empty_skips_nodes_with_pods() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(test_node(4000, 8_000_000_000));
+        let pid = state.submit_pod(test_pod(1000, 1_000_000_000));
+        state.bind_pod(pid, nid);
+
+        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 10);
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn when_underutilized_drains_reschedulable_nodes() {
+        let mut state = ClusterState::new();
+        // Node A: small pod
+        let na = state.add_node(Node { cost_per_hour: 0.1, ..test_node(4000, 8_000_000_000) });
+        let pid = state.submit_pod(test_pod(500, 500_000_000));
+        state.bind_pod(pid, na);
+
+        // Node B: has capacity to absorb A's pod
+        state.add_node(test_node(4000, 8_000_000_000));
+
+        let actions = evaluate(&state, ConsolidationPolicy::WhenUnderutilized, 10);
+        assert!(!actions.is_empty());
+        // Should drain the cheaper node
+        let has_drain = actions.iter().any(|a| matches!(a, ConsolidationAction::DrainAndTerminate { .. }));
+        assert!(has_drain);
+    }
+
+    #[test]
+    fn disruption_budget_limits_actions() {
+        let mut state = ClusterState::new();
+        // 3 empty nodes
+        state.add_node(test_node(4000, 8_000_000_000));
+        state.add_node(test_node(4000, 8_000_000_000));
+        state.add_node(test_node(4000, 8_000_000_000));
+
+        // Budget of 1
+        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 1);
+        assert_eq!(actions.len(), 1);
+    }
+
+    #[test]
+    fn disruption_budget_calculation() {
+        let pool = test_pool();
+        assert_eq!(disruption_budget(&pool, 100), 10); // 10% of 100
+        assert_eq!(disruption_budget(&pool, 1), 1);    // min 1
+        assert_eq!(disruption_budget(&pool, 0), 1);    // min 1
+    }
+
+    #[test]
+    fn consolidation_handler_schedules_follow_ups() {
+        let mut state = ClusterState::new();
+        state.add_node(test_node(4000, 8_000_000_000)); // empty node
+
+        let mut handler = ConsolidationHandler::new(test_pool(), ConsolidationPolicy::WhenEmpty);
+        let events = handler.handle(
+            &kubesim_engine::Event::KarpenterConsolidationLoop,
+            SimTime(1000),
+            &mut state,
+        );
+        // Should have NodeCordoned, NodeTerminated, and re-schedule
+        assert!(events.len() >= 2);
+        let has_reschedule = events.iter().any(|e| matches!(e.event, kubesim_engine::Event::KarpenterConsolidationLoop));
+        assert!(has_reschedule);
+    }
+
+    #[test]
+    fn consolidation_handler_ignores_non_consolidation_events() {
+        let mut state = ClusterState::new();
+        let mut handler = ConsolidationHandler::new(test_pool(), ConsolidationPolicy::WhenEmpty);
+        let events = handler.handle(
+            &kubesim_engine::Event::MetricsSnapshot,
+            SimTime(1000),
+            &mut state,
+        );
+        assert!(events.is_empty());
+    }
+}

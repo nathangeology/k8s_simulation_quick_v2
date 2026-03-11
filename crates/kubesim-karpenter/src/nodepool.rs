@@ -57,3 +57,54 @@ impl NodePool {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pool_with_limits(max_nodes: Option<u32>, max_cpu: Option<u64>, max_mem: Option<u64>) -> NodePool {
+        NodePool {
+            name: "test".into(),
+            instance_types: vec![],
+            limits: NodePoolLimits { max_nodes, max_cpu_millis: max_cpu, max_memory_bytes: max_mem },
+            labels: vec![],
+            taints: vec![],
+            max_disrupted_pct: 10,
+        }
+    }
+
+    #[test]
+    fn can_launch_no_limits() {
+        let pool = pool_with_limits(None, None, None);
+        let usage = NodePoolUsage::default();
+        assert!(pool.can_launch(&usage, 4000, 8_000_000_000));
+    }
+
+    #[test]
+    fn can_launch_node_limit_reached() {
+        let pool = pool_with_limits(Some(2), None, None);
+        let usage = NodePoolUsage { node_count: 2, ..Default::default() };
+        assert!(!pool.can_launch(&usage, 4000, 8_000_000_000));
+    }
+
+    #[test]
+    fn can_launch_cpu_limit_exceeded() {
+        let pool = pool_with_limits(None, Some(8000), None);
+        let usage = NodePoolUsage { cpu_millis: 6000, ..Default::default() };
+        assert!(!pool.can_launch(&usage, 4000, 8_000_000_000));
+    }
+
+    #[test]
+    fn can_launch_memory_limit_exceeded() {
+        let pool = pool_with_limits(None, None, Some(16_000_000_000));
+        let usage = NodePoolUsage { memory_bytes: 10_000_000_000, ..Default::default() };
+        assert!(!pool.can_launch(&usage, 4000, 8_000_000_000));
+    }
+
+    #[test]
+    fn can_launch_within_all_limits() {
+        let pool = pool_with_limits(Some(5), Some(20000), Some(40_000_000_000));
+        let usage = NodePoolUsage { node_count: 2, cpu_millis: 8000, memory_bytes: 16_000_000_000 };
+        assert!(pool.can_launch(&usage, 4000, 8_000_000_000));
+    }
+}

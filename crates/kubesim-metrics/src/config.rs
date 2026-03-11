@@ -81,3 +81,30 @@ impl Default for MetricsConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detail_level_auto_resolves() {
+        assert_eq!(DetailLevel::Auto.resolve(500), DetailLevel::Pod);
+        assert_eq!(DetailLevel::Auto.resolve(5000), DetailLevel::Deployment);
+        assert_eq!(DetailLevel::Auto.resolve(50000), DetailLevel::Namespace);
+        assert_eq!(DetailLevel::Auto.resolve(500000), DetailLevel::Cluster);
+    }
+
+    #[test]
+    fn detail_level_explicit_unchanged() {
+        assert_eq!(DetailLevel::Pod.resolve(500000), DetailLevel::Pod);
+        assert_eq!(DetailLevel::Cluster.resolve(1), DetailLevel::Cluster);
+    }
+
+    #[test]
+    fn default_config() {
+        let config = MetricsConfig::default();
+        assert_eq!(config.detail_level, DetailLevel::Auto);
+        assert_eq!(config.sample_rate, 1.0);
+        assert_eq!(config.export_format, ExportFormat::Parquet);
+    }
+}

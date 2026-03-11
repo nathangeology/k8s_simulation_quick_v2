@@ -214,3 +214,73 @@ impl EventHandler for MetricsCollector {
         Vec::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kubesim_core::*;
+    use kubesim_engine::EventHandler;
+
+    fn test_node(cpu: u64, mem: u64) -> Node {
+        Node {
+            instance_type: "m5.xlarge".into(),
+            allocatable: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
+            allocated: Resources::default(),
+            pods: smallvec::smallvec![],
+            conditions: NodeConditions { ready: true, ..Default::default() },
+            labels: LabelSet::default(),
+            taints: smallvec::smallvec![],
+            cost_per_hour: 0.192,
+            lifecycle: NodeLifecycle::OnDemand,
+            cordoned: false,
+        }
+    }
+
+    #[test]
+    fn snapshot_captures_cluster_state() {
+        let mut state = ClusterState::new();
+        state.add_node(test_node(4000, 8_000_000_000));
+
+        let mut collector = MetricsCollector::new(MetricsConfig::default());
+        collector.handle(&Event::MetricsSnapshot, SimTime(1000), &mut state);
+
+        assert_eq!(collector.snapshots().len(), 1);
+        let snap = &collector.snapshots()[0];
+        assert_eq!(snap.node_count, 1);
+        assert_eq!(snap.time, SimTime(1000));
+        assert!((snap.total_cost_per_hour - 0.192).abs() < 0.001);
+    }
+
+    #[test]
+    fn disruption_count_incremented() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(test_node(4000, 8_000_000_000));
+
+        let mut collector = MetricsCollector::new(MetricsConfig::default());
+        collector.handle(&Event::SpotInterruption(nid), SimTime(100), &mut state);
+
+        assert_eq!(collector.disruption_count(), 1);
+    }
+
+    #[test]
+    fn export_csv_has_header() {
+        let collector = MetricsCollector::new(MetricsConfig { export_format: crate::config::ExportFormat::Csv, ..Default::default() });
+        let csv = collector.export_csv();
+        assert!(csv.starts_with("time,"));
+    }
+
+    #[test]
+    fn export_json_valid() {
+        let mut state = ClusterState::new();
+        state.add_node(test_node(4000, 8_000_000_000));
+
+        let mut collector = MetricsCollector::new(MetricsConfig { export_format: crate::config::ExportFormat::Json, ..Default::default() });
+        collector.handle(&Event::MetricsSnapshot, SimTime(1000), &mut state);
+
+        let json = collector.export();
+        assert!(json.contains("total_cost_per_hour"));
+        // Verify it's valid JSON
+        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&json);
+        assert!(parsed.is_ok());
+    }
+}

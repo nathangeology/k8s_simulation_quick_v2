@@ -59,3 +59,33 @@ pub struct MetricsSnapshot {
     /// Effective detail level used for this snapshot.
     pub detail_level: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percentiles_empty() {
+        let p = Percentiles::from_sorted(&[]);
+        assert_eq!(p.p50, 0.0);
+        assert_eq!(p.p90, 0.0);
+        assert_eq!(p.p99, 0.0);
+    }
+
+    #[test]
+    fn percentiles_single_value() {
+        let p = Percentiles::from_sorted(&[42.0]);
+        assert_eq!(p.p50, 42.0);
+        assert_eq!(p.p90, 42.0);
+        assert_eq!(p.p99, 42.0);
+    }
+
+    #[test]
+    fn percentiles_multiple_values() {
+        let data: Vec<f64> = (1..=100).map(|i| i as f64).collect();
+        let p = Percentiles::from_sorted(&data);
+        assert!((p.p50 - 50.0).abs() < 2.0);
+        assert!((p.p90 - 90.0).abs() < 2.0);
+        assert!((p.p99 - 99.0).abs() < 2.0);
+    }
+}
