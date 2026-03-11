@@ -1,7 +1,23 @@
 # Adversarial Scenarios
 
-Worst-case scenarios discovered by `AdversarialFinder` where MostAllocated vs
+Worst-case scenarios discovered by the adversarial finder where MostAllocated vs
 LeastAllocated scheduling strategies diverge most in cost.
+
+## Output Structure
+
+- `scenarios/adversarial/*.yaml` — Clean input YAMLs (no results data, no scores)
+- `results/adversarial/manifest.json` — Scores, direction, category, per-variant metrics
+- `results/adversarial/summary.md` — Human-readable summary of findings
+
+## Directional Categories
+
+Scenarios are categorized by signed delta (`most_cost - least_cost`):
+
+- **adversarial_to_most** — MostAllocated costs more (positive delta)
+- **adversarial_to_least** — LeastAllocated costs more (negative delta)
+- **both_degrade** — Equal cost (zero delta)
+
+Top-K scenarios are kept from each category separately.
 
 ## Generation
 
@@ -9,8 +25,8 @@ LeastAllocated scheduling strategies diverge most in cost.
 python -m kubesim run-adversarial --budget 1000 --top-k 10
 ```
 
-## Purpose
+Or via the standalone script:
 
-These scenarios serve as inputs for follow-up property-based testing, ensuring
-the simulator handles extreme configurations correctly and that scheduling
-strategy comparisons remain valid under adversarial conditions.
+```bash
+python scripts/find_adversarial.py
+```
