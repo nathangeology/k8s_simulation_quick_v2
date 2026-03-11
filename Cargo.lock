@@ -120,6 +120,8 @@ version = "0.1.0"
 dependencies = [
  "kubesim-core",
  "kubesim-ec2",
+ "kubesim-engine",
+ "serde",
  "thiserror",
 ]
 
