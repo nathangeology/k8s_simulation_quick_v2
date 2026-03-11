@@ -1,0 +1,59 @@
+study:
+  name: deletion-cost-ranking-comparison
+  runs: 10000
+  time_mode: wall_clock
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge, c5.xlarge]
+        min_nodes: 5
+        max_nodes: 100
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+  workloads:
+    - type: web_app
+      count: 10
+      replicas: {min: 5, max: 50}
+      scaling: {type: hpa, metric: cpu, target: "70%"}
+    - type: saas_microservice
+      count: 5
+      replicas: {min: 3, max: 100}
+      scaling: {type: hpa, metric: rps, target: 1000}
+      topology_spread: {max_skew: 1, topology_key: topology.kubernetes.io/zone}
+      pdb: {min_available: "50%"}
+    - type: batch_job
+      count: {dist: poisson, lambda: 8}
+      duration: {dist: uniform, min: 300, max: 3600}
+
+  # Diurnal traffic with spike forces scale-up then scale-down,
+  # exercising deletion ordering during consolidation.
+  traffic_pattern:
+    type: diurnal_with_spike
+    peak_multiplier: 5
+    duration: 24h
+
+  # NOTE: Some pods should carry karpenter.sh/do-not-disrupt to test
+  # partitioning behavior, but WorkloadDef does not yet support pod
+  # annotations. Filed for future work.
+
+  variants:
+    - name: baseline
+      deletion_cost_strategy: none
+    - name: smallest_first
+      deletion_cost_strategy: prefer_emptying_nodes
+    - name: largest_first
+      deletion_cost_strategy: largest_first
+    - name: unallocated_vcpu
+      deletion_cost_strategy: unallocated_vcpu
+    - name: random
+      deletion_cost_strategy: random
+
+  metrics:
+    compare:
+      - nodes_reclaimed_per_hour
+      - time_to_consolidate
+      - total_cost
+      - disruption_count
+      - availability_gap_seconds
+      - node_count_over_time
