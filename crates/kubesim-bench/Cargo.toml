@@ -1,0 +1,17 @@
+[package]
+name = "kubesim-bench"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "scale-perf-benchmark"
+path = "src/main.rs"
+
+[dependencies]
+kubesim-core = { workspace = true }
+kubesim-engine = { workspace = true }
+kubesim-scheduler = { workspace = true }
+kubesim-ec2 = { workspace = true }
+kubesim-metrics = { workspace = true }
+kubesim-workload = { workspace = true }
+rand = { workspace = true }

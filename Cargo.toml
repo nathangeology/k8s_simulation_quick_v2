@@ -9,6 +9,7 @@ members = [
     "crates/kubesim-py",
     "crates/kubesim-workload",
     "crates/kubesim-karpenter",
+    "crates/kubesim-bench",
 ]
 
 [workspace.package]
