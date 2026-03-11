@@ -10,6 +10,10 @@ use kubesim_core::{
 };
 use kubesim_ec2::Catalog;
 use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, TimeMode};
+use kubesim_karpenter::{
+    ConsolidationHandler, ConsolidationPolicy, NodePool, NodePoolLimits,
+    ProvisioningHandler, SpotInterruptionHandler,
+};
 use kubesim_metrics::{MetricsCollector, MetricsConfig as RustMetricsConfig};
 use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
 use kubesim_workload::{
@@ -78,6 +82,7 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
 struct SimHandler {
     scheduler: Scheduler,
     metrics: MetricsCollector,
+    catalog: Catalog,
 }
 
 impl kubesim_engine::EventHandler for SimHandler {
@@ -113,6 +118,38 @@ impl kubesim_engine::EventHandler for SimHandler {
                 }
                 Vec::new()
             }
+            EngineEvent::NodeLaunching(spec) => {
+                let node = instance_to_node(&self.catalog, &spec.instance_type);
+                let node_id = state.add_node(node);
+                // Try to schedule pending pods onto the new node
+                let pending: Vec<_> = state.pending_queue.clone();
+                for pod_id in pending {
+                    if let kubesim_scheduler::ScheduleResult::Bound(nid) =
+                        self.scheduler.schedule_one(state, pod_id)
+                    {
+                        state.bind_pod(pod_id, nid);
+                    }
+                }
+                vec![kubesim_engine::ScheduledEvent {
+                    time: SimTime(time.0 + 1),
+                    event: EngineEvent::NodeReady(node_id),
+                }]
+            }
+            EngineEvent::NodeCordoned(node_id) => {
+                if let Some(node) = state.nodes.get_mut(*node_id) {
+                    node.cordoned = true;
+                }
+                Vec::new()
+            }
+            EngineEvent::NodeDrained(_node_id) => {
+                // Drain is handled by the consolidation handler which evicts pods.
+                // This event is informational for SimHandler.
+                Vec::new()
+            }
+            EngineEvent::NodeTerminated(node_id) => {
+                state.remove_node(*node_id);
+                Vec::new()
+            }
             _ => Vec::new(),
         }
     }
@@ -133,8 +170,9 @@ struct SimRunResult {
 fn run_single(
     workload_events: &[WorkloadEvent],
     variant: Option<&Variant>,
+    scenario: &ScenarioFile,
     time_mode: TimeMode,
-    _seed: u64,
+    seed: u64,
 ) -> SimRunResult {
     let catalog = Catalog::embedded().expect("embedded EC2 catalog");
 
@@ -188,8 +226,51 @@ fn run_single(
     let handler = SimHandler {
         scheduler: Scheduler::new(SchedulerProfile::with_scoring("default", scoring)),
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
+        catalog: Catalog::embedded().expect("embedded EC2 catalog"),
     };
     engine.add_handler(Box::new(handler));
+
+    // Register karpenter handlers for pools that have karpenter config
+    for pool_def in &scenario.study.cluster.node_pools {
+        if let Some(karpenter) = &pool_def.karpenter {
+            let pool = NodePool {
+                name: "default".into(),
+                instance_types: pool_def.instance_types.clone(),
+                limits: NodePoolLimits {
+                    max_nodes: Some(pool_def.max_nodes),
+                    max_cpu_millis: None,
+                    max_memory_bytes: None,
+                },
+                labels: vec![],
+                taints: vec![],
+                max_disrupted_pct: 10,
+                weight: 0,
+            };
+
+            engine.add_handler(Box::new(
+                ProvisioningHandler::new(
+                    Catalog::embedded().expect("embedded EC2 catalog"),
+                    pool.clone(),
+                ),
+            ));
+
+            let consolidation_policy = karpenter
+                .consolidation
+                .as_ref()
+                .map(|c| match c.policy {
+                    kubesim_workload::ConsolidationPolicy::WhenEmpty => ConsolidationPolicy::WhenEmpty,
+                    kubesim_workload::ConsolidationPolicy::WhenUnderutilized => ConsolidationPolicy::WhenUnderutilized,
+                })
+                .unwrap_or(ConsolidationPolicy::WhenUnderutilized);
+
+            engine.add_handler(Box::new(
+                ConsolidationHandler::new(pool, consolidation_policy)
+                    .with_catalog(Catalog::embedded().expect("embedded EC2 catalog")),
+            ));
+
+            engine.add_handler(Box::new(SpotInterruptionHandler::new(seed)));
+        }
+    }
 
     // Wire DeletionCostController if variant specifies a strategy
     if let Some(strategy) = variant.and_then(|v| v.deletion_cost_strategy) {
@@ -331,7 +412,7 @@ impl Simulation {
                 .ok_or_else(|| PyValueError::new_err("no variants defined in scenario"))?,
         };
 
-        let r = run_single(&self.workload_events, Some(v), self.time_mode, self.seed);
+        let r = run_single(&self.workload_events, Some(v), &self.scenario, self.time_mode, self.seed);
 
         Ok(SimResult {
             events_processed: r.events_processed,
@@ -353,7 +434,7 @@ impl Simulation {
         }
 
         Ok(self.scenario.study.variants.iter().map(|v| {
-            let r = run_single(&self.workload_events, Some(v), self.time_mode, self.seed);
+            let r = run_single(&self.workload_events, Some(v), &self.scenario, self.time_mode, self.seed);
             SimResult {
                 events_processed: r.events_processed,
                 total_cost_per_hour: r.total_cost_per_hour,
@@ -416,7 +497,7 @@ fn batch_run<'py>(
                 let events = load_scenario_from_str_seeded(&yaml, seed)
                     .expect("scenario already validated")
                     .1;
-                let r = run_single(&events, Some(v), time_mode, seed);
+                let r = run_single(&events, Some(v), &scenario, time_mode, seed);
                 (seed, v.name.clone(), r)
             }).collect()
         })
@@ -602,8 +683,52 @@ impl StepSimulation {
                 SchedulerProfile::with_scoring("default", scoring),
             ),
             metrics: MetricsCollector::new(RustMetricsConfig::default()),
+            catalog: Catalog::embedded()
+                .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
         };
         engine.add_handler(Box::new(handler));
+
+        // Register karpenter handlers for pools that have karpenter config
+        for pool_def in &self.scenario.study.cluster.node_pools {
+            if let Some(karpenter) = &pool_def.karpenter {
+                let pool = NodePool {
+                    name: "default".into(),
+                    instance_types: pool_def.instance_types.clone(),
+                    limits: NodePoolLimits {
+                        max_nodes: Some(pool_def.max_nodes),
+                        max_cpu_millis: None,
+                        max_memory_bytes: None,
+                    },
+                    labels: vec![],
+                    taints: vec![],
+                    max_disrupted_pct: 10,
+                    weight: 0,
+                };
+
+                engine.add_handler(Box::new(
+                    ProvisioningHandler::new(
+                        Catalog::embedded().map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
+                        pool.clone(),
+                    ),
+                ));
+
+                let consolidation_policy = karpenter
+                    .consolidation
+                    .as_ref()
+                    .map(|c| match c.policy {
+                        kubesim_workload::ConsolidationPolicy::WhenEmpty => ConsolidationPolicy::WhenEmpty,
+                        kubesim_workload::ConsolidationPolicy::WhenUnderutilized => ConsolidationPolicy::WhenUnderutilized,
+                    })
+                    .unwrap_or(ConsolidationPolicy::WhenUnderutilized);
+
+                engine.add_handler(Box::new(
+                    ConsolidationHandler::new(pool, consolidation_policy)
+                        .with_catalog(Catalog::embedded().map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?),
+                ));
+
+                engine.add_handler(Box::new(SpotInterruptionHandler::new(42)));
+            }
+        }
 
         self.engine = Some(engine);
         self.state = Some(state);
