@@ -70,9 +70,14 @@ impl EventHandler for SpotInterruptionHandler {
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent> {
         match event {
-            Event::KarpenterProvisioningLoop => {
-                // Piggyback on provisioning loop to check spot nodes.
+            Event::SpotInterruptionCheck => {
                 let mut follow_ups = Vec::new();
+
+                // Re-schedule next check.
+                follow_ups.push(ScheduledEvent {
+                    time: SimTime(time.0 + self.check_interval_ns),
+                    event: Event::SpotInterruptionCheck,
+                });
 
                 // Collect spot nodes to check (avoid borrow conflict with state mutation).
                 let spot_nodes: Vec<(NodeId, u32)> = state
@@ -215,12 +220,12 @@ mod tests {
 
         let mut handler = SpotInterruptionHandler::new(42);
         let events = handler.handle(
-            &Event::KarpenterProvisioningLoop,
+            &Event::SpotInterruptionCheck,
             SimTime(1000),
             &mut state,
         );
-        // Should have SpotInterruption + NodeTerminated
-        assert!(events.len() >= 2);
+        // Should have re-schedule + SpotInterruption + NodeTerminated
+        assert!(events.len() >= 3);
         assert_eq!(handler.metrics.interruptions, 1);
     }
 
@@ -233,10 +238,11 @@ mod tests {
 
         let mut handler = SpotInterruptionHandler::new(42);
         let events = handler.handle(
-            &Event::KarpenterProvisioningLoop,
+            &Event::SpotInterruptionCheck,
             SimTime(1000),
             &mut state,
         );
-        assert!(events.is_empty());
+        // Only the self-reschedule event
+        assert_eq!(events.len(), 1);
     }
 }

@@ -41,6 +41,7 @@ pub enum Event {
     NodeDrained(NodeId),
     NodeTerminated(NodeId),
     SpotInterruption(NodeId),
+    SpotInterruptionCheck,
     HpaEvaluation(DeploymentId),
     KarpenterProvisioningLoop,
     KarpenterConsolidationLoop,

@@ -95,6 +95,9 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
             events.push(Event::KarpenterConsolidationLoop {
                 time: SimTime(0),
             });
+            events.push(Event::SpotInterruptionCheck {
+                time: SimTime(0),
+            });
         }
     }
 
