@@ -5,11 +5,11 @@ use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
 
 use kubesim_core::{
-    ClusterState, LabelSet, Node, NodeConditions, NodeLifecycle, OwnerId, Pod, PodPhase,
+    ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeLifecycle, OwnerId, Pod, PodPhase,
     QoSClass, Resources, SchedulingConstraints, SimTime,
 };
 use kubesim_ec2::Catalog;
-use kubesim_engine::{Engine, Event as EngineEvent, PodSpec, TimeMode};
+use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, TimeMode};
 use kubesim_metrics::{MetricsCollector, MetricsConfig as RustMetricsConfig};
 use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
 use kubesim_workload::{
@@ -190,6 +190,14 @@ fn run_single(
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
     };
     engine.add_handler(Box::new(handler));
+
+    // Wire DeletionCostController if variant specifies a strategy
+    if let Some(strategy) = variant.and_then(|v| v.deletion_cost_strategy) {
+        if strategy != DeletionCostStrategy::None {
+            engine.add_handler(Box::new(DeletionCostController::new(strategy)));
+            engine.schedule(SimTime(0), EngineEvent::DeletionCostReconcile);
+        }
+    }
 
     let events_processed = engine.run_to_completion(&mut state);
 
