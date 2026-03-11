@@ -5,9 +5,17 @@ from kubesim._native import (
 )
 from kubesim import analysis
 
+# Adversarial finder — optional (requires hypothesis + pyyaml)
+try:
+    from kubesim.adversarial import AdversarialFinder, ScenarioSpace, ScoredScenario
+except ImportError:
+    pass
+
 __all__ = [
     "Simulation", "SimResult", "StepSimulation", "StepObs",
-    "batch_run", "analysis", "__version__",
+    "batch_run", "analysis",
+    "AdversarialFinder", "ScenarioSpace", "ScoredScenario",
+    "__version__",
 ]
 
 # Register Gymnasium environment if gymnasium is available
