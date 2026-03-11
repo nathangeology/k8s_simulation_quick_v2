@@ -82,14 +82,3 @@ study:
       max: 12
     churn: low
     traffic: diurnal
-  variants:
-  - name: most_allocated
-    scheduler:
-      scoring: MostAllocated
-      weight: 1
-  - name: least_allocated
-    scheduler:
-      scoring: LeastAllocated
-      weight: 1
-  metrics:
-    compare: []

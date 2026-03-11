@@ -116,17 +116,6 @@ study:
     topology_spread:
       max_skew: 4
       topology_key: topology.kubernetes.io/zone
-  variants:
-  - name: most_allocated
-    scheduler:
-      scoring: MostAllocated
-      weight: 1
-  - name: least_allocated
-    scheduler:
-      scoring: LeastAllocated
-      weight: 1
-  metrics:
-    compare: []
   traffic_pattern:
     type: diurnal_with_spike
     peak_multiplier: 9.133850459534802

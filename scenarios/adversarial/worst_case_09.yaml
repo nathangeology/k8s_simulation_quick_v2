@@ -95,14 +95,3 @@ study:
       std: 1843m
     pdb:
       min_available: 25%
-  variants:
-  - name: most_allocated
-    scheduler:
-      scoring: MostAllocated
-      weight: 1
-  - name: least_allocated
-    scheduler:
-      scoring: LeastAllocated
-      weight: 1
-  metrics:
-    compare: []
