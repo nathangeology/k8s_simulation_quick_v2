@@ -1,8 +1,11 @@
 //! KubeSim Engine — Discrete event simulation loop with priority queue and dual time modes.
 
-use kubesim_core::{ClusterState, NodeId, PodId, SimTime};
+use kubesim_core::{ClusterState, NodeId, OwnerId, PodId, SimTime};
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
+
+pub mod replicaset;
+pub use replicaset::ReplicaSetController;
 
 // ── Events ──────────────────────────────────────────────────────
 
@@ -51,6 +54,7 @@ pub enum Event {
     KarpenterConsolidationLoop,
     ScaleDown(DeploymentId, u32),
     ScaleUp(DeploymentId, u32),
+    ReplicaSetReconcile(OwnerId),
     MetricsSnapshot,
 }
 

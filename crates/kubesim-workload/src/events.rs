@@ -61,6 +61,16 @@ pub enum Event {
     ConfigureDeletionCost {
         strategy: DeletionCostStrategy,
     },
+    /// Submit a ReplicaSet that manages pod lifecycle.
+    ReplicaSetSubmitted {
+        time: SimTime,
+        owner_id: u32,
+        desired_replicas: u32,
+        requests: Resources,
+        limits: Resources,
+        priority: i32,
+        deletion_cost_strategy: DeletionCostStrategy,
+    },
 }
 
 impl Event {
@@ -76,6 +86,7 @@ impl Event {
             | Event::TrafficChange { time, .. }
             | Event::MetricsSnapshot { time } => *time,
             Event::ConfigureScheduler { .. } | Event::ConfigureDeletionCost { .. } => SimTime(0),
+            Event::ReplicaSetSubmitted { time, .. } => *time,
         }
     }
 }

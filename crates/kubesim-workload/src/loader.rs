@@ -120,14 +120,27 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
             let owner_id = owner_counter;
             owner_counter += 1;
 
-            for _ in 0..replicas {
-                let requests = sample_resources(workload, rng);
+            let requests = sample_resources(workload, rng);
+
+            if replicas > 1 || workload.replicas.is_some() {
+                // Workload with replicas → emit ReplicaSet
+                events.push(Event::ReplicaSetSubmitted {
+                    time: SimTime(0),
+                    owner_id,
+                    desired_replicas: replicas,
+                    requests,
+                    limits: requests,
+                    priority,
+                    deletion_cost_strategy: DeletionCostStrategy::None,
+                });
+            } else {
+                // Bare pod
                 events.push(Event::PodSubmitted {
                     time: SimTime(0),
                     workload_name: workload.workload_type.clone(),
                     owner_id,
                     requests,
-                    limits: requests, // limits = requests for Guaranteed QoS default
+                    limits: requests,
                     priority,
                     deletion_cost: None,
                 });

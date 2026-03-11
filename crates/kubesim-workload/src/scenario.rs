@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use kubesim_core::DeletionCostStrategy;
+
 /// Top-level scenario file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioFile {
@@ -365,12 +367,7 @@ pub enum ScoringStrategy {
     LeastAllocated,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DeletionCostStrategy {
-    None,
-    PreferEmptyingNodes,
-}
+// DeletionCostStrategy is re-exported from kubesim_core
 
 // ── Metrics config ──────────────────────────────────────────────
 
