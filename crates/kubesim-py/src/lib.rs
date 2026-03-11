@@ -15,6 +15,8 @@ use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
 use kubesim_workload::{
     load_scenario_from_str, ScenarioFile, Variant,
     Event as WorkloadEvent, TimeMode as ScenarioTimeMode,
+    generate_random_scenario, RandomScenarioConfig,
+    RangeU32, InstanceWeight, ArchetypeWeights,
 };
 
 use std::path::Path;
