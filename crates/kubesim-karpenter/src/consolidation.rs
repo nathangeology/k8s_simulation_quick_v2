@@ -49,22 +49,35 @@ fn find_empty_nodes(state: &ClusterState) -> Vec<NodeId> {
 /// Check whether all pods on `candidate` can fit on other ready, non-cordoned nodes.
 ///
 /// Uses a greedy first-fit approach: for each pod, find any other node with
-/// enough available resources. This is a simplified model — real Karpenter
-/// uses full scheduling simulation.
+/// enough available resources AND passing scheduling constraints (affinity,
+/// taints, topology spread). Real Karpenter uses full scheduling simulation;
+/// this approximates it by running the scheduler's filter plugins.
 fn pods_can_reschedule(
     state: &ClusterState,
     candidate: NodeId,
 ) -> Option<Vec<PodId>> {
+    use kubesim_scheduler::{
+        FilterResult, TaintToleration, NodeAffinity,
+        InterPodAffinityFilter, PodTopologySpreadFilter, FilterPlugin,
+    };
+
     let node = state.nodes.get(candidate)?;
     if node.pods.is_empty() {
         return Some(Vec::new());
     }
 
+    let filters: Vec<Box<dyn FilterPlugin>> = vec![
+        Box::new(TaintToleration),
+        Box::new(NodeAffinity),
+        Box::new(InterPodAffinityFilter),
+        Box::new(PodTopologySpreadFilter),
+    ];
+
     // Collect pods to move
     let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
-    let pods: Vec<(PodId, Resources)> = pod_ids
+    let pods: Vec<(PodId, &Pod)> = pod_ids
         .iter()
-        .filter_map(|&pid| state.pods.get(pid).map(|p| (pid, p.requests)))
+        .filter_map(|&pid| state.pods.get(pid).map(|p| (pid, p)))
         .collect();
 
     // Build available capacity on other nodes (mutable copy for greedy allocation)
@@ -75,13 +88,22 @@ fn pods_can_reschedule(
         .map(|(nid, n)| (nid, n.allocatable.saturating_sub(&n.allocated)))
         .collect();
 
-    for &(_, req) in &pods {
-        let slot = other_avail
-            .iter_mut()
-            .find(|(_, avail)| req.fits_in(avail));
+    for &(_, pod) in &pods {
+        let slot = other_avail.iter_mut().find(|(nid, avail)| {
+            // Check resource fit
+            if !pod.requests.fits_in(avail) {
+                return false;
+            }
+            // Check scheduling constraints via filter plugins
+            let target_node = match state.nodes.get(*nid) {
+                Some(n) => n,
+                None => return false,
+            };
+            filters.iter().all(|f| matches!(f.filter(state, pod, target_node), FilterResult::Pass))
+        });
         match slot {
-            Some((_, avail)) => *avail = avail.saturating_sub(&req),
-            None => return None, // no room for this pod
+            Some((_, avail)) => *avail = avail.saturating_sub(&pod.requests),
+            None => return None,
         }
     }
 

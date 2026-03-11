@@ -132,6 +132,7 @@ dependencies = [
  "kubesim-core",
  "kubesim-ec2",
  "kubesim-engine",
+ "kubesim-scheduler",
  "serde",
  "smallvec",
  "thiserror",

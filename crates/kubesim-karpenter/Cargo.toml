@@ -7,6 +7,7 @@ edition.workspace = true
 kubesim-core = { workspace = true }
 kubesim-ec2 = { workspace = true }
 kubesim-engine = { workspace = true }
+kubesim-scheduler = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
