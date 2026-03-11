@@ -205,3 +205,150 @@ impl EventHandler for DriftHandler {
         follow_ups
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kubesim_engine::Event;
+
+    fn test_node(instance_type: &str) -> Node {
+        Node {
+            instance_type: instance_type.into(),
+            allocatable: Resources { cpu_millis: 4000, memory_bytes: 8_000_000_000, gpu: 0, ephemeral_bytes: 0 },
+            allocated: Resources::default(),
+            pods: smallvec::smallvec![],
+            conditions: NodeConditions { ready: true, ..Default::default() },
+            labels: LabelSet::default(),
+            taints: smallvec::smallvec![],
+            cost_per_hour: 0.192,
+            lifecycle: NodeLifecycle::OnDemand,
+            cordoned: false,
+        }
+    }
+
+    fn test_pool() -> NodePool {
+        NodePool {
+            name: "default".into(),
+            instance_types: vec!["m5.xlarge".into()],
+            limits: crate::nodepool::NodePoolLimits::default(),
+            labels: vec![],
+            taints: vec![],
+            max_disrupted_pct: 10,
+        }
+    }
+
+    fn test_pod(cpu: u64, mem: u64) -> Pod {
+        Pod {
+            requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
+            limits: Resources::default(),
+            phase: PodPhase::Pending,
+            node: None,
+            scheduling_constraints: SchedulingConstraints::default(),
+            deletion_cost: None,
+            owner: OwnerId(0),
+            qos_class: QoSClass::Burstable,
+            priority: 0,
+            labels: LabelSet::default(),
+        }
+    }
+
+    #[test]
+    fn drifted_node_detected() {
+        let pool = test_pool(); // allows only m5.xlarge
+        let handler = DriftHandler::new(pool, DriftConfig::default());
+        let node = test_node("m5.2xlarge"); // not in pool
+        assert!(handler.is_drifted(&node));
+    }
+
+    #[test]
+    fn non_drifted_node_passes() {
+        let pool = test_pool();
+        let handler = DriftHandler::new(pool, DriftConfig::default());
+        let node = test_node("m5.xlarge");
+        assert!(!handler.is_drifted(&node));
+    }
+
+    #[test]
+    fn empty_pool_means_no_drift() {
+        let pool = NodePool {
+            instance_types: vec![],
+            ..test_pool()
+        };
+        let handler = DriftHandler::new(pool, DriftConfig::default());
+        let node = test_node("anything");
+        assert!(!handler.is_drifted(&node));
+    }
+
+    #[test]
+    fn drift_handler_terminates_empty_drifted_node() {
+        let mut state = ClusterState::new();
+        state.add_node(test_node("m5.2xlarge")); // drifted
+
+        let mut handler = DriftHandler::new(test_pool(), DriftConfig::default());
+        let events = handler.handle(
+            &Event::KarpenterConsolidationLoop,
+            SimTime(1000),
+            &mut state,
+        );
+
+        let has_terminated = events.iter().any(|e| matches!(e.event, Event::NodeTerminated(_)));
+        assert!(has_terminated);
+    }
+
+    #[test]
+    fn drift_handler_drains_node_with_pods() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(test_node("m5.2xlarge")); // drifted
+        let pid = state.submit_pod(test_pod(500, 500_000_000));
+        state.bind_pod(pid, nid);
+
+        // Add a target node for rescheduling
+        state.add_node(test_node("m5.xlarge"));
+
+        let mut handler = DriftHandler::new(test_pool(), DriftConfig::default());
+        handler.handle(
+            &Event::KarpenterConsolidationLoop,
+            SimTime(1000),
+            &mut state,
+        );
+
+        // Pod should be evicted back to pending
+        assert_eq!(state.pods.get(pid).unwrap().phase, PodPhase::Pending);
+    }
+
+    #[test]
+    fn drift_handler_respects_pdb() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(test_node("m5.2xlarge")); // drifted
+        let mut pod = test_pod(500, 500_000_000);
+        pod.labels.insert("app".into(), "web".into());
+        let pid = state.submit_pod(pod);
+        state.bind_pod(pid, nid);
+
+        // PDB requires 1 pod available
+        state.pdbs.push(PodDisruptionBudget {
+            selector: LabelSelector { match_labels: LabelSet(vec![("app".into(), "web".into())]) },
+            min_available: 1,
+        });
+
+        let mut handler = DriftHandler::new(test_pool(), DriftConfig::default());
+        handler.handle(
+            &Event::KarpenterConsolidationLoop,
+            SimTime(1000),
+            &mut state,
+        );
+
+        // Pod should NOT be evicted (PDB blocks it), node enters draining
+        assert_eq!(state.pods.get(pid).unwrap().phase, PodPhase::Running);
+        assert!(!handler.draining.is_empty());
+    }
+
+    #[test]
+    fn drift_handler_ignores_non_consolidation_events() {
+        let mut state = ClusterState::new();
+        let mut handler = DriftHandler::new(test_pool(), DriftConfig::default());
+        let events = handler.handle(&Event::MetricsSnapshot, SimTime(1000), &mut state);
+        // Only returns empty for non-consolidation events
+        assert!(events.is_empty());
+    }
+}

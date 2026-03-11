@@ -135,3 +135,108 @@ impl EventHandler for SpotInterruptionHandler {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn spot_node(prob: u32) -> Node {
+        Node {
+            instance_type: "m5.xlarge".into(),
+            allocatable: Resources { cpu_millis: 4000, memory_bytes: 8_000_000_000, gpu: 0, ephemeral_bytes: 0 },
+            allocated: Resources::default(),
+            pods: smallvec::smallvec![],
+            conditions: NodeConditions { ready: true, ..Default::default() },
+            labels: LabelSet::default(),
+            taints: smallvec::smallvec![],
+            cost_per_hour: 0.076,
+            lifecycle: NodeLifecycle::Spot { interruption_prob: prob },
+            cordoned: false,
+        }
+    }
+
+    fn test_pod() -> Pod {
+        Pod {
+            requests: Resources { cpu_millis: 500, memory_bytes: 500_000_000, gpu: 0, ephemeral_bytes: 0 },
+            limits: Resources::default(),
+            phase: PodPhase::Pending,
+            node: None,
+            scheduling_constraints: SchedulingConstraints::default(),
+            deletion_cost: None,
+            owner: OwnerId(0),
+            qos_class: QoSClass::Burstable,
+            priority: 0,
+            labels: LabelSet::default(),
+        }
+    }
+
+    #[test]
+    fn zero_prob_never_interrupts() {
+        let mut handler = SpotInterruptionHandler::new(42);
+        assert!(!handler.roll(0));
+    }
+
+    #[test]
+    fn million_prob_always_interrupts() {
+        let mut handler = SpotInterruptionHandler::new(42);
+        assert!(handler.roll(1_000_000));
+    }
+
+    #[test]
+    fn spot_interruption_evicts_pods() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(spot_node(0));
+        let pid = state.submit_pod(test_pod());
+        state.bind_pod(pid, nid);
+
+        let mut handler = SpotInterruptionHandler::new(42);
+        handler.handle(&Event::SpotInterruption(nid), SimTime(1000), &mut state);
+
+        assert_eq!(state.pods.get(pid).unwrap().phase, PodPhase::Pending);
+        assert_eq!(handler.metrics.pods_disrupted, 1);
+    }
+
+    #[test]
+    fn node_terminated_removes_node() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(spot_node(0));
+
+        let mut handler = SpotInterruptionHandler::new(42);
+        handler.handle(&Event::NodeTerminated(nid), SimTime(1000), &mut state);
+
+        assert!(state.nodes.get(nid).is_none());
+    }
+
+    #[test]
+    fn high_prob_spot_generates_interruptions() {
+        let mut state = ClusterState::new();
+        // 100% interruption probability
+        state.add_node(spot_node(1_000_000));
+
+        let mut handler = SpotInterruptionHandler::new(42);
+        let events = handler.handle(
+            &Event::KarpenterProvisioningLoop,
+            SimTime(1000),
+            &mut state,
+        );
+        // Should have SpotInterruption + NodeTerminated
+        assert!(events.len() >= 2);
+        assert_eq!(handler.metrics.interruptions, 1);
+    }
+
+    #[test]
+    fn on_demand_nodes_not_interrupted() {
+        let mut state = ClusterState::new();
+        let mut node = spot_node(0);
+        node.lifecycle = NodeLifecycle::OnDemand;
+        state.add_node(node);
+
+        let mut handler = SpotInterruptionHandler::new(42);
+        let events = handler.handle(
+            &Event::KarpenterProvisioningLoop,
+            SimTime(1000),
+            &mut state,
+        );
+        assert!(events.is_empty());
+    }
+}

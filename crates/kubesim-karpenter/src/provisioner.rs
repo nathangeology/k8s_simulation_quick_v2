@@ -159,3 +159,133 @@ pub fn provision(
     }
     decisions
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nodepool::NodePoolLimits;
+
+    fn test_pod(cpu: u64, mem: u64) -> Pod {
+        Pod {
+            requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
+            limits: Resources::default(),
+            phase: PodPhase::Pending,
+            node: None,
+            scheduling_constraints: SchedulingConstraints::default(),
+            deletion_cost: None,
+            owner: OwnerId(0),
+            qos_class: QoSClass::Burstable,
+            priority: 0,
+            labels: LabelSet::default(),
+        }
+    }
+
+    fn test_pool() -> NodePool {
+        NodePool {
+            name: "default".into(),
+            instance_types: vec!["m5.xlarge".into(), "m5.2xlarge".into()],
+            limits: NodePoolLimits::default(),
+            labels: vec![],
+            taints: vec![],
+            max_disrupted_pct: 10,
+        }
+    }
+
+    fn test_catalog() -> kubesim_ec2::Catalog {
+        kubesim_ec2::Catalog::embedded().unwrap()
+    }
+
+    #[test]
+    fn batch_pending_pods_groups_by_constraints() {
+        let mut state = ClusterState::new();
+        // Two pods with same constraints → one batch
+        state.submit_pod(test_pod(500, 500_000_000));
+        state.submit_pod(test_pod(500, 500_000_000));
+
+        let batches = batch_pending_pods(&state);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].pod_ids.len(), 2);
+        assert_eq!(batches[0].total_requests.cpu_millis, 1000);
+    }
+
+    #[test]
+    fn batch_pending_pods_separates_different_affinities() {
+        let mut state = ClusterState::new();
+        state.submit_pod(test_pod(500, 500_000_000));
+
+        let mut pod2 = test_pod(500, 500_000_000);
+        pod2.scheduling_constraints.node_affinity.push(NodeAffinityTerm {
+            affinity_type: AffinityType::Required,
+            match_labels: LabelSet(vec![("zone".into(), "us-east-1a".into())]),
+        });
+        state.submit_pod(pod2);
+
+        let batches = batch_pending_pods(&state);
+        assert_eq!(batches.len(), 2);
+    }
+
+    #[test]
+    fn select_instance_picks_cheapest_fit() {
+        let catalog = test_catalog();
+        let pool = test_pool();
+        let usage = NodePoolUsage::default();
+        let batch = PodBatch {
+            pod_ids: vec![],
+            total_requests: Resources { cpu_millis: 2000, memory_bytes: 4_000_000_000, gpu: 0, ephemeral_bytes: 0 },
+            required_labels: vec![],
+            common_tolerations: vec![],
+            gpu_required: 0,
+        };
+
+        let decision = select_instance(&batch, &catalog, &pool, &usage);
+        assert!(decision.is_some());
+        let d = decision.unwrap();
+        // m5.xlarge (4 vcpu, 16 GiB) is cheaper than m5.2xlarge
+        assert_eq!(d.instance_type, "m5.xlarge");
+    }
+
+    #[test]
+    fn select_instance_respects_pool_limits() {
+        let catalog = test_catalog();
+        let pool = NodePool {
+            limits: NodePoolLimits { max_nodes: Some(1), ..Default::default() },
+            ..test_pool()
+        };
+        let usage = NodePoolUsage { node_count: 1, ..Default::default() };
+        let batch = PodBatch {
+            pod_ids: vec![],
+            total_requests: Resources { cpu_millis: 1000, memory_bytes: 1_000_000_000, gpu: 0, ephemeral_bytes: 0 },
+            required_labels: vec![],
+            common_tolerations: vec![],
+            gpu_required: 0,
+        };
+
+        let decision = select_instance(&batch, &catalog, &pool, &usage);
+        assert!(decision.is_none());
+    }
+
+    #[test]
+    fn provision_returns_decisions_for_pending_pods() {
+        let mut state = ClusterState::new();
+        state.submit_pod(test_pod(1000, 1_000_000_000));
+        state.submit_pod(test_pod(1000, 1_000_000_000));
+
+        let catalog = test_catalog();
+        let pool = test_pool();
+        let usage = NodePoolUsage::default();
+
+        let decisions = provision(&state, &catalog, &pool, &usage);
+        assert!(!decisions.is_empty());
+    }
+
+    #[test]
+    fn provision_empty_queue_returns_empty() {
+        let state = ClusterState::new();
+        let catalog = test_catalog();
+        let pool = test_pool();
+        let usage = NodePoolUsage::default();
+
+        let decisions = provision(&state, &catalog, &pool, &usage);
+        assert!(decisions.is_empty());
+    }
+}
