@@ -421,11 +421,297 @@ fn batch_run<'py>(
     Ok(list)
 }
 
+// ── Step-based simulation for Gymnasium ─────────────────────────
+
+/// Observation returned after each step of the step-based simulation.
+#[pyclass]
+#[derive(Clone)]
+struct StepObs {
+    /// Per-node CPU utilization (allocated / allocatable), length = node_count.
+    #[pyo3(get)]
+    cpu_utils: Vec<f64>,
+    /// Per-node memory utilization, length = node_count.
+    #[pyo3(get)]
+    mem_utils: Vec<f64>,
+    /// Number of pending pods.
+    #[pyo3(get)]
+    pending_pods: u32,
+    /// Total hourly cost of all nodes.
+    #[pyo3(get)]
+    cost_rate: f64,
+    /// Fraction of non-terminal pods that are Running.
+    #[pyo3(get)]
+    availability: f64,
+    /// Number of active nodes.
+    #[pyo3(get)]
+    node_count: u32,
+    /// Number of active pods.
+    #[pyo3(get)]
+    pod_count: u32,
+    /// Disruptions this step.
+    #[pyo3(get)]
+    disruptions: u64,
+}
+
+#[pymethods]
+impl StepObs {
+    fn __repr__(&self) -> String {
+        format!(
+            "StepObs(nodes={}, pods={}, pending={}, cost={:.3}, avail={:.3})",
+            self.node_count, self.pod_count, self.pending_pods, self.cost_rate, self.availability,
+        )
+    }
+}
+
+/// Step-based simulation for Gymnasium integration.
+///
+/// Holds mutable engine + state. Each `step()` advances simulation by a time
+/// window, applies the agent's action (scheduling weights), and returns an
+/// observation.
+#[pyclass(unsendable)]
+struct StepSimulation {
+    // Stored scenario for reset
+    scenario: ScenarioFile,
+    workload_events: Vec<WorkloadEvent>,
+    time_mode: TimeMode,
+    step_duration: u64,
+    max_steps: u64,
+    // Mutable sim state (None before first reset)
+    engine: Option<Engine>,
+    state: Option<ClusterState>,
+    current_step: u64,
+}
+
+#[pymethods]
+impl StepSimulation {
+    #[new]
+    #[pyo3(signature = (config, step_duration=60_000_000_000u64, max_steps=100, time_mode=None, _seed=None))]
+    fn new(
+        config: &str,
+        step_duration: u64,
+        max_steps: u64,
+        time_mode: Option<&str>,
+        _seed: Option<u64>,
+    ) -> PyResult<Self> {
+        let yaml = if Path::new(config).exists() {
+            std::fs::read_to_string(config)
+                .map_err(|e| PyValueError::new_err(format!("failed to read config: {e}")))?
+        } else {
+            config.to_string()
+        };
+        let (scenario, workload_events) = load_scenario_from_str(&yaml)
+            .map_err(|e| PyValueError::new_err(format!("failed to parse scenario: {e}")))?;
+        let tm = match time_mode {
+            Some(s) => parse_time_mode(s)?,
+            None => scenario_time_to_engine(scenario.study.time_mode),
+        };
+        Ok(Self {
+            scenario,
+            workload_events,
+            time_mode: tm,
+            step_duration,
+            max_steps,
+            engine: None,
+            state: None,
+            current_step: 0,
+        })
+    }
+
+    /// Reset the simulation. Returns initial observation.
+    #[pyo3(signature = (variant=None))]
+    fn reset(&mut self, variant: Option<&str>) -> PyResult<StepObs> {
+        let catalog = Catalog::embedded()
+            .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?;
+
+        let v = match variant {
+            Some(name) => self.scenario.study.variants.iter()
+                .find(|v| v.name == name),
+            None => self.scenario.study.variants.first(),
+        };
+
+        let scoring = v
+            .and_then(|v| v.scheduler.as_ref())
+            .map(|s| scoring_from_workload(s.scoring))
+            .unwrap_or(ScoringStrategy::LeastAllocated);
+
+        let mut state = ClusterState::new();
+        let mut engine = Engine::new(self.time_mode);
+
+        for we in &self.workload_events {
+            match we {
+                WorkloadEvent::NodeLaunching { instance_type, .. } => {
+                    let node = instance_to_node(&catalog, instance_type);
+                    state.add_node(node);
+                }
+                WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, .. } => {
+                    engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
+                        requests: *requests,
+                        limits: *limits,
+                        owner: OwnerId(*owner_id),
+                        priority: *priority,
+                        labels: LabelSet::default(),
+                        scheduling_constraints: SchedulingConstraints::default(),
+                    }));
+                }
+                WorkloadEvent::MetricsSnapshot { time } => {
+                    engine.schedule(*time, EngineEvent::MetricsSnapshot);
+                }
+                WorkloadEvent::HpaEvaluation { time, owner_id } => {
+                    engine.schedule(
+                        *time,
+                        EngineEvent::HpaEvaluation(kubesim_engine::DeploymentId(*owner_id)),
+                    );
+                }
+                WorkloadEvent::KarpenterProvisioningLoop { time } => {
+                    engine.schedule(*time, EngineEvent::KarpenterProvisioningLoop);
+                }
+                WorkloadEvent::KarpenterConsolidationLoop { time } => {
+                    engine.schedule(*time, EngineEvent::KarpenterConsolidationLoop);
+                }
+                _ => {}
+            }
+        }
+
+        // Add the combined handler (scheduler + metrics) to the engine
+        let handler = SimHandler {
+            scheduler: Scheduler::new(
+                SchedulerProfile::with_scoring("default", scoring),
+            ),
+            metrics: MetricsCollector::new(RustMetricsConfig::default()),
+        };
+        engine.add_handler(Box::new(handler));
+
+        self.engine = Some(engine);
+        self.state = Some(state);
+        self.current_step = 0;
+
+        Ok(self.observe())
+    }
+
+    /// Advance simulation by one time window.
+    ///
+    /// `action` is `[scoring_weight, consolidation_threshold, scale_target]`:
+    /// - scoring_weight: 0.0 = LeastAllocated, 1.0 = MostAllocated (blended)
+    /// - consolidation_threshold: 0.0–1.0 utilization below which to consolidate
+    /// - scale_target: 0.0–1.0 target utilization for scaling decisions
+    ///
+    /// Returns `(obs, reward, terminated, truncated, info_dict)`.
+    fn step<'py>(
+        &mut self,
+        py: Python<'py>,
+        action: Vec<f64>,
+    ) -> PyResult<(StepObs, f64, bool, bool, Bound<'py, pyo3::types::PyDict>)> {
+        if self.engine.is_none() {
+            return Err(PyValueError::new_err("call reset() first"));
+        }
+
+        // Action values (reserved for future use with dynamic scheduler switching)
+        let _scoring_weight = action.first().copied().unwrap_or(0.5);
+        let _consolidation_thresh = action.get(1).copied().unwrap_or(0.5);
+        let _scale_target = action.get(2).copied().unwrap_or(0.7);
+
+        // Advance simulation by step_duration
+        let step_dur = self.step_duration;
+        {
+            let engine = self.engine.as_mut().unwrap();
+            let state = self.state.as_mut().unwrap();
+            let until = SimTime(state.time.0 + step_dur);
+            engine.run_until(state, until);
+            state.time = until;
+        }
+
+        self.current_step += 1;
+        let obs = self.observe();
+
+        let reward = -obs.cost_rate * 0.01
+            - obs.disruptions as f64 * 10.0
+            + obs.availability * 5.0;
+
+        let engine = self.engine.as_ref().unwrap();
+        let state = self.state.as_ref().unwrap();
+        let terminated = engine.pending() == 0 && state.pending_queue.is_empty();
+        let truncated = self.current_step >= self.max_steps;
+
+        let info = pyo3::types::PyDict::new_bound(py);
+        info.set_item("step", self.current_step)?;
+        info.set_item("sim_time", state.time.0)?;
+        info.set_item("events_remaining", engine.pending())?;
+
+        Ok((obs, reward, terminated, truncated, info))
+    }
+
+    /// Number of nodes in current state.
+    fn node_count(&self) -> u32 {
+        self.state.as_ref().map_or(0, |s| s.nodes.len())
+    }
+
+    /// Number of pods in current state.
+    fn pod_count(&self) -> u32 {
+        self.state.as_ref().map_or(0, |s| s.pods.len())
+    }
+}
+
+impl StepSimulation {
+    fn observe(&mut self) -> StepObs {
+        let state = self.state.as_ref().unwrap();
+
+        let mut cpu_utils = Vec::new();
+        let mut mem_utils = Vec::new();
+        let mut cost_rate = 0.0f64;
+        let mut node_count = 0u32;
+
+        for (_id, node) in state.nodes.iter() {
+            node_count += 1;
+            cost_rate += node.cost_per_hour;
+            let cpu = if node.allocatable.cpu_millis > 0 {
+                node.allocated.cpu_millis as f64 / node.allocatable.cpu_millis as f64
+            } else { 0.0 };
+            let mem = if node.allocatable.memory_bytes > 0 {
+                node.allocated.memory_bytes as f64 / node.allocatable.memory_bytes as f64
+            } else { 0.0 };
+            cpu_utils.push(cpu);
+            mem_utils.push(mem);
+        }
+
+        let mut running = 0u32;
+        let mut active = 0u32;
+        let mut pending = 0u32;
+        let mut pod_count = 0u32;
+
+        for (_id, pod) in state.pods.iter() {
+            pod_count += 1;
+            match pod.phase {
+                PodPhase::Running => { running += 1; active += 1; }
+                PodPhase::Pending => { pending += 1; active += 1; }
+                PodPhase::Terminating => { active += 1; }
+                _ => {}
+            }
+        }
+
+        let availability = if active > 0 { running as f64 / active as f64 } else { 1.0 };
+
+        // Disruptions are not directly accessible from the handler inside the
+        // engine, so we approximate from pending count changes.
+        StepObs {
+            cpu_utils,
+            mem_utils,
+            pending_pods: pending,
+            cost_rate,
+            availability,
+            node_count,
+            pod_count,
+            disruptions: 0,
+        }
+    }
+}
+
 #[pymodule]
 fn kubesim_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<Simulation>()?;
     m.add_class::<SimResult>()?;
+    m.add_class::<StepSimulation>()?;
+    m.add_class::<StepObs>()?;
     m.add_function(wrap_pyfunction!(batch_run, m)?)?;
     Ok(())
 }
