@@ -71,6 +71,42 @@ def validate_kwok_main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def compare_main(argv: list[str] | None = None) -> int:
+    """kubesim compare tier1.parquet tier2.parquet --threshold 0.05 --output report.html"""
+    from kubesim.validation.compare import compare_tiers
+
+    parser = argparse.ArgumentParser(
+        prog="kubesim compare",
+        description="Compare SimResult parquet files across tiers and report divergences",
+    )
+    parser.add_argument("files", nargs="+", type=Path,
+                        help="Parquet files to compare (first is baseline)")
+    parser.add_argument("--threshold", "-t", type=float, default=0.05,
+                        help="Divergence threshold as fraction (default: 0.05 = 5%%)")
+    parser.add_argument("--output", "-o", type=Path, default=Path("report.html"),
+                        help="Output HTML report path (default: report.html)")
+
+    args = parser.parse_args(argv)
+
+    for f in args.files:
+        if not f.exists():
+            print(f"Error: file not found: {f}", file=sys.stderr)
+            return 1
+
+    result = compare_tiers(args.files, threshold=args.threshold, output=args.output)
+
+    status = "DIVERGENCE" if result.has_divergence else "OK"
+    print(f"[{status}] Compared {len(args.files)} tiers (threshold={args.threshold * 100:.1f}%)")
+    for md in result.metrics:
+        flags = " ".join(
+            f"{md.labels[i]}:{md.pct_deltas[i] * 100:+.1f}%{'!' if md.divergent[i] else ''}"
+            for i in range(1, len(md.values))
+        )
+        print(f"  {md.metric}: {flags}")
+    print(f"Report: {args.output}")
+    return 1 if result.has_divergence else 0
+
+
 # Keep backward compat: old entry point
 main = translate_main
 

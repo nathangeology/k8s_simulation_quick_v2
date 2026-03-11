@@ -22,6 +22,9 @@ def main() -> int:
     elif cmd == "validate-eks":
         from kubesim.validation.eks_cli import main as eks_main
         return eks_main(sys.argv[2:])
+    elif cmd == "compare":
+        from kubesim.validation.cli import compare_main
+        return compare_main(sys.argv[2:])
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
         return 1
