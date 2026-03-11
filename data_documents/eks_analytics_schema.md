@@ -4,7 +4,6 @@
 
 ### Metadata Source
 
-Pre-prod schema and sample data : https://tiny.amazon.com/um810e1o/IsenLink
 DB : `resources_snapshot`
 table : `node_v1`
 
@@ -250,10 +249,6 @@ table : `nodepools_v1`
 |`resources_ephemeral_storage`	|STRING	|	|	|Total temporary disk space currently available across all nodes	|`300Gi`, `100Gi`	|	|
 |`snapshot_timestamp`	|TIMESTAMP	|-	|Analytics	|When this data snapshot was captured from the source system	|`2024-01-30T18:00:00Z`	|	|
 
-## Reference
-
-[Design Doc - EKS Analytics Data Model - Pods & Nodes](https://quip-amazon.com/VSfyAyhIaviM)
-[EKS Analytics: NodePool Schema and Data Classification](https://quip-amazon.com/pxXyAusm6x3a)
 
 
  
