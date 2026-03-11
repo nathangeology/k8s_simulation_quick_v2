@@ -49,6 +49,44 @@ fn find_empty_nodes(state: &ClusterState) -> Vec<NodeId> {
         .collect()
 }
 
+/// Compute a multi-factor disruption score for a candidate node.
+///
+/// Upstream Karpenter sorts consolidation candidates by:
+/// 1. Disruption cost — max pod priority + count of PDB-covered pods (lower = better candidate)
+/// 2. Pod count — fewer pods means less disruption (lower = better)
+/// 3. Node age — older nodes preferred for consolidation (lower created_at = better)
+///
+/// Returns `(disruption_cost, pod_count, negative_age)` for ascending sort.
+fn candidate_score(state: &ClusterState, node: &Node) -> (i64, usize, u64) {
+    let mut max_priority: i32 = 0;
+    let mut pdb_covered: i64 = 0;
+    for &pid in &node.pods {
+        if let Some(pod) = state.pods.get(pid) {
+            if pod.priority > max_priority {
+                max_priority = pod.priority;
+            }
+            if state.pdbs.iter().any(|pdb| pod.labels.matches(&pdb.selector)) {
+                pdb_covered += 1;
+            }
+        }
+    }
+    let disruption_cost = max_priority as i64 + pdb_covered;
+    let pod_count = node.pods.len();
+    // Invert age so ascending sort prefers older nodes (lower created_at).
+    let negative_age = node.created_at.0;
+    (disruption_cost, pod_count, negative_age)
+}
+
+/// Sort candidate nodes by multi-factor disruption score (ascending).
+/// Candidates with lower disruption cost are consolidated first.
+fn sort_candidates(state: &ClusterState, candidates: &mut [(NodeId, &Node)]) {
+    candidates.sort_by(|a, b| {
+        let sa = candidate_score(state, a.1);
+        let sb = candidate_score(state, b.1);
+        sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+}
+
 /// Check whether all pods on `candidate` can fit on other ready, non-cordoned nodes.
 ///
 /// Uses a greedy first-fit approach: for each pod, find any other node with
@@ -116,14 +154,13 @@ fn pods_can_reschedule(
 /// Find underutilized nodes whose pods can all be rescheduled elsewhere.
 fn find_underutilized_nodes(state: &ClusterState) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
-    // Sort candidates by cost ascending — consolidate cheapest nodes first
-    let mut candidates: Vec<(NodeId, f64)> = state
+    // Sort candidates by multi-factor disruption score — consolidate least-disruptive nodes first
+    let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
         .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
-        .map(|(id, n)| (id, n.cost_per_hour))
         .collect();
-    candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    sort_candidates(state, &mut candidates);
 
     for (nid, _) in candidates {
         if let Some(pod_ids) = pods_can_reschedule(state, nid) {
@@ -161,7 +198,7 @@ fn find_replace_candidates(
         .iter()
         .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
         .collect();
-    candidates.sort_by(|a, b| b.1.cost_per_hour.partial_cmp(&a.1.cost_per_hour).unwrap_or(std::cmp::Ordering::Equal));
+    sort_candidates(state, &mut candidates);
 
     for (nid, node) in candidates {
         // Skip if pods can already be rescheduled (delete path handles these)
@@ -439,6 +476,7 @@ mod tests {
             cost_per_hour: 0.192,
             lifecycle: NodeLifecycle::OnDemand,
             cordoned: false,
+            created_at: SimTime(0),
         }
     }
 

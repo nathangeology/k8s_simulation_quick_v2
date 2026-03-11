@@ -124,6 +124,7 @@ mod tests {
             cost_per_hour: 0.192,
             lifecycle: NodeLifecycle::OnDemand,
             cordoned: false,
+            created_at: SimTime(0),
         }
     }
 
