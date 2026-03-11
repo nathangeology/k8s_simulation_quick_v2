@@ -7,6 +7,23 @@ use std::collections::HashMap;
 use crate::config::{DetailLevel, ExportFormat, MetricsConfig};
 use crate::snapshot::{MetricsSnapshot, Percentiles};
 
+/// Compute Shannon entropy and its normalized form from a slice of counts.
+/// Returns (raw_entropy, normalized_entropy). If fewer than 2 items or total is 0,
+/// returns (0.0, 0.0).
+fn shannon_entropy(counts: &[f64]) -> (f64, f64) {
+    let total: f64 = counts.iter().sum();
+    if total == 0.0 || counts.len() < 2 {
+        return (0.0, 0.0);
+    }
+    let h: f64 = counts.iter()
+        .filter(|&&c| c > 0.0)
+        .map(|&c| { let p = c / total; -p * p.ln() })
+        .sum();
+    let max_h = (counts.len() as f64).ln();
+    let normalized = if max_h > 0.0 { h / max_h } else { 0.0 };
+    (h, normalized)
+}
+
 /// Adaptive metrics collector that hooks into the DES event loop.
 pub struct MetricsCollector {
     config: MetricsConfig,
@@ -156,6 +173,18 @@ impl MetricsCollector {
             DetailLevel::Auto => "auto",
         };
 
+        // Pod placement entropy
+        let pod_counts: Vec<f64> = state.nodes.iter()
+            .map(|(_id, node)| node.pods.len() as f64)
+            .collect();
+        let (pod_placement_entropy, pod_placement_entropy_normalized) = shannon_entropy(&pod_counts);
+
+        // CPU-weighted entropy
+        let cpu_allocs: Vec<f64> = state.nodes.iter()
+            .map(|(_id, node)| node.allocated.cpu_millis as f64)
+            .collect();
+        let (cpu_weighted_entropy, cpu_weighted_entropy_normalized) = shannon_entropy(&cpu_allocs);
+
         self.snapshots.push(MetricsSnapshot {
             time,
             total_cost_per_hour: total_cost,
@@ -168,6 +197,10 @@ impl MetricsCollector {
             pod_count,
             pending_count: pending,
             detail_level: detail_str.to_string(),
+            pod_placement_entropy,
+            pod_placement_entropy_normalized,
+            cpu_weighted_entropy,
+            cpu_weighted_entropy_normalized,
         });
 
         self.recent_latencies.clear();

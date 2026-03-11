@@ -157,6 +157,21 @@ impl kubesim_engine::EventHandler for SimHandler {
 
 // ── Single simulation run ───────────────────────────────────────
 
+/// Compute Shannon entropy and normalized form from a slice of counts.
+fn shannon_entropy(counts: &[f64]) -> (f64, f64) {
+    let total: f64 = counts.iter().sum();
+    if total == 0.0 || counts.len() < 2 {
+        return (0.0, 0.0);
+    }
+    let h: f64 = counts.iter()
+        .filter(|&&c| c > 0.0)
+        .map(|&c| { let p = c / total; -p * p.ln() })
+        .sum();
+    let max_h = (counts.len() as f64).ln();
+    let normalized = if max_h > 0.0 { h / max_h } else { 0.0 };
+    (h, normalized)
+}
+
 struct SimRunResult {
     events_processed: u64,
     total_cost_per_hour: f64,
@@ -165,6 +180,10 @@ struct SimRunResult {
     running_pods: u32,
     pending_pods: u32,
     final_time: u64,
+    pod_placement_entropy: f64,
+    pod_placement_entropy_normalized: f64,
+    cpu_weighted_entropy: f64,
+    cpu_weighted_entropy_normalized: f64,
 }
 
 fn run_single(
@@ -321,6 +340,12 @@ fn run_single(
         }
     }
 
+    // Entropy metrics
+    let pod_counts: Vec<f64> = state.nodes.iter().map(|(_, n)| n.pods.len() as f64).collect();
+    let (pod_placement_entropy, pod_placement_entropy_normalized) = shannon_entropy(&pod_counts);
+    let cpu_allocs: Vec<f64> = state.nodes.iter().map(|(_, n)| n.allocated.cpu_millis as f64).collect();
+    let (cpu_weighted_entropy, cpu_weighted_entropy_normalized) = shannon_entropy(&cpu_allocs);
+
     SimRunResult {
         events_processed,
         total_cost_per_hour: total_cost,
@@ -329,6 +354,10 @@ fn run_single(
         running_pods: running,
         pending_pods: pending,
         final_time: state.time.0,
+        pod_placement_entropy,
+        pod_placement_entropy_normalized,
+        cpu_weighted_entropy,
+        cpu_weighted_entropy_normalized,
     }
 }
 
@@ -355,6 +384,14 @@ struct SimResult {
     variant: String,
     #[pyo3(get)]
     seed: u64,
+    #[pyo3(get)]
+    pod_placement_entropy: f64,
+    #[pyo3(get)]
+    pod_placement_entropy_normalized: f64,
+    #[pyo3(get)]
+    cpu_weighted_entropy: f64,
+    #[pyo3(get)]
+    cpu_weighted_entropy_normalized: f64,
 }
 
 #[pymethods]
@@ -379,6 +416,10 @@ impl SimResult {
         dict.set_item("running_pods", self.running_pods)?;
         dict.set_item("pending_pods", self.pending_pods)?;
         dict.set_item("final_time", self.final_time)?;
+        dict.set_item("pod_placement_entropy", self.pod_placement_entropy)?;
+        dict.set_item("pod_placement_entropy_normalized", self.pod_placement_entropy_normalized)?;
+        dict.set_item("cpu_weighted_entropy", self.cpu_weighted_entropy)?;
+        dict.set_item("cpu_weighted_entropy_normalized", self.cpu_weighted_entropy_normalized)?;
         Ok(dict)
     }
 }
@@ -443,6 +484,10 @@ impl Simulation {
             final_time: r.final_time,
             variant: v.name.clone(),
             seed: self.seed,
+            pod_placement_entropy: r.pod_placement_entropy,
+            pod_placement_entropy_normalized: r.pod_placement_entropy_normalized,
+            cpu_weighted_entropy: r.cpu_weighted_entropy,
+            cpu_weighted_entropy_normalized: r.cpu_weighted_entropy_normalized,
         })
     }
 
@@ -464,6 +509,10 @@ impl Simulation {
                 final_time: r.final_time,
                 variant: v.name.clone(),
                 seed: self.seed,
+                pod_placement_entropy: r.pod_placement_entropy,
+                pod_placement_entropy_normalized: r.pod_placement_entropy_normalized,
+                cpu_weighted_entropy: r.cpu_weighted_entropy,
+                cpu_weighted_entropy_normalized: r.cpu_weighted_entropy_normalized,
             }
         }).collect())
     }
@@ -535,6 +584,10 @@ fn batch_run<'py>(
         dict.set_item("running_pods", r.running_pods)?;
         dict.set_item("pending_pods", r.pending_pods)?;
         dict.set_item("final_time", r.final_time)?;
+        dict.set_item("pod_placement_entropy", r.pod_placement_entropy)?;
+        dict.set_item("pod_placement_entropy_normalized", r.pod_placement_entropy_normalized)?;
+        dict.set_item("cpu_weighted_entropy", r.cpu_weighted_entropy)?;
+        dict.set_item("cpu_weighted_entropy_normalized", r.cpu_weighted_entropy_normalized)?;
         list.append(dict)?;
     }
 
