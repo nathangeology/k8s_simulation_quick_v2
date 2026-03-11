@@ -5,6 +5,7 @@ use kubesim_core::*;
 use kubesim_engine::{Event, EventHandler, ScheduledEvent};
 
 use crate::nodepool::NodePool;
+use crate::version::VersionProfile;
 
 /// Configuration for drift detection behavior.
 #[derive(Debug, Clone)]
@@ -41,19 +42,41 @@ pub struct DriftHandler {
     pub config: DriftConfig,
     /// Nodes currently being drained due to drift.
     draining: Vec<DriftingNode>,
+    /// Version profile controlling drift detection behavior.
+    pub version_profile: Option<VersionProfile>,
 }
 
 impl DriftHandler {
     pub fn new(pool: NodePool, config: DriftConfig) -> Self {
-        Self { pool, config, draining: Vec::new() }
+        Self { pool, config, draining: Vec::new(), version_profile: None }
     }
 
-    /// Check if a node's instance type is still allowed by the NodePool spec.
+    /// Create a handler with a specific Karpenter version profile.
+    pub fn with_version(mut self, profile: VersionProfile) -> Self {
+        self.version_profile = Some(profile);
+        self
+    }
+
+    /// Check if a node is drifted. v0.35: instance type only. v1.x: also hash-based.
     fn is_drifted(&self, node: &Node) -> bool {
         if self.pool.instance_types.is_empty() {
-            return false; // empty = all types allowed, no drift possible
+            return false;
         }
-        !self.pool.instance_types.iter().any(|t| t == &node.instance_type)
+        let type_drifted = !self.pool.instance_types.iter().any(|t| t == &node.instance_type);
+
+        // v0.35: only instance type (AMI) drift
+        // v1.x: also detects label/taint drift via hash comparison
+        let hash_drift = self.version_profile
+            .as_ref()
+            .map_or(true, |p| p.hash_based_drift)
+            && self.has_label_drift(node);
+
+        type_drifted || hash_drift
+    }
+
+    /// Check if node labels diverge from the NodePool's expected labels.
+    fn has_label_drift(&self, node: &Node) -> bool {
+        self.pool.labels.iter().any(|(k, v)| node.labels.get(k) != Some(v.as_str()))
     }
 
     /// Count how many pods matching a PDB's selector are currently Running.

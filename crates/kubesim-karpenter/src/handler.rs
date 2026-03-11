@@ -6,6 +6,7 @@ use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
 
 use crate::nodepool::{NodePool, NodePoolUsage};
 use crate::provisioner;
+use crate::version::VersionProfile;
 
 /// Karpenter provisioning handler for the simulation engine.
 ///
@@ -17,6 +18,8 @@ pub struct ProvisioningHandler {
     pub usage: NodePoolUsage,
     /// Interval (ns) between provisioning loops in WallClock mode.
     pub loop_interval_ns: u64,
+    /// Version profile (reserved for future version-specific provisioning behavior).
+    pub version_profile: Option<VersionProfile>,
 }
 
 impl ProvisioningHandler {
@@ -26,7 +29,14 @@ impl ProvisioningHandler {
             pool,
             usage: NodePoolUsage::default(),
             loop_interval_ns: 5_000_000_000, // 5s default
+            version_profile: None,
         }
+    }
+
+    /// Create a handler with a specific Karpenter version profile.
+    pub fn with_version(mut self, profile: VersionProfile) -> Self {
+        self.version_profile = Some(profile);
+        self
     }
 }
 

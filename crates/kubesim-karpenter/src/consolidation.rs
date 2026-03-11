@@ -9,6 +9,7 @@ use kubesim_core::*;
 use kubesim_engine::{Event, EventHandler, ScheduledEvent};
 
 use crate::nodepool::NodePool;
+use crate::version::{ConsolidationStrategy, VersionProfile};
 
 /// Consolidation policy selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -26,6 +27,12 @@ pub enum ConsolidationAction {
     DrainAndTerminate {
         node_id: NodeId,
         pod_ids: Vec<PodId>,
+    },
+    /// v1.x: Replace a node with a cheaper instance type.
+    Replace {
+        node_id: NodeId,
+        pod_ids: Vec<PodId>,
+        replacement_instance_type: String,
     },
 }
 
@@ -112,6 +119,21 @@ pub fn evaluate(
     policy: ConsolidationPolicy,
     max_disrupted: u32,
 ) -> Vec<ConsolidationAction> {
+    evaluate_versioned(state, policy, max_disrupted, None)
+}
+
+/// Version-aware consolidation evaluation.
+/// When `profile` is `None`, uses v1.x default behavior.
+pub fn evaluate_versioned(
+    state: &ClusterState,
+    policy: ConsolidationPolicy,
+    max_disrupted: u32,
+    profile: Option<&VersionProfile>,
+) -> Vec<ConsolidationAction> {
+    let strategy = profile
+        .map(|p| p.consolidation_strategy)
+        .unwrap_or(ConsolidationStrategy::MultiNode);
+
     let mut actions: Vec<ConsolidationAction> = Vec::new();
     let mut budget = max_disrupted;
 
@@ -125,12 +147,28 @@ pub fn evaluate(
     }
 
     if policy == ConsolidationPolicy::WhenUnderutilized && budget > 0 {
-        for action in find_underutilized_nodes(state) {
-            if budget == 0 {
-                break;
+        match strategy {
+            ConsolidationStrategy::SingleNode => {
+                // v0.35: only delete nodes whose pods fit elsewhere (no replacement)
+                for action in find_underutilized_nodes(state) {
+                    if budget == 0 {
+                        break;
+                    }
+                    actions.push(action);
+                    budget -= 1;
+                }
             }
-            actions.push(action);
-            budget -= 1;
+            ConsolidationStrategy::MultiNode => {
+                // v1.x: same single-node delete, plus future multi-node replacement
+                // (multi-node replacement is a stub — full implementation is future work)
+                for action in find_underutilized_nodes(state) {
+                    if budget == 0 {
+                        break;
+                    }
+                    actions.push(action);
+                    budget -= 1;
+                }
+            }
         }
     }
 
@@ -151,6 +189,8 @@ pub struct ConsolidationHandler {
     pub policy: ConsolidationPolicy,
     /// Interval (ns) between consolidation loops in WallClock mode.
     pub loop_interval_ns: u64,
+    /// Version profile controlling consolidation strategy.
+    pub version_profile: Option<VersionProfile>,
 }
 
 impl ConsolidationHandler {
@@ -159,7 +199,14 @@ impl ConsolidationHandler {
             pool,
             policy,
             loop_interval_ns: 30_000_000_000, // 30s default
+            version_profile: None,
         }
+    }
+
+    /// Create a handler with a specific Karpenter version profile.
+    pub fn with_version(mut self, profile: VersionProfile) -> Self {
+        self.version_profile = Some(profile);
+        self
     }
 }
 
@@ -176,7 +223,7 @@ impl EventHandler for ConsolidationHandler {
 
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
-        let actions = evaluate(state, self.policy, max_d);
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref());
         let mut follow_ups = Vec::new();
 
         for action in actions {
@@ -215,6 +262,34 @@ impl EventHandler for ConsolidationHandler {
                     follow_ups.push(ScheduledEvent {
                         time: SimTime(time.0 + 3),
                         event: Event::NodeTerminated(node_id),
+                    });
+                }
+                ConsolidationAction::Replace { node_id, pod_ids, replacement_instance_type } => {
+                    // v1.x replacement: cordon old node, drain, terminate, launch replacement
+                    if let Some(n) = state.nodes.get_mut(node_id) {
+                        n.cordoned = true;
+                    }
+                    follow_ups.push(ScheduledEvent {
+                        time: SimTime(time.0 + 1),
+                        event: Event::NodeCordoned(node_id),
+                    });
+                    for pid in pod_ids {
+                        state.evict_pod(pid);
+                    }
+                    follow_ups.push(ScheduledEvent {
+                        time: SimTime(time.0 + 2),
+                        event: Event::NodeDrained(node_id),
+                    });
+                    follow_ups.push(ScheduledEvent {
+                        time: SimTime(time.0 + 3),
+                        event: Event::NodeTerminated(node_id),
+                    });
+                    // Launch cheaper replacement
+                    follow_ups.push(ScheduledEvent {
+                        time: SimTime(time.0 + 4),
+                        event: Event::NodeLaunching(kubesim_engine::NodeSpec {
+                            instance_type: replacement_instance_type,
+                        }),
                     });
                 }
             }

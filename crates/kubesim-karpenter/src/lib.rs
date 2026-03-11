@@ -6,6 +6,7 @@ pub mod handler;
 pub mod nodepool;
 pub mod provisioner;
 pub mod spot;
+pub mod version;
 
 pub use kubesim_core;
 pub use consolidation::{ConsolidationAction, ConsolidationHandler, ConsolidationPolicy};
@@ -14,3 +15,4 @@ pub use handler::ProvisioningHandler;
 pub use nodepool::{NodePool, NodePoolLimits, NodePoolUsage};
 pub use provisioner::{batch_pending_pods, provision, select_instance, PodBatch, ProvisionDecision};
 pub use spot::{SpotDisruptionMetrics, SpotInterruptionHandler};
+pub use version::{KarpenterVersion, VersionProfile};
