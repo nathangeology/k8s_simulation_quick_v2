@@ -1,9 +1,17 @@
 """KubeSim — Fast Kubernetes cluster simulator."""
 
-from kubesim._native import (
-    Simulation, SimResult, StepSimulation, StepObs, batch_run, __version__,
-)
-from kubesim import analysis
+try:
+    from kubesim._native import (
+        Simulation, SimResult, StepSimulation, StepObs, batch_run, __version__,
+    )
+except ImportError:
+    Simulation = SimResult = StepSimulation = StepObs = batch_run = None
+    __version__ = "0.1.0-dev"
+
+try:
+    from kubesim import analysis
+except ImportError:
+    analysis = None  # type: ignore[assignment]
 
 # Adversarial finder — optional (requires hypothesis + pyyaml)
 try:

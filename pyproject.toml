@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "Fast Kubernetes cluster simulator — PyO3 bindings"
 requires-python = ">=3.9"
 license = { text = "MIT" }
+dependencies = ["pyyaml>=6.0"]
+
+[project.scripts]
+kubesim = "kubesim.__main__:main"
 
 [tool.maturin]
 manifest-path = "crates/kubesim-py/Cargo.toml"
