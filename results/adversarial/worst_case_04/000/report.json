@@ -1,0 +1,142 @@
+{
+  "study": "000",
+  "variants": [
+    "least_allocated",
+    "most_allocated"
+  ],
+  "runs_per_variant": 50,
+  "per_variant": {
+    "least_allocated": {
+      "total_cost_per_hour": {
+        "mean": 0.3840000000000002,
+        "median": 0.384,
+        "p90": 0.384,
+        "p99": 0.384
+      },
+      "node_count": {
+        "mean": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "p99": 1.0
+      },
+      "running_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "p99": 1.0
+      },
+      "final_time": {
+        "mean": 60000000000.0,
+        "median": 60000000000.0,
+        "p90": 60000000000.0,
+        "p99": 60000000000.0
+      }
+    },
+    "most_allocated": {
+      "total_cost_per_hour": {
+        "mean": 0.3840000000000002,
+        "median": 0.384,
+        "p90": 0.384,
+        "p99": 0.384
+      },
+      "node_count": {
+        "mean": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "p99": 1.0
+      },
+      "running_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "p99": 1.0
+      },
+      "final_time": {
+        "mean": 60000000000.0,
+        "median": 60000000000.0,
+        "p90": 60000000000.0,
+        "p99": 60000000000.0
+      }
+    }
+  },
+  "comparison": [
+    {
+      "metric": "total_cost_per_hour",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "node_count",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "running_pods",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "pending_pods",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "events_processed",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "final_time",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    }
+  ]
+}

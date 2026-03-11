@@ -229,7 +229,7 @@ def main():
             "both_degrade": "Both degrade",
         }[cat]
         print(f"\n{label} (top {len(group)}):")
-        print(f"{'#':>3} {'Δ cost':>+10} {'Most $/hr':>10} {'Least $/hr':>10}  File")
+        print(f"{'#':>3} {'Δ cost':>10} {'Most $/hr':>10} {'Least $/hr':>10}  File")
         print("-" * 60)
 
         for i, (m, scenario) in enumerate(group):

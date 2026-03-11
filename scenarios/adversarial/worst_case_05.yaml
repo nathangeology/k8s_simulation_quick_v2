@@ -1,154 +1,33 @@
 study:
-  name: 8k2wz
-  runs: 7389
-  time_mode: wall_clock
+  name: '000'
+  runs: 1
+  time_mode: logical
   cluster:
     node_pools:
     - instance_types:
-      - m6i.xlarge
-      - r5.2xlarge
-      - g4dn.xlarge
-      - m6i.large
-      - r5.xlarge
-      - m5.large
-      min_nodes: 9
-      max_nodes: 195
-      karpenter:
-        consolidation:
-          policy: WhenUnderutilized
-    - instance_types:
-      - r5.xlarge
-      min_nodes: 3
-      max_nodes: 137
-      karpenter:
-        consolidation:
-          policy: WhenEmpty
-    - instance_types:
-      - c6i.2xlarge
-      - r5.2xlarge
-      - m5.2xlarge
-      - m6i.large
-      - c6i.xlarge
-      min_nodes: 10
-      max_nodes: 163
+      - p3.2xlarge
+      min_nodes: 1
+      max_nodes: 11
   workloads:
-  - type: saas_microservice
-    count: 11
-    replicas:
-      min: 6
-      max: 37
-    churn: low
-    pdb:
-      min_available: 80%
   - type: web_app
-    count: 4
-    replicas:
-      min: 4
-      max: 25
-    churn: low
-    traffic: diurnal
-    pdb:
-      min_available: '2'
-    topology_spread:
-      max_skew: 4
-      topology_key: topology.kubernetes.io/zone
-    scaling:
-      type: hpa
-      metric: cpu
-      target: 70%
-    memory_request:
-      dist: uniform
-      min: 4018Mi
-      max: 83150Mi
-    cpu_request:
-      dist: uniform
-      min: 652m
-      max: 11842m
-  - type: batch_job
-    count: 27
-    priority: low
-    duration:
-      dist: exponential
-      mean: 376m
-    memory_request:
-      dist: uniform
-      min: 2780Mi
-      max: 64523Mi
-    cpu_request:
-      dist: uniform
-      min: 407m
-      max: 26359m
-  - type: web_app
-    count: 14
-    replicas:
-      min: 2
-      max: 27
-    churn: low
-    traffic: diurnal
-    topology_spread:
-      max_skew: 5
-      topology_key: kubernetes.io/hostname
-    scaling:
-      type: hpa
-      metric: cpu
-      target: 70%
-    cpu_request:
-      dist: normal
-      mean: 2057m
-      std: 377m
-    memory_request:
-      dist: normal
-      mean: 2993Mi
-      std: 1964Mi
-    pdb:
-      min_available: 80%
-  - type: ml_training
     count: 1
     replicas:
-      fixed: 1
-    priority: high
-    cpu_request:
-      dist: uniform
-      min: 761m
-      max: 12839m
-    gpu_request:
-      dist: choice
-      values:
-      - 1
-      - 2
-      - 4
-      - 8
-    memory_request:
-      dist: normal
-      mean: 27171Mi
-      std: 3272Mi
-    duration:
-      dist: exponential
-      mean: 351m
-  - type: saas_microservice
-    count: 3
-    replicas:
-      min: 7
-      max: 27
+      min: 2
+      max: 11
     churn: low
-    memory_request:
-      dist: uniform
-      min: 2723Mi
-      max: 75938Mi
-    scaling:
-      type: hpa
-      metric: rps
-      target: 1000
-    cpu_request:
-      dist: normal
-      mean: 8000m
-      std: 1084m
-    pdb:
-      min_available: '2'
-    topology_spread:
-      max_skew: 3
-      topology_key: kubernetes.io/hostname
-  traffic_pattern:
-    type: steady
-    peak_multiplier: 5.241014891351867
-    duration: 12h
+    traffic: diurnal
+  variants:
+  - name: most_allocated
+    scheduler:
+      scoring: MostAllocated
+      weight: 1
+  - name: least_allocated
+    scheduler:
+      scoring: LeastAllocated
+      weight: 1
+  metrics:
+    compare:
+    - total_cost_per_hour
+    - node_count
+    - running_pods
+    - pending_pods

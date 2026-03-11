@@ -1,122 +1,18 @@
 study:
-  name: panyil
-  runs: 3683
+  name: '000'
+  runs: 1
   time_mode: logical
   cluster:
     node_pools:
     - instance_types:
-      - c5.large
-      - c6i.2xlarge
       - m6i.xlarge
-      - r5.2xlarge
-      - c6i.xlarge
-      - g4dn.2xlarge
-      min_nodes: 3
-      max_nodes: 28
-    - instance_types:
-      - m6i.2xlarge
-      min_nodes: 8
-      max_nodes: 78
-      karpenter:
-        consolidation:
-          policy: WhenEmpty
-    - instance_types:
-      - c5.large
-      - c5.2xlarge
-      min_nodes: 8
-      max_nodes: 32
-      karpenter:
-        consolidation:
-          policy: WhenEmpty
+      min_nodes: 1
+      max_nodes: 11
   workloads:
-  - type: saas_microservice
+  - type: web_app
     count: 1
     replicas:
-      min: 10
-      max: 71
-    churn: medium
-    topology_spread:
-      max_skew: 2
-      topology_key: kubernetes.io/hostname
-  - type: ml_training
-    count: 2
-    replicas:
-      fixed: 1
-    priority: high
-    memory_request:
-      dist: uniform
-      min: 2028Mi
-      max: 96842Mi
-    duration:
-      dist: exponential
-      mean: 90m
-    gpu_request:
-      dist: choice
-      values:
-      - 1
-      - 2
-      - 4
-      - 8
-    cpu_request:
-      dist: uniform
-      min: 2000m
-      max: 5205m
-  - type: ml_training
-    count: 5
-    replicas:
-      fixed: 1
-    priority: high
-    memory_request:
-      dist: uniform
-      min: 2851Mi
-      max: 13009Mi
-  - type: web_app
-    count: 5
-    replicas:
-      min: 3
-      max: 40
+      min: 2
+      max: 11
     churn: low
     traffic: diurnal
-    pdb:
-      min_available: '2'
-    cpu_request:
-      dist: uniform
-      min: 1207m
-      max: 15093m
-  - type: saas_microservice
-    count: 9
-    replicas:
-      min: 4
-      max: 24
-    churn: medium
-    pdb:
-      min_available: 50%
-    topology_spread:
-      max_skew: 4
-      topology_key: kubernetes.io/hostname
-  - type: batch_job
-    count: 17
-    priority: low
-    duration:
-      dist: exponential
-      mean: 55m
-  - type: web_app
-    count: 8
-    replicas:
-      min: 7
-      max: 36
-    churn: low
-    traffic: diurnal
-    pdb:
-      min_available: 25%
-    cpu_request:
-      dist: uniform
-      min: 1083m
-      max: 14604m
-    topology_spread:
-      max_skew: 4
-      topology_key: topology.kubernetes.io/zone
-  traffic_pattern:
-    type: diurnal_with_spike
-    peak_multiplier: 9.133850459534802
-    duration: 48h
