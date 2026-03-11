@@ -258,6 +258,7 @@ mod tests {
             labels: vec![],
             taints: vec![],
             max_disrupted_pct: 10,
+            weight: 0,
         }
     }
 

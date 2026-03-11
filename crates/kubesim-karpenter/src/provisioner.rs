@@ -4,6 +4,7 @@ use kubesim_core::*;
 use kubesim_ec2::Catalog;
 
 use crate::nodepool::{NodePool, NodePoolUsage};
+use crate::version::{KarpenterVersion, VersionProfile};
 
 /// A batch of compatible pending pods that can share a single node.
 #[derive(Debug)]
@@ -142,13 +143,37 @@ pub fn provision(
     pool: &NodePool,
     usage: &NodePoolUsage,
 ) -> Vec<ProvisionDecision> {
-    let batches = batch_pending_pods(state);
+    provision_versioned(state, catalog, pool, usage, None)
+}
+
+/// Version-aware provisioning.
+///
+/// v0.35: cheapest-fit per batch (original behavior).
+/// v1.x: first-fit-decreasing — sorts batches largest-first for better bin-packing.
+pub fn provision_versioned(
+    state: &ClusterState,
+    catalog: &Catalog,
+    pool: &NodePool,
+    usage: &NodePoolUsage,
+    profile: Option<&VersionProfile>,
+) -> Vec<ProvisionDecision> {
+    let mut batches = batch_pending_pods(state);
+    let use_ffd = profile.map_or(false, |p| p.version == KarpenterVersion::V1);
+
+    if use_ffd {
+        // First-fit-decreasing: sort batches by total resource request size (largest first)
+        batches.sort_by(|a, b| {
+            let size_a = a.total_requests.cpu_millis + a.total_requests.memory_bytes / 1_000_000;
+            let size_b = b.total_requests.cpu_millis + b.total_requests.memory_bytes / 1_000_000;
+            size_b.cmp(&size_a)
+        });
+    }
+
     let mut decisions = Vec::new();
     let mut running_usage = usage.clone();
 
     for batch in &batches {
         if let Some(decision) = select_instance(batch, catalog, pool, &running_usage) {
-            // Update running usage for subsequent batches
             if let Some(it) = catalog.get(&decision.instance_type) {
                 running_usage.node_count += 1;
                 running_usage.cpu_millis += (it.vcpu as u64) * 1000;
@@ -158,6 +183,12 @@ pub fn provision(
         }
     }
     decisions
+}
+
+/// Select the best pool from multiple pools using v1.x weight-based priority.
+/// Higher weight = higher priority. Returns pools sorted by descending weight.
+pub fn sort_pools_by_weight(pools: &mut [&NodePool]) {
+    pools.sort_by(|a, b| b.weight.cmp(&a.weight));
 }
 
 #[cfg(test)]
@@ -188,6 +219,7 @@ mod tests {
             labels: vec![],
             taints: vec![],
             max_disrupted_pct: 10,
+            weight: 0,
         }
     }
 

@@ -30,6 +30,9 @@ pub struct NodePool {
     /// Maximum percentage of nodes that may be disrupted simultaneously (0–100).
     #[serde(default = "default_disruption_pct")]
     pub max_disrupted_pct: u32,
+    /// v1.x: priority weight for multi-pool ordering (higher = preferred). v0.35 ignores this.
+    #[serde(default)]
+    pub weight: u32,
 }
 
 fn default_disruption_pct() -> u32 { 10 }
@@ -70,6 +73,7 @@ mod tests {
             labels: vec![],
             taints: vec![],
             max_disrupted_pct: 10,
+            weight: 0,
         }
     }
 

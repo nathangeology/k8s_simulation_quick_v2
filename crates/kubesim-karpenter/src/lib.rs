@@ -13,6 +13,6 @@ pub use consolidation::{ConsolidationAction, ConsolidationHandler, Consolidation
 pub use drift::{DriftConfig, DriftHandler};
 pub use handler::ProvisioningHandler;
 pub use nodepool::{NodePool, NodePoolLimits, NodePoolUsage};
-pub use provisioner::{batch_pending_pods, provision, select_instance, PodBatch, ProvisionDecision};
+pub use provisioner::{batch_pending_pods, provision, provision_versioned, select_instance, sort_pools_by_weight, PodBatch, ProvisionDecision};
 pub use spot::{SpotDisruptionMetrics, SpotInterruptionHandler};
 pub use version::{KarpenterVersion, VersionProfile};

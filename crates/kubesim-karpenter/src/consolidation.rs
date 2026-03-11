@@ -12,7 +12,7 @@ use kubesim_ec2::Catalog;
 use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
 
 use crate::nodepool::NodePool;
-use crate::version::{ConsolidationStrategy, VersionProfile};
+use crate::version::{ConsolidationStrategy, DisruptionReason, VersionProfile};
 
 /// Consolidation policy selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -55,9 +55,11 @@ fn find_empty_nodes(state: &ClusterState) -> Vec<NodeId> {
 /// 1. Disruption cost — max pod priority + count of PDB-covered pods (lower = better candidate)
 /// 2. Pod count — fewer pods means less disruption (lower = better)
 /// 3. Node age — older nodes preferred for consolidation (lower created_at = better)
+/// 4. Spot preference (v1.x) — on-demand nodes preferred over spot for consolidation
+///    (spot nodes are already cheap; consolidating on-demand saves more)
 ///
-/// Returns `(disruption_cost, pod_count, negative_age)` for ascending sort.
-fn candidate_score(state: &ClusterState, node: &Node) -> (i64, usize, u64) {
+/// Returns `(spot_penalty, disruption_cost, pod_count, negative_age)` for ascending sort.
+fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
     let mut max_priority: i32 = 0;
     let mut pdb_covered: i64 = 0;
     for &pid in &node.pods {
@@ -74,7 +76,12 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (i64, usize, u64) {
     let pod_count = node.pods.len();
     // Invert age so ascending sort prefers older nodes (lower created_at).
     let negative_age = node.created_at.0;
-    (disruption_cost, pod_count, negative_age)
+    // Spot nodes get penalty=1 so on-demand nodes (penalty=0) are consolidated first.
+    let spot_penalty = match node.lifecycle {
+        NodeLifecycle::Spot { .. } => 1u8,
+        NodeLifecycle::OnDemand => 0u8,
+    };
+    (spot_penalty, disruption_cost, pod_count, negative_age)
 }
 
 /// Sort candidate nodes by multi-factor disruption score (ascending).
@@ -279,38 +286,74 @@ pub fn evaluate_versioned(
         .map(|p| p.replace_consolidation)
         .unwrap_or(true);
 
+    // v1.x per-reason budgets: compute per-reason caps from profile budgets.
+    // If a budget entry has reasons, it applies only to those reasons.
+    // If no reasons, it's a global fallback (same as v0.35 flat percentage).
+    let total_nodes = state.nodes.len() as u32;
+    let (empty_budget, underutilized_budget) = if let Some(p) = profile {
+        let mut empty_cap = max_disrupted;
+        let mut underutil_cap = max_disrupted;
+        let has_per_reason = p.budgets.iter().any(|b| !b.reasons.is_empty());
+        if has_per_reason {
+            empty_cap = 0;
+            underutil_cap = 0;
+            for b in &p.budgets {
+                let cap = ((total_nodes as u64 * b.max_percent as u64) / 100).max(1) as u32;
+                if b.reasons.is_empty() {
+                    // Global fallback
+                    empty_cap = empty_cap.max(cap);
+                    underutil_cap = underutil_cap.max(cap);
+                } else {
+                    for r in &b.reasons {
+                        match r {
+                            DisruptionReason::Empty => empty_cap = empty_cap.max(cap),
+                            DisruptionReason::Underutilized => underutil_cap = underutil_cap.max(cap),
+                            DisruptionReason::Drifted => {} // handled by drift handler
+                        }
+                    }
+                }
+            }
+        }
+        (empty_cap, underutil_cap)
+    } else {
+        (max_disrupted, max_disrupted)
+    };
+
     let mut actions: Vec<ConsolidationAction> = Vec::new();
-    let mut budget = max_disrupted;
+    let mut total_used: u32 = 0;
 
     // WhenEmpty always runs (both policies include it)
+    let mut empty_used: u32 = 0;
     for nid in find_empty_nodes(state) {
-        if budget == 0 {
+        if empty_used >= empty_budget || total_used >= max_disrupted {
             break;
         }
         actions.push(ConsolidationAction::TerminateEmpty(nid));
-        budget -= 1;
+        empty_used += 1;
+        total_used += 1;
     }
 
-    if policy == ConsolidationPolicy::WhenUnderutilized && budget > 0 {
-        // Delete path: nodes whose pods fit on existing nodes
+    if policy == ConsolidationPolicy::WhenUnderutilized && total_used < max_disrupted {
+        let mut underutil_used: u32 = 0;
         for action in find_underutilized_nodes(state) {
-            if budget == 0 {
+            if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                 break;
             }
             actions.push(action);
-            budget -= 1;
+            underutil_used += 1;
+            total_used += 1;
         }
 
-        // Replace path (v1.x only): nodes that can't be deleted but can be
-        // swapped for a cheaper instance type
-        if budget > 0 && replace_enabled && strategy == ConsolidationStrategy::MultiNode {
+        // Replace path (v1.x only)
+        if total_used < max_disrupted && replace_enabled && strategy == ConsolidationStrategy::MultiNode {
             if let Some((cat, pool)) = catalog {
                 for action in find_replace_candidates(state, cat, pool) {
-                    if budget == 0 {
+                    if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                         break;
                     }
                     actions.push(action);
-                    budget -= 1;
+                    underutil_used += 1;
+                    total_used += 1;
                 }
             }
         }
@@ -505,6 +548,7 @@ mod tests {
             labels: vec![],
             taints: vec![],
             max_disrupted_pct: 10,
+            weight: 0,
         }
     }
 
