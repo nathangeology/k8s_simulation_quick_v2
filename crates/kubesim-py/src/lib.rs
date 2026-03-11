@@ -708,7 +708,7 @@ impl StepSimulation {
 }
 
 #[pymodule]
-fn kubesim_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<Simulation>()?;
     m.add_class::<SimResult>()?;

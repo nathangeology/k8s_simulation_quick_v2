@@ -5,3 +5,5 @@
 .kiro/
 __pycache__/
 target/
+.venv/
+target/
