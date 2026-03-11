@@ -51,7 +51,9 @@ impl EventHandler for ProvisioningHandler {
             return Vec::new();
         };
 
-        let decisions = provisioner::provision(state, &self.catalog, &self.pool, &self.usage);
+        let decisions = provisioner::provision_versioned(
+            state, &self.catalog, &self.pool, &self.usage, self.version_profile.as_ref(),
+        );
         let mut follow_ups = Vec::new();
 
         for decision in &decisions {

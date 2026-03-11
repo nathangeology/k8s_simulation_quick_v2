@@ -116,6 +116,7 @@ fn full_simulation_loop() {
         labels: vec![],
         taints: vec![],
         max_disrupted_pct: 50,
+        weight: 0,
     };
 
     let mut state = ClusterState::new();
