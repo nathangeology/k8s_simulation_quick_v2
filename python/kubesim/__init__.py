@@ -15,7 +15,22 @@ except ImportError:
 
 # Adversarial finder — optional (requires hypothesis + pyyaml)
 try:
-    from kubesim.adversarial import AdversarialFinder, ScenarioSpace, ScoredScenario
+    from kubesim.adversarial import (
+        AdversarialFinder, ScenarioSpace, ScoredScenario,
+        VariantPair, MOST_VS_LEAST, KARPENTER_CONSOLIDATION, DELETION_COST_PAIRS,
+    )
+except ImportError:
+    pass
+
+# Objectives — optional
+try:
+    from kubesim.objectives import OBJECTIVES as _OBJECTIVES
+except ImportError:
+    pass
+
+# Scenario templates — optional
+try:
+    from kubesim.scenario_templates import TEMPLATES as _TEMPLATES
 except ImportError:
     pass
 
@@ -23,6 +38,7 @@ __all__ = [
     "Simulation", "SimResult", "StepSimulation", "StepObs",
     "batch_run", "analysis",
     "AdversarialFinder", "ScenarioSpace", "ScoredScenario",
+    "VariantPair", "MOST_VS_LEAST", "KARPENTER_CONSOLIDATION", "DELETION_COST_PAIRS",
     "__version__",
 ]
 
