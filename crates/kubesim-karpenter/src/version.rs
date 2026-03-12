@@ -13,6 +13,16 @@ pub enum KarpenterVersion {
     V1,
 }
 
+impl KarpenterVersion {
+    /// Numeric ordinal for version ordering (used by conformance range checks).
+    pub fn ordinal(self) -> u32 {
+        match self {
+            Self::V0_35 => 0,
+            Self::V1 => 1,
+        }
+    }
+}
+
 impl Default for KarpenterVersion {
     fn default() -> Self {
         Self::V1
