@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use kubesim_core::DeletionCostStrategy;
+pub use kubesim_ec2::CatalogProvider;
 
 /// Top-level scenario file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +23,8 @@ pub struct Study {
     pub runs: u32,
     #[serde(default)]
     pub time_mode: TimeMode,
+    #[serde(default)]
+    pub catalog_provider: CatalogProvider,
     pub cluster: ClusterConfig,
     pub workloads: Vec<WorkloadDef>,
     #[serde(default)]
