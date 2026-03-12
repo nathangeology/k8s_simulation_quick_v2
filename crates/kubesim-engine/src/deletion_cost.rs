@@ -53,6 +53,7 @@ impl EventHandler for DeletionCostController {
 
         vec![reschedule(time, self.loop_interval_ns)]
     }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
 
 fn reschedule(time: SimTime, interval: u64) -> ScheduledEvent {

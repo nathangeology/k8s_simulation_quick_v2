@@ -18,6 +18,9 @@ import numpy as np
 RESULT_COLUMNS = [
     "seed", "variant", "events_processed", "total_cost_per_hour",
     "node_count", "pod_count", "running_pods", "pending_pods", "final_time",
+    "cumulative_cost", "time_weighted_node_count", "time_to_stable",
+    "cumulative_pending_pod_seconds", "disruption_count", "disruption_seconds",
+    "peak_node_count", "peak_cost_rate",
 ]
 
 
@@ -33,6 +36,9 @@ def results_to_df(results: list[dict] | list) -> pl.DataFrame:
 # ── Variant comparison ───────────────────────────────────────────
 
 _METRIC_COLS = [
+    "cumulative_cost", "time_weighted_node_count", "time_to_stable",
+    "cumulative_pending_pod_seconds", "disruption_count", "disruption_seconds",
+    "peak_node_count", "peak_cost_rate",
     "total_cost_per_hour", "node_count", "pod_count",
     "running_pods", "pending_pods", "final_time",
 ]
@@ -146,7 +152,9 @@ def summary_report(df: pl.DataFrame, fmt: str = "markdown") -> str:
     if len(variants) == 2:
         a, b = variants
         lines.append(f"\n## Statistical Comparison: {a} vs {b}\n")
-        for metric in ["total_cost_per_hour", "node_count", "pending_pods"]:
+        for metric in ["cumulative_cost", "time_weighted_node_count", "time_to_stable",
+                        "cumulative_pending_pod_seconds", "disruption_count",
+                        "total_cost_per_hour", "node_count", "pending_pods"]:
             mw = mann_whitney(df, a, b, metric)
             bci = bootstrap_ci(df, a, b, metric)
             lines.append(f"### {metric}")
