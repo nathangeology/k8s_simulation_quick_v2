@@ -123,6 +123,12 @@ pub struct VersionProfile {
     pub hash_based_drift: bool,
     /// v1.x: can replace a node with a cheaper instance type during consolidation.
     pub replace_consolidation: bool,
+    /// Max candidates to evaluate per consolidation pass (bounds computational cost).
+    /// Mirrors Karpenter's MaxParallelReconciles. Default: 10.
+    pub max_candidates_per_pass: usize,
+    /// Max candidates to evaluate during multi-node before falling back to single-node.
+    /// In logical time mode this acts as a proxy for wall-clock timeout. Default: 50.
+    pub multi_node_timeout_candidates: usize,
 }
 
 impl VersionProfile {
@@ -134,6 +140,8 @@ impl VersionProfile {
                 budgets: vec![DisruptionBudgetConfig::default()],
                 hash_based_drift: false,
                 replace_consolidation: false,
+                max_candidates_per_pass: 10,
+                multi_node_timeout_candidates: 50,
             },
             KarpenterVersion::V1 => Self {
                 version,
@@ -141,6 +149,8 @@ impl VersionProfile {
                 budgets: vec![DisruptionBudgetConfig::default()],
                 hash_based_drift: true,
                 replace_consolidation: true,
+                max_candidates_per_pass: 10,
+                multi_node_timeout_candidates: 50,
             },
         }
     }

@@ -66,8 +66,8 @@ fn v1_multi_node_consolidation_spec() -> BehaviorSpec {
 
     BehaviorSpec {
         name: "v1-multi-node-consolidation",
-        description: "v1.0 consolidation can drain multiple underutilized nodes per pass (KNOWN GAP: simulator uses SingleNode strategy)",
-        applies_to: VersionRange { min: Some(KarpenterVersion::V1), max: Some(KarpenterVersion::V0_35) }, // impossible range → always skipped; TODO: enable when multi-node batching is implemented
+        description: "v1.0 consolidation can drain multiple underutilized nodes per pass",
+        applies_to: VersionRange::exact(KarpenterVersion::V1),
         test: Box::new(|profile| {
             let mut state = ClusterState::new();
             // Target node with capacity to absorb all pods (has a pod so it's not "empty")
@@ -84,9 +84,16 @@ fn v1_multi_node_consolidation_spec() -> BehaviorSpec {
             let p2 = state.submit_pod(mk_pod(200, 200_000_000));
             state.bind_pod(p2, n2);
 
+            // Use a permissive budget so the 3-node cluster allows multiple disruptions
+            let mut test_profile = profile.clone();
+            test_profile.budgets = vec![crate::version::DisruptionBudgetConfig {
+                max_percent: 100,
+                ..Default::default()
+            }];
+
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(&test_profile), None, "default", 0,
             );
             let drain_count = actions.iter()
                 .filter(|a| matches!(a, ConsolidationAction::DrainAndTerminate { .. }))

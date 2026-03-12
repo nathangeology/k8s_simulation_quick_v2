@@ -181,14 +181,22 @@ fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
 ///
 /// For `SingleNode` strategy: evaluates one candidate at a time, returns at most 1 action.
 /// For `MultiNode` strategy: builds a candidate set greedily — each candidate is checked
-/// against remaining capacity excluding nodes already selected for removal.
+/// against remaining capacity excluding nodes already selected for removal, with capacity
+/// reduced by pods from previously selected candidates.
+/// `max_candidates` limits how many candidates are evaluated per pass (batch limit).
 /// Nodes younger than `consolidate_after_ns` are exempt from consolidation.
 fn find_underutilized_nodes(
     state: &ClusterState,
     pool_name: &str,
     strategy: ConsolidationStrategy,
     consolidate_after_ns: u64,
+    max_candidates: usize,
 ) -> Vec<ConsolidationAction> {
+    use kubesim_scheduler::{
+        FilterResult, TaintToleration, NodeAffinity,
+        InterPodAffinityFilter, PodTopologySpreadFilter, FilterPlugin,
+    };
+
     let mut actions = Vec::new();
     let mut nodes_being_removed: Vec<NodeId> = Vec::new();
 
@@ -203,18 +211,97 @@ fn find_underutilized_nodes(
         .collect();
     sort_candidates(state, &mut candidates);
 
-    for (nid, _) in candidates {
-        if let Some(pod_ids) = pods_can_reschedule(state, nid, &nodes_being_removed) {
-            nodes_being_removed.push(nid);
-            actions.push(ConsolidationAction::DrainAndTerminate {
-                node_id: nid,
-                pod_ids,
-            });
-            if strategy == ConsolidationStrategy::SingleNode {
+    // Apply batch limit
+    candidates.truncate(max_candidates);
+
+    if strategy == ConsolidationStrategy::SingleNode {
+        // Single-node: use simple per-candidate check
+        for (nid, _) in candidates {
+            if let Some(pod_ids) = pods_can_reschedule(state, nid, &nodes_being_removed) {
+                actions.push(ConsolidationAction::DrainAndTerminate {
+                    node_id: nid,
+                    pod_ids,
+                });
                 break;
             }
         }
+    } else {
+        // Multi-node: track cumulative capacity consumed by displaced pods
+        let filters: Vec<Box<dyn FilterPlugin>> = vec![
+            Box::new(TaintToleration),
+            Box::new(NodeAffinity),
+            Box::new(InterPodAffinityFilter),
+            Box::new(PodTopologySpreadFilter),
+        ];
+
+        // Build mutable available capacity for all non-candidate nodes
+        // We'll update this as we greedily select candidates
+        let mut remaining_avail: Vec<(NodeId, Resources)> = state
+            .nodes
+            .iter()
+            .filter(|(_, n)| n.conditions.ready && !n.cordoned)
+            .map(|(nid, n)| (nid, n.allocatable.saturating_sub(&n.allocated)))
+            .collect();
+
+        for (nid, node) in &candidates {
+            // Skip nodes already selected for removal
+            if nodes_being_removed.contains(nid) {
+                continue;
+            }
+
+            let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
+            let pods: Vec<(PodId, &Pod)> = pod_ids
+                .iter()
+                .filter_map(|&pid| state.pods.get(pid).map(|p| (pid, p)))
+                .collect();
+
+            // Try to place all pods on remaining nodes (excluding already-removed candidates)
+            let mut placements: Vec<(usize, Resources)> = Vec::new();
+            let mut all_fit = true;
+
+            for &(_, pod) in &pods {
+                let slot = remaining_avail.iter().enumerate().find(|(_, (rid, avail))| {
+                    if nodes_being_removed.contains(rid) || *rid == *nid {
+                        return false;
+                    }
+                    if !pod.requests.fits_in(avail) {
+                        return false;
+                    }
+                    let target = match state.nodes.get(*rid) {
+                        Some(n) => n,
+                        None => return false,
+                    };
+                    filters.iter().all(|f| matches!(f.filter(state, pod, target), FilterResult::Pass))
+                });
+                match slot {
+                    Some((idx, _)) => {
+                        remaining_avail[idx].1 = remaining_avail[idx].1.saturating_sub(&pod.requests);
+                        placements.push((idx, pod.requests));
+                    }
+                    None => { all_fit = false; break; }
+                }
+            }
+
+            if all_fit {
+                nodes_being_removed.push(*nid);
+                actions.push(ConsolidationAction::DrainAndTerminate {
+                    node_id: *nid,
+                    pod_ids,
+                });
+            } else {
+                // Rollback capacity reservations for this failed candidate
+                for (idx, res) in placements {
+                    remaining_avail[idx].1 = Resources {
+                        cpu_millis: remaining_avail[idx].1.cpu_millis + res.cpu_millis,
+                        memory_bytes: remaining_avail[idx].1.memory_bytes + res.memory_bytes,
+                        gpu: remaining_avail[idx].1.gpu + res.gpu,
+                        ephemeral_bytes: remaining_avail[idx].1.ephemeral_bytes + res.ephemeral_bytes,
+                    };
+                }
+            }
+        }
     }
+
     actions
 }
 
@@ -328,6 +415,12 @@ pub fn evaluate_versioned(
     let replace_enabled = profile
         .map(|p| p.replace_consolidation)
         .unwrap_or(true);
+    let max_candidates = profile
+        .map(|p| p.max_candidates_per_pass)
+        .unwrap_or(10);
+    let timeout_candidates = profile
+        .map(|p| p.multi_node_timeout_candidates)
+        .unwrap_or(50);
 
     // v1.x per-reason budgets: compute per-reason caps from profile budgets.
     // If a budget entry has reasons, it applies only to those reasons.
@@ -388,7 +481,32 @@ pub fn evaluate_versioned(
 
     if policy == ConsolidationPolicy::WhenUnderutilized && total_used < max_disrupted {
         let mut underutil_used: u32 = 0;
-        for action in find_underutilized_nodes(state, pool_name, strategy, consolidate_after_ns) {
+
+        // Multi-node → single-node timeout fallback: attempt multi-node first,
+        // but if the candidate set exceeds the timeout threshold, fall back to
+        // single-node evaluation. In logical time mode, candidate count is the
+        // proxy for wall-clock timeout.
+        let (effective_strategy, effective_limit) = if strategy == ConsolidationStrategy::MultiNode {
+            // Count underutilized candidates to decide if multi-node is feasible
+            let candidate_count = state.nodes.iter()
+                .filter(|(_, n)| {
+                    n.conditions.ready && !n.cordoned && !n.pods.is_empty()
+                        && n.pool_name == pool_name
+                        && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+                        && !node_has_do_not_disrupt(state, n)
+                })
+                .count();
+            if candidate_count > timeout_candidates {
+                // Too many candidates — fall back to single-node
+                (ConsolidationStrategy::SingleNode, max_candidates)
+            } else {
+                (ConsolidationStrategy::MultiNode, max_candidates)
+            }
+        } else {
+            (strategy, max_candidates)
+        };
+
+        for action in find_underutilized_nodes(state, pool_name, effective_strategy, consolidate_after_ns, effective_limit) {
             if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                 break;
             }
