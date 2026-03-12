@@ -1,41 +1,34 @@
 study:
   name: deletion-cost-ranking-comparison
   runs: 10000
-  time_mode: wall_clock
+  time_mode: logical
 
   cluster:
     node_pools:
-      - instance_types: [m5.xlarge, m5.2xlarge, c5.xlarge]
-        min_nodes: 5
-        max_nodes: 100
+      - instance_types: [m5.xlarge, m5.2xlarge]
+        min_nodes: 8
+        max_nodes: 50
         karpenter:
           consolidation: {policy: WhenUnderutilized}
 
   workloads:
+    # Single large RS — dominates node placement, scale down 80%
     - type: web_app
-      count: 10
-      replicas: {min: 5, max: 50}
-      scaling: {type: hpa, metric: cpu, target: "70%"}
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "500m", max: "1000m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "512Mi"}
+      scale_down:
+        - {at: "50", reduce_by: 32}
+
+    # Second RS — also large, scale down 75%
     - type: saas_microservice
-      count: 5
-      replicas: {min: 3, max: 100}
-      scaling: {type: hpa, metric: rps, target: 1000}
-      topology_spread: {max_skew: 1, topology_key: topology.kubernetes.io/zone}
-      pdb: {min_available: "50%"}
-    - type: batch_job
-      count: {dist: poisson, lambda: 8}
-      duration: {dist: uniform, min: 300, max: 3600}
-
-  # Diurnal traffic with spike forces scale-up then scale-down,
-  # exercising deletion ordering during consolidation.
-  traffic_pattern:
-    type: diurnal_with_spike
-    peak_multiplier: 5
-    duration: 24h
-
-  # NOTE: Some pods should carry karpenter.sh/do-not-disrupt to test
-  # partitioning behavior, but WorkloadDef does not yet support pod
-  # annotations. Filed for future work.
+      count: 1
+      replicas: {fixed: 30}
+      cpu_request: {dist: uniform, min: "500m", max: "1000m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "512Mi"}
+      scale_down:
+        - {at: "50", reduce_by: 23}
 
   variants:
     - name: baseline
@@ -51,9 +44,5 @@ study:
 
   metrics:
     compare:
-      - nodes_reclaimed_per_hour
-      - time_to_consolidate
       - total_cost
-      - disruption_count
-      - availability_gap_seconds
       - node_count_over_time

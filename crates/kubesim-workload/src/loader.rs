@@ -155,6 +155,19 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     });
                 }
             }
+
+            // Emit scale-down events if configured
+            if let Some(ref scale_downs) = workload.scale_down {
+                for sd in scale_downs {
+                    if let Some(time_ns) = parse_duration_ns(&sd.at) {
+                        events.push(Event::ReplicaSetScaleDown {
+                            time: SimTime(time_ns),
+                            owner_id,
+                            reduce_by: sd.reduce_by,
+                        });
+                    }
+                }
+            }
         }
     }
 

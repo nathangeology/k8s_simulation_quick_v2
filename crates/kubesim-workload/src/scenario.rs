@@ -118,6 +118,18 @@ pub struct WorkloadDef {
     pub churn: Option<ChurnLevel>,
     #[serde(default)]
     pub traffic: Option<String>,
+    /// Scale-down events: reduce replicas at specified times.
+    #[serde(default)]
+    pub scale_down: Option<Vec<ScaleDownEvent>>,
+}
+
+/// A scale-down event that reduces replicas at a given time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScaleDownEvent {
+    /// Time offset (e.g. "12h", "30m", "3600s") from simulation start.
+    pub at: String,
+    /// Number of replicas to reduce by.
+    pub reduce_by: u32,
 }
 
 /// Either a fixed integer or a distribution.
@@ -230,7 +242,7 @@ fn parse_memory_bytes(s: &str) -> Option<u64> {
     }
 }
 
-fn parse_duration_ns(s: &str) -> Option<u64> {
+pub fn parse_duration_ns(s: &str) -> Option<u64> {
     if let Some(v) = s.strip_suffix('h') {
         v.parse::<f64>().ok().map(|v| (v * 3_600_000_000_000.0) as u64)
     } else if let Some(v) = s.strip_suffix('m') {
