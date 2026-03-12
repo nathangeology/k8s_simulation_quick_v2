@@ -69,6 +69,20 @@ impl EventHandler for SimGlueHandler {
                 state.remove_node(*node_id);
                 Vec::new()
             }
+            Event::KarpenterProvisioningLoop => {
+                // Try to schedule pending pods onto existing nodes before the
+                // provisioner launches new ones. This catches evicted pods that
+                // were returned to pending by DrainHandler.
+                let pending: Vec<PodId> = state.pending_queue.clone();
+                for pid in pending {
+                    if let ScheduleResult::Bound(nid) =
+                        self.scheduler.schedule_one(state, pid)
+                    {
+                        state.bind_pod(pid, nid);
+                    }
+                }
+                Vec::new()
+            }
             Event::NodeLaunching(spec) => {
                 if let Some(it) = self.catalog.get(&spec.instance_type) {
                     let node = Node {
