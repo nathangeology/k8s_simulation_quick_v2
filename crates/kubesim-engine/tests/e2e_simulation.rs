@@ -119,6 +119,7 @@ fn full_simulation_loop() {
         labels: vec![],
         taints: vec![],
         max_disrupted_pct: 50,
+        max_disrupted_count: None,
         weight: 0,
     };
 

@@ -52,6 +52,27 @@ fn scoring_from_workload(s: kubesim_workload::ScoringStrategy) -> ScoringStrateg
     }
 }
 
+fn nodepool_from_def(pool_def: &kubesim_workload::NodePoolDef, pool_name: String) -> NodePool {
+    let (pct, count) = match &pool_def.disruption_budget {
+        Some(db) => (db.max_percent, db.max_count),
+        None => (10, None),
+    };
+    NodePool {
+        name: pool_name,
+        instance_types: pool_def.instance_types.clone(),
+        limits: NodePoolLimits {
+            max_nodes: Some(pool_def.max_nodes),
+            max_cpu_millis: None,
+            max_memory_bytes: None,
+        },
+        labels: pool_def.labels.clone(),
+        taints: pool_def.taints.clone(),
+        max_disrupted_pct: pct,
+        max_disrupted_count: count,
+        weight: pool_def.weight,
+    }
+}
+
 fn parse_karpenter_version(s: &str) -> Option<KarpenterVersion> {
     match s {
         "v0.35" | "v0_35" | "0.35" => Some(KarpenterVersion::V0_35),
@@ -336,19 +357,7 @@ fn run_single(
                 } else {
                     format!("pool-{}", idx)
                 });
-            let pool = NodePool {
-                name: pool_name,
-                instance_types: pool_def.instance_types.clone(),
-                limits: NodePoolLimits {
-                    max_nodes: Some(pool_def.max_nodes),
-                    max_cpu_millis: None,
-                    max_memory_bytes: None,
-                },
-                labels: pool_def.labels.clone(),
-                taints: pool_def.taints.clone(),
-                max_disrupted_pct: 10,
-                weight: pool_def.weight,
-            };
+            let pool = nodepool_from_def(pool_def, pool_name);
 
             let mut prov = ProvisioningHandler::new(
                 Catalog::embedded().expect("embedded EC2 catalog"),
@@ -371,7 +380,15 @@ fn run_single(
             let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
                 .with_catalog(Catalog::embedded().expect("embedded EC2 catalog"));
             if let Some(ref vp) = version_profile {
-                consol = consol.with_version(vp.clone());
+                let mut vp = vp.clone();
+                if let Some(db) = &pool_def.disruption_budget {
+                    vp.budgets = vec![kubesim_karpenter::version::DisruptionBudgetConfig {
+                        max_percent: db.max_percent,
+                        reasons: Vec::new(),
+                        schedule: db.schedule.clone(),
+                    }];
+                }
+                consol = consol.with_version(vp);
             }
             engine.add_handler(Box::new(consol));
 
@@ -871,19 +888,7 @@ impl StepSimulation {
                     } else {
                         format!("pool-{}", idx)
                     });
-                let pool = NodePool {
-                    name: pool_name,
-                    instance_types: pool_def.instance_types.clone(),
-                    limits: NodePoolLimits {
-                        max_nodes: Some(pool_def.max_nodes),
-                        max_cpu_millis: None,
-                        max_memory_bytes: None,
-                    },
-                    labels: pool_def.labels.clone(),
-                    taints: pool_def.taints.clone(),
-                    max_disrupted_pct: 10,
-                    weight: pool_def.weight,
-                };
+                let pool = nodepool_from_def(pool_def, pool_name);
 
                 engine.add_handler(Box::new(
                     ProvisioningHandler::new(
