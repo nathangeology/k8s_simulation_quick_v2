@@ -53,15 +53,17 @@ fn find_empty_nodes(state: &ClusterState, pool_name: &str) -> Vec<NodeId> {
 ///
 /// Upstream Karpenter sorts consolidation candidates by:
 /// 1. Disruption cost — max pod priority + count of PDB-covered pods (lower = better candidate)
-/// 2. Pod count — fewer pods means less disruption (lower = better)
-/// 3. Node age — older nodes preferred for consolidation (lower created_at = better)
-/// 4. Spot preference (v1.x) — on-demand nodes preferred over spot for consolidation
+/// 2. Aggregate pod deletion cost — sum of pod-deletion-cost annotations (lower = better)
+/// 3. Pod count — fewer pods means less disruption (lower = better)
+/// 4. Node age — older nodes preferred for consolidation (lower created_at = better)
+/// 5. Spot preference (v1.x) — on-demand nodes preferred over spot for consolidation
 ///    (spot nodes are already cheap; consolidating on-demand saves more)
 ///
-/// Returns `(spot_penalty, disruption_cost, pod_count, negative_age)` for ascending sort.
-fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
+/// Returns `(spot_penalty, disruption_cost, aggregate_deletion_cost, pod_count, negative_age)` for ascending sort.
+fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, i64, usize, u64) {
     let mut max_priority: i32 = 0;
     let mut pdb_covered: i64 = 0;
+    let mut agg_deletion_cost: i64 = 0;
     for &pid in &node.pods {
         if let Some(pod) = state.pods.get(pid) {
             if pod.priority > max_priority {
@@ -70,6 +72,7 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
             if state.pdbs.iter().any(|pdb| pod.labels.matches(&pdb.selector)) {
                 pdb_covered += 1;
             }
+            agg_deletion_cost += pod.deletion_cost.unwrap_or(0) as i64;
         }
     }
     let disruption_cost = max_priority as i64 + pdb_covered;
@@ -81,7 +84,7 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
         NodeLifecycle::Spot { .. } => 1u8,
         NodeLifecycle::OnDemand => 0u8,
     };
-    (spot_penalty, disruption_cost, pod_count, negative_age)
+    (spot_penalty, disruption_cost, agg_deletion_cost, pod_count, negative_age)
 }
 
 /// Sort candidate nodes by multi-factor disruption score (ascending).
