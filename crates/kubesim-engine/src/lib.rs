@@ -23,6 +23,8 @@ pub struct NodeSpec {
     pub labels: kubesim_core::LabelSet,
     /// Taints propagated from the NodePool.
     pub taints: Vec<kubesim_core::Taint>,
+    /// Name of the NodePool that launched this node.
+    pub pool_name: String,
 }
 
 /// Specification for submitting a new pod (carried by PodSubmitted event).

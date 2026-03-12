@@ -55,13 +55,28 @@ pub struct ClusterConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodePoolDef {
+    #[serde(default)]
+    pub name: Option<String>,
     pub instance_types: Vec<String>,
     #[serde(default = "default_min_nodes")]
     pub min_nodes: u32,
     #[serde(default = "default_max_nodes")]
     pub max_nodes: u32,
     #[serde(default)]
+    pub labels: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub taints: Vec<kubesim_core::Taint>,
+    #[serde(default)]
+    pub weight: u32,
+    #[serde(default)]
     pub karpenter: Option<KarpenterConfig>,
+}
+
+impl NodePoolDef {
+    /// Convert labels map to Vec<(String, String)> for NodePool construction.
+    pub fn labels_vec(&self) -> Vec<(String, String)> {
+        self.labels.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+    }
 }
 
 fn default_min_nodes() -> u32 {

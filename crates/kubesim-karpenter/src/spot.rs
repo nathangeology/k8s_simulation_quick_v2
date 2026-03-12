@@ -158,6 +158,7 @@ mod tests {
             lifecycle: NodeLifecycle::Spot { interruption_prob: prob },
             cordoned: false,
             created_at: SimTime(0),
+            pool_name: "default".into(),
         }
     }
 

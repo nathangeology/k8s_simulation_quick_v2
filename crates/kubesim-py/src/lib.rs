@@ -83,6 +83,7 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
         lifecycle: NodeLifecycle::OnDemand,
         cordoned: false,
         created_at: SimTime(0),
+        pool_name: String::new(),
     }
 }
 
@@ -134,7 +135,10 @@ impl kubesim_engine::EventHandler for SimHandler {
                 Vec::new()
             }
             EngineEvent::NodeLaunching(spec) => {
-                let node = instance_to_node(&self.catalog, &spec.instance_type);
+                let mut node = instance_to_node(&self.catalog, &spec.instance_type);
+                node.labels = spec.labels.clone();
+                node.taints = spec.taints.iter().cloned().collect();
+                node.pool_name = spec.pool_name.clone();
                 let node_id = state.add_node(node);
                 // Try to schedule pending pods onto the new node
                 let pending: Vec<_> = state.pending_queue.clone();
@@ -201,6 +205,13 @@ struct SimRunResult {
     cpu_weighted_entropy_normalized: f64,
 }
 
+/// Resolve pool name: use explicit name from scenario, or generate from index.
+fn pool_name_for(pool_def: &kubesim_workload::NodePoolDef, index: usize) -> String {
+    pool_def.name.clone().unwrap_or_else(|| {
+        if index == 0 { "default".into() } else { format!("pool-{}", index) }
+    })
+}
+
 fn run_single(
     workload_events: &[WorkloadEvent],
     variant: Option<&Variant>,
@@ -218,11 +229,22 @@ fn run_single(
         .map(|s| scoring_from_workload(s.scoring))
         .unwrap_or(ScoringStrategy::LeastAllocated);
 
+    // Build pool name lookup from scenario
+    let pool_names: Vec<String> = scenario.study.cluster.node_pools.iter().enumerate()
+        .map(|(i, pd)| pool_name_for(pd, i))
+        .collect();
+
     // Seed engine from workload events
     for we in workload_events {
         match we {
-            WorkloadEvent::NodeLaunching { instance_type, .. } => {
-                let node = instance_to_node(&catalog, instance_type);
+            WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
+                let mut node = instance_to_node(&catalog, instance_type);
+                let idx = *pool_index as usize;
+                if let Some(pd) = scenario.study.cluster.node_pools.get(idx) {
+                    node.pool_name = pool_names[idx].clone();
+                    node.labels = LabelSet(pd.labels_vec());
+                    node.taints = pd.taints.iter().cloned().collect();
+                }
                 state.add_node(node);
             }
             WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, .. } => {
@@ -290,25 +312,32 @@ fn run_single(
     engine.add_handler(Box::new(ReplicaSetController));
 
     // Register karpenter handlers for pools that have karpenter config
+    // Sort pools by weight (higher weight = higher priority) for provisioning order
     let version_profile = variant
         .and_then(|v| v.karpenter_version.as_deref())
         .and_then(parse_karpenter_version)
         .map(VersionProfile::new);
 
-    for pool_def in &scenario.study.cluster.node_pools {
+    let mut pool_indices: Vec<usize> = (0..scenario.study.cluster.node_pools.len()).collect();
+    pool_indices.sort_by(|&a, &b| {
+        scenario.study.cluster.node_pools[b].weight.cmp(&scenario.study.cluster.node_pools[a].weight)
+    });
+
+    for pool_idx in pool_indices {
+        let pool_def = &scenario.study.cluster.node_pools[pool_idx];
         if let Some(karpenter) = &pool_def.karpenter {
             let pool = NodePool {
-                name: "default".into(),
+                name: pool_names[pool_idx].clone(),
                 instance_types: pool_def.instance_types.clone(),
                 limits: NodePoolLimits {
                     max_nodes: Some(pool_def.max_nodes),
                     max_cpu_millis: None,
                     max_memory_bytes: None,
                 },
-                labels: vec![],
-                taints: vec![],
+                labels: pool_def.labels_vec(),
+                taints: pool_def.taints.clone(),
                 max_disrupted_pct: 10,
-                weight: 0,
+                weight: pool_def.weight,
             };
 
             let mut prov = ProvisioningHandler::new(
@@ -742,10 +771,21 @@ impl StepSimulation {
         let mut state = ClusterState::new();
         let mut engine = Engine::new(self.time_mode);
 
+        // Build pool name lookup
+        let pool_names: Vec<String> = self.scenario.study.cluster.node_pools.iter().enumerate()
+            .map(|(i, pd)| pool_name_for(pd, i))
+            .collect();
+
         for we in &self.workload_events {
             match we {
-                WorkloadEvent::NodeLaunching { instance_type, .. } => {
-                    let node = instance_to_node(&catalog, instance_type);
+                WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
+                    let mut node = instance_to_node(&catalog, instance_type);
+                    let idx = *pool_index as usize;
+                    if let Some(pd) = self.scenario.study.cluster.node_pools.get(idx) {
+                        node.pool_name = pool_names[idx].clone();
+                        node.labels = LabelSet(pd.labels_vec());
+                        node.taints = pd.taints.iter().cloned().collect();
+                    }
                     state.add_node(node);
                 }
                 WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, .. } => {
@@ -817,20 +857,27 @@ impl StepSimulation {
         engine.add_handler(Box::new(ReplicaSetController));
 
         // Register karpenter handlers for pools that have karpenter config
-        for pool_def in &self.scenario.study.cluster.node_pools {
+        // Sort pools by weight (higher weight = higher priority)
+        let mut pool_indices: Vec<usize> = (0..self.scenario.study.cluster.node_pools.len()).collect();
+        pool_indices.sort_by(|&a, &b| {
+            self.scenario.study.cluster.node_pools[b].weight.cmp(&self.scenario.study.cluster.node_pools[a].weight)
+        });
+
+        for pool_idx in pool_indices {
+            let pool_def = &self.scenario.study.cluster.node_pools[pool_idx];
             if let Some(karpenter) = &pool_def.karpenter {
                 let pool = NodePool {
-                    name: "default".into(),
+                    name: pool_names[pool_idx].clone(),
                     instance_types: pool_def.instance_types.clone(),
                     limits: NodePoolLimits {
                         max_nodes: Some(pool_def.max_nodes),
                         max_cpu_millis: None,
                         max_memory_bytes: None,
                     },
-                    labels: vec![],
-                    taints: vec![],
+                    labels: pool_def.labels_vec(),
+                    taints: pool_def.taints.clone(),
                     max_disrupted_pct: 10,
-                    weight: 0,
+                    weight: pool_def.weight,
                 };
 
                 engine.add_handler(Box::new(

@@ -1,0 +1,48 @@
+study:
+  name: multi-nodepool-routing
+  runs: 100
+  time_mode: wall_clock
+
+  cluster:
+    node_pools:
+      - name: general
+        instance_types: [m5.xlarge, m5.2xlarge]
+        min_nodes: 2
+        max_nodes: 50
+        weight: 10
+        labels:
+          pool: general
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+      - name: gpu-compute
+        instance_types: [p3.2xlarge, g4dn.xlarge]
+        min_nodes: 1
+        max_nodes: 20
+        weight: 20
+        labels:
+          pool: gpu-compute
+          nvidia.com/gpu: "true"
+        taints:
+          - key: nvidia.com/gpu
+            value: "true"
+            effect: NoSchedule
+        karpenter:
+          consolidation: {policy: WhenEmpty}
+
+  workloads:
+    - type: web_app
+      count: 10
+      replicas: {fixed: 5}
+
+    - type: ml_training
+      count: 3
+      replicas: {fixed: 2}
+      gpu_request: {dist: uniform, min: 1, max: 1}
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}
+
+  metrics:
+    compare: [total_cost, node_count_over_time]

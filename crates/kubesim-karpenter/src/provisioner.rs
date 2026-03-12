@@ -33,8 +33,19 @@ pub struct ProvisionDecision {
 /// Two pods are compatible if they share the same required node labels and
 /// the same set of tolerations. This is a simplified model — real Karpenter
 /// uses a more nuanced grouping.
+///
+/// When `pool` is provided, only pods whose required labels are a subset of
+/// the pool's labels (and whose tolerations cover the pool's taints) are included.
 pub fn batch_pending_pods(state: &ClusterState) -> Vec<PodBatch> {
+    batch_pending_pods_for_pool(state, None)
+}
+
+/// Batch pending pods, optionally filtering to those compatible with a specific pool.
+pub fn batch_pending_pods_for_pool(state: &ClusterState, pool: Option<&NodePool>) -> Vec<PodBatch> {
     use std::collections::HashMap;
+
+    let pool_labels = pool.map(|p| &p.labels);
+    let pool_taints = pool.map(|p| &p.taints);
 
     // Key: (sorted required labels, sorted toleration keys)
     let mut groups: HashMap<(Vec<(String, String)>, Vec<String>, u32), Vec<PodId>> = HashMap::new();
@@ -53,6 +64,28 @@ pub fn batch_pending_pods(state: &ClusterState) -> Vec<PodBatch> {
         }
         req_labels.sort();
         req_labels.dedup();
+
+        // If pool is specified, skip pods whose required labels don't match pool labels
+        if let Some(pl) = pool_labels {
+            let matches = req_labels.iter().all(|(k, v)| {
+                pl.iter().any(|(pk, pv)| pk == k && pv == v)
+            });
+            if !matches {
+                continue;
+            }
+        }
+
+        // If pool has taints, skip pods that don't tolerate them
+        if let Some(pt) = pool_taints {
+            let tolerates_all = pt.iter()
+                .filter(|t| matches!(t.effect, kubesim_core::TaintEffect::NoSchedule))
+                .all(|taint| {
+                    pod.scheduling_constraints.tolerations.iter().any(|tol| tol.tolerates(taint))
+                });
+            if !tolerates_all {
+                continue;
+            }
+        }
 
         let mut tol_keys: Vec<String> = pod.scheduling_constraints.tolerations
             .iter()
@@ -157,7 +190,7 @@ pub fn provision_versioned(
     usage: &NodePoolUsage,
     profile: Option<&VersionProfile>,
 ) -> Vec<ProvisionDecision> {
-    let mut batches = batch_pending_pods(state);
+    let mut batches = batch_pending_pods_for_pool(state, Some(pool));
     let use_ffd = profile.map_or(false, |p| p.version == KarpenterVersion::V1);
 
     if use_ffd {

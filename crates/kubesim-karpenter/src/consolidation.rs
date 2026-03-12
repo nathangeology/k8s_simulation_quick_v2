@@ -39,12 +39,12 @@ pub enum ConsolidationAction {
     },
 }
 
-/// Identify empty nodes (ready, not cordoned, zero pods).
-fn find_empty_nodes(state: &ClusterState) -> Vec<NodeId> {
+/// Identify empty nodes (ready, not cordoned, zero pods) belonging to a specific pool.
+fn find_empty_nodes(state: &ClusterState, pool_name: &str) -> Vec<NodeId> {
     state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && n.pods.is_empty())
+        .filter(|(_, n)| n.conditions.ready && !n.cordoned && n.pods.is_empty() && n.pool_name == pool_name)
         .map(|(id, _)| id)
         .collect()
 }
@@ -159,13 +159,14 @@ fn pods_can_reschedule(
 }
 
 /// Find underutilized nodes whose pods can all be rescheduled elsewhere.
-fn find_underutilized_nodes(state: &ClusterState) -> Vec<ConsolidationAction> {
+/// Only evaluates nodes belonging to the specified pool.
+fn find_underutilized_nodes(state: &ClusterState, pool_name: &str) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
     // Sort candidates by multi-factor disruption score — consolidate least-disruptive nodes first
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
+        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool_name)
         .collect();
     sort_candidates(state, &mut candidates);
 
@@ -203,7 +204,7 @@ fn find_replace_candidates(
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
+        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool.name)
         .collect();
     sort_candidates(state, &mut candidates);
 
@@ -264,8 +265,9 @@ pub fn evaluate(
     state: &ClusterState,
     policy: ConsolidationPolicy,
     max_disrupted: u32,
+    pool_name: &str,
 ) -> Vec<ConsolidationAction> {
-    evaluate_versioned(state, policy, max_disrupted, None, None)
+    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name)
 }
 
 /// Version-aware consolidation evaluation.
@@ -278,6 +280,7 @@ pub fn evaluate_versioned(
     max_disrupted: u32,
     profile: Option<&VersionProfile>,
     catalog: Option<(&Catalog, &NodePool)>,
+    pool_name: &str,
 ) -> Vec<ConsolidationAction> {
     let strategy = profile
         .map(|p| p.consolidation_strategy)
@@ -324,7 +327,7 @@ pub fn evaluate_versioned(
 
     // WhenEmpty always runs (both policies include it)
     let mut empty_used: u32 = 0;
-    for nid in find_empty_nodes(state) {
+    for nid in find_empty_nodes(state, pool_name) {
         if empty_used >= empty_budget || total_used >= max_disrupted {
             break;
         }
@@ -335,7 +338,7 @@ pub fn evaluate_versioned(
 
     if policy == ConsolidationPolicy::WhenUnderutilized && total_used < max_disrupted {
         let mut underutil_used: u32 = 0;
-        for action in find_underutilized_nodes(state) {
+        for action in find_underutilized_nodes(state, pool_name) {
             if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                 break;
             }
@@ -420,7 +423,7 @@ impl EventHandler for ConsolidationHandler {
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref);
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name);
         let mut follow_ups = Vec::new();
 
         for action in actions {
@@ -488,6 +491,7 @@ impl EventHandler for ConsolidationHandler {
                             instance_type: replacement_instance_type,
                             labels: kubesim_core::LabelSet(self.pool.labels.clone()),
                             taints: self.pool.taints.clone(),
+                            pool_name: self.pool.name.clone(),
                         }),
                     });
                 }
@@ -526,6 +530,7 @@ mod tests {
             lifecycle: NodeLifecycle::OnDemand,
             cordoned: false,
             created_at: SimTime(0),
+            pool_name: "default".into(),
         }
     }
 
@@ -561,7 +566,7 @@ mod tests {
         let mut state = ClusterState::new();
         state.add_node(test_node(4000, 8_000_000_000)); // empty node
 
-        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 10);
+        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 10, "default");
         assert_eq!(actions.len(), 1);
         assert!(matches!(actions[0], ConsolidationAction::TerminateEmpty(_)));
     }
@@ -573,7 +578,7 @@ mod tests {
         let pid = state.submit_pod(test_pod(1000, 1_000_000_000));
         state.bind_pod(pid, nid);
 
-        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 10);
+        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 10, "default");
         assert!(actions.is_empty());
     }
 
@@ -588,7 +593,7 @@ mod tests {
         // Node B: has capacity to absorb A's pod
         state.add_node(test_node(4000, 8_000_000_000));
 
-        let actions = evaluate(&state, ConsolidationPolicy::WhenUnderutilized, 10);
+        let actions = evaluate(&state, ConsolidationPolicy::WhenUnderutilized, 10, "default");
         assert!(!actions.is_empty());
         // Should drain the cheaper node
         let has_drain = actions.iter().any(|a| matches!(a, ConsolidationAction::DrainAndTerminate { .. }));
@@ -604,7 +609,7 @@ mod tests {
         state.add_node(test_node(4000, 8_000_000_000));
 
         // Budget of 1
-        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 1);
+        let actions = evaluate(&state, ConsolidationPolicy::WhenEmpty, 1, "default");
         assert_eq!(actions.len(), 1);
     }
 

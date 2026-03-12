@@ -86,6 +86,7 @@ impl EventHandler for SimGlueHandler {
                         lifecycle: NodeLifecycle::OnDemand,
                         cordoned: false,
                         created_at: time,
+                        pool_name: spec.pool_name.clone(),
                     };
                     state.add_node(node);
                     // Schedule pending pods onto available nodes
