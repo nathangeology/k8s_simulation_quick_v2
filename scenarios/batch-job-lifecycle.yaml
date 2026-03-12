@@ -1,0 +1,44 @@
+study:
+  name: batch-job-lifecycle
+  runs: 1000
+  time_mode: wall_clock
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge]
+        min_nodes: 3
+        max_nodes: 30
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+  workloads:
+    - type: batch_job
+      count: 20
+      duration:
+        dist: uniform
+        min: "1h"
+        max: "4h"
+      cpu_request:
+        dist: uniform
+        min: "500m"
+        max: "2000m"
+      memory_request:
+        dist: uniform
+        min: "512Mi"
+        max: "4Gi"
+
+    - type: web_app
+      count: 5
+      replicas: {fixed: 3}
+
+  variants:
+    - name: with_do_not_disrupt
+      scheduler: {scoring: MostAllocated, weight: 1}
+    - name: without_do_not_disrupt
+      scheduler: {scoring: LeastAllocated, weight: 1}
+
+  metrics:
+    compare:
+      - total_cost
+      - node_count
+      - pending_pods

@@ -268,6 +268,8 @@ pub struct Pod {
     pub labels: LabelSet,
     /// When true, Karpenter consolidation will not disrupt the node hosting this pod.
     pub do_not_disrupt: bool,
+    /// Optional pod lifetime in nanoseconds (for batch jobs).
+    pub duration_ns: Option<u64>,
 }
 
 // ── Deletion cost strategy ──────────────────────────────────────

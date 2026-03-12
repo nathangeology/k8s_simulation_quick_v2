@@ -107,6 +107,7 @@ impl kubesim_engine::EventHandler for SimHandler {
 
         match event {
             EngineEvent::PodSubmitted(spec) => {
+                let duration_ns = spec.duration_ns;
                 let pod = Pod {
                     requests: spec.requests,
                     limits: spec.limits,
@@ -119,6 +120,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                     priority: spec.priority,
                     labels: spec.labels.clone(),
                     do_not_disrupt: spec.do_not_disrupt,
+                    duration_ns,
                 };
                 let pod_id = state.submit_pod(pod);
 
@@ -126,6 +128,13 @@ impl kubesim_engine::EventHandler for SimHandler {
                     self.scheduler.schedule_one(state, pod_id)
                 {
                     state.bind_pod(pod_id, node_id);
+                    // Schedule PodCompleted if duration is set
+                    if let Some(dur) = duration_ns {
+                        return vec![kubesim_engine::ScheduledEvent {
+                            time: SimTime(time.0 + dur),
+                            event: EngineEvent::PodCompleted(pod_id),
+                        }];
+                    }
                 } else {
                     // Pod couldn't be scheduled — trigger provisioning
                     return vec![kubesim_engine::ScheduledEvent {
@@ -168,6 +177,18 @@ impl kubesim_engine::EventHandler for SimHandler {
             }
             EngineEvent::NodeTerminated(node_id) => {
                 state.remove_node(*node_id);
+                Vec::new()
+            }
+            EngineEvent::PodCompleted(pod_id) => {
+                if let Some(pod) = state.pods.get_mut(*pod_id) {
+                    pod.phase = PodPhase::Succeeded;
+                    if let Some(node_id) = pod.node.take() {
+                        if let Some(node) = state.nodes.get_mut(node_id) {
+                            node.allocated = node.allocated.saturating_sub(&pod.requests);
+                            node.pods.retain(|p| *p != *pod_id);
+                        }
+                    }
+                }
                 Vec::new()
             }
             _ => Vec::new(),
@@ -230,7 +251,7 @@ fn run_single(
                 let node = instance_to_node(&catalog, instance_type);
                 state.add_node(node);
             }
-            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, .. } => {
+            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
                 engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
                     requests: *requests,
                     limits: *limits,
@@ -239,6 +260,7 @@ fn run_single(
                     labels: LabelSet::default(),
                     scheduling_constraints: SchedulingConstraints::default(),
                     do_not_disrupt: workload_name == "batch_job",
+                    duration_ns: *duration_ns,
                 }));
             }
             WorkloadEvent::MetricsSnapshot { time } => {
@@ -765,7 +787,7 @@ impl StepSimulation {
                     let node = instance_to_node(&catalog, instance_type);
                     state.add_node(node);
                 }
-                WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, .. } => {
+                WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
                     engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
                         requests: *requests,
                         limits: *limits,
@@ -774,6 +796,7 @@ impl StepSimulation {
                         labels: LabelSet::default(),
                         scheduling_constraints: SchedulingConstraints::default(),
                         do_not_disrupt: workload_name == "batch_job",
+                        duration_ns: *duration_ns,
                     }));
                 }
                 WorkloadEvent::MetricsSnapshot { time } => {

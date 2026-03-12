@@ -194,6 +194,7 @@ fn emit_web_app(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
             limits: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
             priority: 0,
             deletion_cost: None,
+            duration_ns: None,
         });
     }
     // HPA
@@ -214,6 +215,7 @@ fn emit_ml_training(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
         limits: Resources { cpu_millis: cpu, memory_bytes: mem, gpu, ephemeral_bytes: 0 },
         priority: 100, // high
         deletion_cost: None,
+        duration_ns: None,
     });
 }
 
@@ -231,6 +233,7 @@ fn emit_batch_job(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
             limits: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
             priority: -100, // low
             deletion_cost: None,
+            duration_ns: None,
         });
     }
 }
@@ -249,6 +252,7 @@ fn emit_saas_microservice(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u
             limits: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
             priority: 0,
             deletion_cost: None,
+            duration_ns: None,
         });
     }
     // HPA

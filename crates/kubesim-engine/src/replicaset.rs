@@ -113,6 +113,7 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState) -> Vec<ScheduledEvent>
                 priority: rs.pod_template.priority,
                 labels: rs.pod_template.labels.clone(),
                 do_not_disrupt: false,
+                duration_ns: None,
             };
             state.submit_pod(pod);
         }
