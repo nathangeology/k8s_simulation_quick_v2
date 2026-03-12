@@ -116,7 +116,16 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
             .map(|p| p.to_i32())
             .unwrap_or(0);
 
-        for _ in 0..count {
+        // When count > 1 and scale_down is defined, stagger scale-down times
+        // across RS instances so they don't all scale down simultaneously.
+        // Default stagger: 5 minutes per instance (configurable via scale_down_stagger).
+        let stagger_ns = workload
+            .scale_down_stagger
+            .as_deref()
+            .and_then(parse_duration_ns)
+            .unwrap_or(300_000_000_000); // 5m default
+
+        for i in 0..count {
             let owner_id = owner_counter;
             owner_counter += 1;
 
@@ -156,12 +165,13 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                 }
             }
 
-            // Emit scale-down events if configured
+            // Emit scale-down events with per-instance stagger when count > 1
             if let Some(ref scale_downs) = workload.scale_down {
+                let offset = if count > 1 { (i as u64) * stagger_ns } else { 0 };
                 for sd in scale_downs {
                     if let Some(time_ns) = parse_duration_ns(&sd.at) {
                         events.push(Event::ReplicaSetScaleDown {
-                            time: SimTime(time_ns),
+                            time: SimTime(time_ns + offset),
                             owner_id,
                             reduce_by: sd.reduce_by,
                         });
