@@ -9,7 +9,5 @@ kubesim-ec2 = { workspace = true }
 kubesim-engine = { workspace = true }
 kubesim-scheduler = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
-
-[dev-dependencies]
 smallvec = { workspace = true }
+thiserror = { workspace = true }
