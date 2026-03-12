@@ -1,0 +1,87 @@
+study:
+  name: multi-nodepool
+  runs: 100
+  time_mode: logical
+
+  cluster:
+    node_pools:
+      - name: general-purpose
+        instance_types:
+          - m5.xlarge
+          - m5.2xlarge
+        min_nodes: 1
+        max_nodes: 20
+        weight: 10
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+
+      - name: gpu-compute
+        instance_types:
+          - p3.2xlarge
+          - g4dn.xlarge
+        min_nodes: 0
+        max_nodes: 10
+        weight: 20
+        labels:
+          - ["accelerator", "gpu"]
+        taints:
+          - key: gpu
+            value: "true"
+            effect: NoSchedule
+        karpenter:
+          consolidation:
+            policy: WhenEmpty
+
+  workloads:
+    - type: web_app
+      count: 6
+      replicas:
+        fixed: 8
+      scaling:
+        type: hpa
+        metric: cpu
+        target: "70%"
+      cpu_request:
+        dist: uniform
+        min: "250m"
+        max: "500m"
+      memory_request:
+        dist: uniform
+        min: "256Mi"
+        max: "512Mi"
+      priority: medium
+      traffic: diurnal
+      scale_down:
+        - {at: "12h", reduce_by: 5}
+
+    - type: batch_job
+      count: 4
+      cpu_request:
+        dist: uniform
+        min: "500m"
+        max: "2000m"
+      memory_request:
+        dist: uniform
+        min: "512Mi"
+        max: "2Gi"
+      duration:
+        dist: exponential
+        mean: "2h"
+      priority: low
+
+  traffic_pattern:
+    type: diurnal
+    peak_multiplier: 3.0
+    duration: "24h"
+
+  variants:
+    - name: karpenter-v1.x
+      karpenter_version: "v1"
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - node_count
+      - running_pods
+      - pending_pods

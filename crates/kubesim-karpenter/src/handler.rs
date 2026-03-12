@@ -70,6 +70,7 @@ impl EventHandler for ProvisioningHandler {
                     instance_type: decision.instance_type.clone(),
                     labels: kubesim_core::LabelSet(self.pool.labels.clone()),
                     taints: self.pool.taints.clone(),
+                    pool_name: self.pool.name.clone(),
                 }),
             });
         }

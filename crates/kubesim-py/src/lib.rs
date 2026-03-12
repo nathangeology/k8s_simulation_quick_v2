@@ -83,6 +83,7 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
         lifecycle: NodeLifecycle::OnDemand,
         cordoned: false,
         created_at: SimTime(0),
+        pool_name: String::new(),
     }
 }
 
@@ -135,7 +136,10 @@ impl kubesim_engine::EventHandler for SimHandler {
                 Vec::new()
             }
             EngineEvent::NodeLaunching(spec) => {
-                let node = instance_to_node(&self.catalog, &spec.instance_type);
+                let mut node = instance_to_node(&self.catalog, &spec.instance_type);
+                node.labels = spec.labels.clone();
+                node.taints = spec.taints.iter().cloned().collect();
+                node.pool_name = spec.pool_name.clone();
                 let node_id = state.add_node(node);
                 // Try to schedule pending pods onto the new node
                 let pending: Vec<_> = state.pending_queue.clone();
@@ -297,20 +301,31 @@ fn run_single(
         .and_then(parse_karpenter_version)
         .map(VersionProfile::new);
 
-    for pool_def in &scenario.study.cluster.node_pools {
+    // Build and sort pools by weight (higher weight = higher priority)
+    let mut pool_defs: Vec<(usize, &kubesim_workload::NodePoolDef)> = scenario.study.cluster.node_pools
+        .iter().enumerate().collect();
+    pool_defs.sort_by(|a, b| b.1.weight.cmp(&a.1.weight));
+
+    for (idx, pool_def) in pool_defs {
         if let Some(karpenter) = &pool_def.karpenter {
+            let pool_name = pool_def.name.clone()
+                .unwrap_or_else(|| if scenario.study.cluster.node_pools.len() == 1 {
+                    "default".into()
+                } else {
+                    format!("pool-{}", idx)
+                });
             let pool = NodePool {
-                name: "default".into(),
+                name: pool_name,
                 instance_types: pool_def.instance_types.clone(),
                 limits: NodePoolLimits {
                     max_nodes: Some(pool_def.max_nodes),
                     max_cpu_millis: None,
                     max_memory_bytes: None,
                 },
-                labels: vec![],
-                taints: vec![],
+                labels: pool_def.labels.clone(),
+                taints: pool_def.taints.clone(),
                 max_disrupted_pct: 10,
-                weight: 0,
+                weight: pool_def.weight,
             };
 
             let mut prov = ProvisioningHandler::new(
@@ -820,20 +835,31 @@ impl StepSimulation {
         engine.add_handler(Box::new(ReplicaSetController));
 
         // Register karpenter handlers for pools that have karpenter config
-        for pool_def in &self.scenario.study.cluster.node_pools {
+        // Sort pools by weight (higher weight = higher priority)
+        let mut pool_defs: Vec<(usize, &kubesim_workload::NodePoolDef)> = self.scenario.study.cluster.node_pools
+            .iter().enumerate().collect();
+        pool_defs.sort_by(|a, b| b.1.weight.cmp(&a.1.weight));
+
+        for (idx, pool_def) in pool_defs {
             if let Some(karpenter) = &pool_def.karpenter {
+                let pool_name = pool_def.name.clone()
+                    .unwrap_or_else(|| if self.scenario.study.cluster.node_pools.len() == 1 {
+                        "default".into()
+                    } else {
+                        format!("pool-{}", idx)
+                    });
                 let pool = NodePool {
-                    name: "default".into(),
+                    name: pool_name,
                     instance_types: pool_def.instance_types.clone(),
                     limits: NodePoolLimits {
                         max_nodes: Some(pool_def.max_nodes),
                         max_cpu_millis: None,
                         max_memory_bytes: None,
                     },
-                    labels: vec![],
-                    taints: vec![],
+                    labels: pool_def.labels.clone(),
+                    taints: pool_def.taints.clone(),
                     max_disrupted_pct: 10,
-                    weight: 0,
+                    weight: pool_def.weight,
                 };
 
                 engine.add_handler(Box::new(
