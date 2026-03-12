@@ -37,6 +37,10 @@ pub struct DisruptionBudgetConfig {
     pub reasons: Vec<DisruptionReason>,
     /// v1.x only: cron schedule window when disruption is allowed.
     pub schedule: Option<String>,
+    /// Budget percentage when schedule is active (e.g. maintenance window). v1.x only.
+    pub active_budget: Option<u32>,
+    /// Budget percentage when schedule is inactive (e.g. business hours). v1.x only.
+    pub inactive_budget: Option<u32>,
 }
 
 impl Default for DisruptionBudgetConfig {
@@ -45,8 +49,50 @@ impl Default for DisruptionBudgetConfig {
             max_percent: 10,
             reasons: Vec::new(),
             schedule: None,
+            active_budget: None,
+            inactive_budget: None,
         }
     }
+}
+
+/// Evaluate whether a schedule string is currently active at the given SimTime.
+///
+/// Supported formats:
+/// - `"weekday_business_hours"` — Mon–Fri 09:00–17:00
+/// - `"maintenance_window"` — Daily 02:00–06:00
+/// - `"HH:MM-HH:MM"` — Explicit hour range (e.g. `"02:00-06:00"`)
+///
+/// SimTime is nanoseconds from epoch. We derive a "sim hour" (0–23) and
+/// "sim weekday" (0=Mon..6=Sun) from it using a 24h cycle.
+pub fn evaluate_schedule(time: kubesim_core::SimTime, schedule: &str) -> bool {
+    const HOUR_NS: u64 = 3_600_000_000_000;
+    const DAY_NS: u64 = 24 * HOUR_NS;
+
+    let hour = ((time.0 % DAY_NS) / HOUR_NS) as u32;
+    let day = ((time.0 / DAY_NS) % 7) as u32; // 0=Mon..6=Sun
+
+    match schedule {
+        "weekday_business_hours" => day < 5 && hour >= 9 && hour < 17,
+        "maintenance_window" => hour >= 2 && hour < 6,
+        s if s.contains('-') => {
+            if let Some((start_s, end_s)) = s.split_once('-') {
+                let start = parse_hhmm(start_s);
+                let end = parse_hhmm(end_s);
+                match (start, end) {
+                    (Some(s), Some(e)) => hour >= s && hour < e,
+                    _ => false,
+                }
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+fn parse_hhmm(s: &str) -> Option<u32> {
+    let s = s.trim();
+    s.split_once(':').and_then(|(h, _)| h.parse().ok())
 }
 
 /// Disruption reasons (v1.x feature — v0.35 treats all disruptions uniformly).

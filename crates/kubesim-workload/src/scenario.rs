@@ -92,6 +92,12 @@ pub struct DisruptionBudgetDef {
     /// Cron schedule for time-gated overrides (v1.x only, optional).
     #[serde(default)]
     pub schedule: Option<String>,
+    /// Budget percentage when schedule is active (v1.x only, optional).
+    #[serde(default)]
+    pub active_budget: Option<u32>,
+    /// Budget percentage when schedule is inactive (v1.x only, optional).
+    #[serde(default)]
+    pub inactive_budget: Option<u32>,
 }
 
 fn default_disruption_max_percent() -> u32 { 10 }
