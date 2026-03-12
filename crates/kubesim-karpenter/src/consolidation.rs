@@ -158,6 +158,13 @@ fn pods_can_reschedule(
     Some(pod_ids)
 }
 
+/// Returns true if any pod on the node has `do_not_disrupt` set.
+fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
+    node.pods.iter().any(|&pid| {
+        state.pods.get(pid).map_or(false, |p| p.do_not_disrupt)
+    })
+}
+
 /// Find underutilized nodes whose pods can all be rescheduled elsewhere.
 fn find_underutilized_nodes(state: &ClusterState) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
@@ -166,6 +173,7 @@ fn find_underutilized_nodes(state: &ClusterState) -> Vec<ConsolidationAction> {
         .nodes
         .iter()
         .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
+        .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
     sort_candidates(state, &mut candidates);
 
@@ -204,6 +212,7 @@ fn find_replace_candidates(
         .nodes
         .iter()
         .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty())
+        .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
     sort_candidates(state, &mut candidates);
 
@@ -541,6 +550,7 @@ mod tests {
             qos_class: QoSClass::Burstable,
             priority: 0,
             labels: LabelSet::default(),
+            do_not_disrupt: false,
         }
     }
 
@@ -643,5 +653,28 @@ mod tests {
             &mut state,
         );
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn do_not_disrupt_pod_prevents_consolidation() {
+        let mut state = ClusterState::new();
+        // Node A: has a do-not-disrupt pod
+        let na = state.add_node(Node { cost_per_hour: 0.1, ..test_node(4000, 8_000_000_000) });
+        let mut pod = test_pod(500, 500_000_000);
+        pod.do_not_disrupt = true;
+        let pid = state.submit_pod(pod);
+        state.bind_pod(pid, na);
+
+        // Node B: has capacity to absorb A's pod
+        state.add_node(test_node(4000, 8_000_000_000));
+
+        let actions = evaluate(&state, ConsolidationPolicy::WhenUnderutilized, 10);
+        // Node A must NOT be a consolidation candidate
+        let drains_na = actions.iter().any(|a| match a {
+            ConsolidationAction::DrainAndTerminate { node_id, .. } => *node_id == na,
+            ConsolidationAction::Replace { node_id, .. } => *node_id == na,
+            _ => false,
+        });
+        assert!(!drains_na, "node with do-not-disrupt pod should not be consolidated");
     }
 }

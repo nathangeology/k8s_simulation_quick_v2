@@ -264,6 +264,8 @@ pub struct Pod {
     pub qos_class: QoSClass,
     pub priority: i32,
     pub labels: LabelSet,
+    /// When true, Karpenter consolidation will not disrupt the node hosting this pod.
+    pub do_not_disrupt: bool,
 }
 
 // ── Deletion cost strategy ──────────────────────────────────────

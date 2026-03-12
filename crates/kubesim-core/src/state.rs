@@ -162,6 +162,7 @@ mod tests {
             qos_class: QoSClass::Burstable,
             priority: 0,
             labels: LabelSet::default(),
+            do_not_disrupt: false,
         }
     }
 

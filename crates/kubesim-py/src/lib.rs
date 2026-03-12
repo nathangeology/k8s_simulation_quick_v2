@@ -117,6 +117,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                     qos_class: QoSClass::Burstable,
                     priority: spec.priority,
                     labels: spec.labels.clone(),
+                    do_not_disrupt: spec.do_not_disrupt,
                 };
                 let pod_id = state.submit_pod(pod);
 
@@ -225,7 +226,7 @@ fn run_single(
                 let node = instance_to_node(&catalog, instance_type);
                 state.add_node(node);
             }
-            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, .. } => {
+            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, .. } => {
                 engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
                     requests: *requests,
                     limits: *limits,
@@ -233,6 +234,7 @@ fn run_single(
                     priority: *priority,
                     labels: LabelSet::default(),
                     scheduling_constraints: SchedulingConstraints::default(),
+                    do_not_disrupt: workload_name == "batch_job",
                 }));
             }
             WorkloadEvent::MetricsSnapshot { time } => {
@@ -748,7 +750,7 @@ impl StepSimulation {
                     let node = instance_to_node(&catalog, instance_type);
                     state.add_node(node);
                 }
-                WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, .. } => {
+                WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, .. } => {
                     engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
                         requests: *requests,
                         limits: *limits,
@@ -756,6 +758,7 @@ impl StepSimulation {
                         priority: *priority,
                         labels: LabelSet::default(),
                         scheduling_constraints: SchedulingConstraints::default(),
+                        do_not_disrupt: workload_name == "batch_job",
                     }));
                 }
                 WorkloadEvent::MetricsSnapshot { time } => {
