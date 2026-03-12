@@ -413,9 +413,114 @@ pub fn disruption_budget(pool: &NodePool, total_nodes: u32) -> u32 {
     }
 }
 
+// ── Scheduling simulation ───────────────────────────────────────
+
+/// Validate a consolidation plan by simulating pod scheduling.
+///
+/// Collects all pods from candidate nodes, builds a virtual view of remaining
+/// capacity (excluding candidate nodes), and checks that every displaced pod
+/// can be placed on a remaining node. If any pod fails to schedule, shrinks
+/// the candidate set by removing the last candidate and retries.
+///
+/// Returns the validated subset of actions (may be smaller than input).
+fn simulate_and_validate(
+    state: &ClusterState,
+    actions: Vec<ConsolidationAction>,
+) -> Vec<ConsolidationAction> {
+    use kubesim_scheduler::{
+        FilterResult, TaintToleration, NodeAffinity,
+        InterPodAffinityFilter, PodTopologySpreadFilter, FilterPlugin,
+    };
+
+    if actions.is_empty() {
+        return actions;
+    }
+
+    let filters: Vec<Box<dyn FilterPlugin>> = vec![
+        Box::new(TaintToleration),
+        Box::new(NodeAffinity),
+        Box::new(InterPodAffinityFilter),
+        Box::new(PodTopologySpreadFilter),
+    ];
+
+    let mut validated = actions;
+
+    loop {
+        // Collect all candidate node IDs
+        let candidate_nodes: Vec<NodeId> = validated.iter().map(|a| match a {
+            ConsolidationAction::TerminateEmpty(nid) => *nid,
+            ConsolidationAction::DrainAndTerminate { node_id, .. } => *node_id,
+            ConsolidationAction::Replace { node_id, .. } => *node_id,
+        }).collect();
+
+        // Collect all displaced pods
+        let displaced_pods: Vec<PodId> = validated.iter().flat_map(|a| match a {
+            ConsolidationAction::TerminateEmpty(_) => vec![],
+            ConsolidationAction::DrainAndTerminate { pod_ids, .. } => pod_ids.clone(),
+            ConsolidationAction::Replace { pod_ids, .. } => pod_ids.clone(),
+        }).collect();
+
+        if displaced_pods.is_empty() {
+            break;
+        }
+
+        // Build virtual capacity on remaining nodes
+        let mut remaining_avail: Vec<(NodeId, Resources)> = state
+            .nodes
+            .iter()
+            .filter(|(nid, n)| {
+                !candidate_nodes.contains(nid)
+                    && n.conditions.ready
+                    && !n.cordoned
+            })
+            .map(|(nid, n)| (nid, n.allocatable.saturating_sub(&n.allocated)))
+            .collect();
+
+        // Try to place every displaced pod
+        let mut all_fit = true;
+        for &pid in &displaced_pods {
+            let pod = match state.pods.get(pid) {
+                Some(p) => p,
+                None => continue,
+            };
+            let slot = remaining_avail.iter_mut().find(|(nid, avail)| {
+                if !pod.requests.fits_in(avail) {
+                    return false;
+                }
+                let target = match state.nodes.get(*nid) {
+                    Some(n) => n,
+                    None => return false,
+                };
+                filters.iter().all(|f| matches!(f.filter(state, pod, target), FilterResult::Pass))
+            });
+            match slot {
+                Some((_, avail)) => *avail = avail.saturating_sub(&pod.requests),
+                None => { all_fit = false; break; }
+            }
+        }
+
+        if all_fit {
+            break;
+        }
+
+        // Shrink candidate set by removing the last action and retry
+        validated.pop();
+        if validated.is_empty() {
+            break;
+        }
+    }
+
+    validated
+}
+
 // ── EventHandler integration ────────────────────────────────────
 
 /// Karpenter consolidation handler for the simulation engine.
+///
+/// Implements a two-phase approach matching real Karpenter:
+/// - PLAN phase: evaluate candidates + validate via scheduling simulation
+/// - EXECUTE phase: cordon nodes immediately, schedule `NodeDrained` events
+///   that perform actual pod eviction (handled by [`DrainHandler`])
 pub struct ConsolidationHandler {
     pub pool: NodePool,
     pub policy: ConsolidationPolicy,
@@ -466,17 +571,21 @@ impl EventHandler for ConsolidationHandler {
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
         let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name);
+
+        // PLAN phase: validate via scheduling simulation — shrink candidate set
+        // until all displaced pods can be placed on remaining nodes.
+        let actions = simulate_and_validate(state, actions);
+
         let mut follow_ups = Vec::new();
 
-        // Stabilization delay (15s) between drain actions — real Karpenter waits
-        // for pods to reschedule before evaluating the next candidate.
+        // EXECUTE phase: cordon candidates immediately, schedule staggered drain events.
+        // Pod eviction is deferred to NodeDrained events (handled by DrainHandler).
         const STABILIZATION_NS: u64 = 15_000_000_000;
         let mut action_offset: u64 = 0;
 
         for action in actions {
             match action {
                 ConsolidationAction::TerminateEmpty(nid) => {
-                    // Cordon then terminate (no drain needed — node is empty)
                     if let Some(n) = state.nodes.get_mut(nid) {
                         n.cordoned = true;
                     }
@@ -490,8 +599,7 @@ impl EventHandler for ConsolidationHandler {
                     });
                     action_offset += STABILIZATION_NS;
                 }
-                ConsolidationAction::DrainAndTerminate { node_id, pod_ids } => {
-                    // Cordon
+                ConsolidationAction::DrainAndTerminate { node_id, .. } => {
                     if let Some(n) = state.nodes.get_mut(node_id) {
                         n.cordoned = true;
                     }
@@ -499,10 +607,7 @@ impl EventHandler for ConsolidationHandler {
                         time: SimTime(time.0 + action_offset + 1),
                         event: Event::NodeCordoned(node_id),
                     });
-                    // Evict pods (they return to pending queue for rescheduling)
-                    for pid in pod_ids {
-                        state.evict_pod(pid);
-                    }
+                    // Eviction deferred to DrainHandler
                     follow_ups.push(ScheduledEvent {
                         time: SimTime(time.0 + action_offset + 2),
                         event: Event::NodeDrained(node_id),
@@ -513,8 +618,7 @@ impl EventHandler for ConsolidationHandler {
                     });
                     action_offset += STABILIZATION_NS;
                 }
-                ConsolidationAction::Replace { node_id, pod_ids, replacement_instance_type } => {
-                    // v1.x replacement: cordon old node, drain, terminate, launch replacement
+                ConsolidationAction::Replace { node_id, replacement_instance_type, .. } => {
                     if let Some(n) = state.nodes.get_mut(node_id) {
                         n.cordoned = true;
                     }
@@ -522,9 +626,7 @@ impl EventHandler for ConsolidationHandler {
                         time: SimTime(time.0 + action_offset + 1),
                         event: Event::NodeCordoned(node_id),
                     });
-                    for pid in pod_ids {
-                        state.evict_pod(pid);
-                    }
+                    // Eviction deferred to DrainHandler
                     follow_ups.push(ScheduledEvent {
                         time: SimTime(time.0 + action_offset + 2),
                         event: Event::NodeDrained(node_id),
@@ -533,7 +635,6 @@ impl EventHandler for ConsolidationHandler {
                         time: SimTime(time.0 + action_offset + 3),
                         event: Event::NodeTerminated(node_id),
                     });
-                    // Launch cheaper replacement
                     follow_ups.push(ScheduledEvent {
                         time: SimTime(time.0 + action_offset + 4),
                         event: Event::NodeLaunching(NodeSpec {
@@ -556,6 +657,49 @@ impl EventHandler for ConsolidationHandler {
         });
 
         follow_ups
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
+}
+
+// ── Drain handler ───────────────────────────────────────────────
+
+/// Handles `NodeDrained` events by evicting all pods from the drained node
+/// and triggering a provisioning loop so evicted pods get rescheduled.
+///
+/// This separates the EXECUTE phase from the PLAN phase: the consolidation
+/// handler schedules staggered `NodeDrained` events, and this handler performs
+/// the actual pod eviction one node at a time — preventing cascade eviction.
+pub struct DrainHandler;
+
+impl EventHandler for DrainHandler {
+    fn handle(
+        &mut self,
+        event: &Event,
+        time: SimTime,
+        state: &mut ClusterState,
+    ) -> Vec<ScheduledEvent> {
+        let Event::NodeDrained(node_id) = event else {
+            return Vec::new();
+        };
+
+        let pod_ids: Vec<PodId> = match state.nodes.get(*node_id) {
+            Some(n) => n.pods.clone().into_vec(),
+            None => return Vec::new(),
+        };
+
+        for pid in pod_ids {
+            state.evict_pod(pid);
+        }
+
+        // Trigger provisioning so evicted pods get rescheduled on remaining nodes
+        if !state.pending_queue.is_empty() {
+            vec![ScheduledEvent {
+                time: SimTime(time.0 + 1),
+                event: Event::KarpenterProvisioningLoop,
+            }]
+        } else {
+            Vec::new()
+        }
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
