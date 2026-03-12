@@ -247,6 +247,8 @@ pub struct Node {
     pub cordoned: bool,
     /// When this node was created (for age-based consolidation sorting).
     pub created_at: SimTime,
+    /// Which NodePool launched this node (for pool-scoped consolidation).
+    pub pool_name: String,
 }
 
 // ── Pod ─────────────────────────────────────────────────────────

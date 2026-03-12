@@ -33,7 +33,9 @@ pub struct ProvisionDecision {
 /// Two pods are compatible if they share the same required node labels and
 /// the same set of tolerations. This is a simplified model — real Karpenter
 /// uses a more nuanced grouping.
-pub fn batch_pending_pods(state: &ClusterState) -> Vec<PodBatch> {
+///
+/// When `pool` is provided, only pods matching the pool's labels/taints are included.
+pub fn batch_pending_pods(state: &ClusterState, pool: Option<&NodePool>) -> Vec<PodBatch> {
     use std::collections::HashMap;
 
     // Key: (sorted required labels, sorted toleration keys)
@@ -44,6 +46,13 @@ pub fn batch_pending_pods(state: &ClusterState) -> Vec<PodBatch> {
             Some(p) if p.phase == PodPhase::Pending => p,
             _ => continue,
         };
+
+        // Filter by pool compatibility if a pool is provided
+        if let Some(pool) = pool {
+            if !pod_matches_pool(pod, pool) {
+                continue;
+            }
+        }
 
         let mut req_labels: Vec<(String, String)> = Vec::new();
         for term in &pod.scheduling_constraints.node_affinity {
@@ -146,6 +155,32 @@ pub fn provision(
     provision_versioned(state, catalog, pool, usage, None)
 }
 
+/// Check whether a pending pod is compatible with a pool's labels and taints.
+/// A pod matches a pool if:
+/// - The pod's required nodeAffinity labels are a subset of the pool's labels
+///   (or the pod has no required labels)
+/// - The pod tolerates all of the pool's taints
+fn pod_matches_pool(pod: &Pod, pool: &NodePool) -> bool {
+    // Check taints: pod must tolerate every pool taint
+    for taint in &pool.taints {
+        if !pod.scheduling_constraints.tolerations.iter().any(|t| t.tolerates(taint)) {
+            return false;
+        }
+    }
+    // Check labels: if pool has labels, pod's required nodeAffinity labels must match
+    if !pool.labels.is_empty() {
+        let pool_labels = LabelSet(pool.labels.clone());
+        for term in &pod.scheduling_constraints.node_affinity {
+            if matches!(term.affinity_type, AffinityType::Required) {
+                if !term.match_labels.0.iter().all(|(k, v)| pool_labels.get(k) == Some(v.as_str())) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
 /// Version-aware provisioning.
 ///
 /// v0.35: cheapest-fit per batch (original behavior).
@@ -157,7 +192,7 @@ pub fn provision_versioned(
     usage: &NodePoolUsage,
     profile: Option<&VersionProfile>,
 ) -> Vec<ProvisionDecision> {
-    let mut batches = batch_pending_pods(state);
+    let mut batches = batch_pending_pods(state, Some(pool));
     let use_ffd = profile.map_or(false, |p| p.version == KarpenterVersion::V1);
 
     if use_ffd {
@@ -303,7 +338,7 @@ mod tests {
         state.submit_pod(test_pod(500, 500_000_000));
         state.submit_pod(test_pod(500, 500_000_000));
 
-        let batches = batch_pending_pods(&state);
+        let batches = batch_pending_pods(&state, None);
         assert_eq!(batches.len(), 1);
         assert_eq!(batches[0].pod_ids.len(), 2);
         assert_eq!(batches[0].total_requests.cpu_millis, 1000);
@@ -321,7 +356,7 @@ mod tests {
         });
         state.submit_pod(pod2);
 
-        let batches = batch_pending_pods(&state);
+        let batches = batch_pending_pods(&state, None);
         assert_eq!(batches.len(), 2);
     }
 

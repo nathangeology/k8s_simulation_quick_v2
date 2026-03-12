@@ -147,6 +147,7 @@ mod tests {
             lifecycle: NodeLifecycle::OnDemand,
             cordoned: false,
             created_at: SimTime(0),
+            pool_name: String::new(),
         }
     }
 
