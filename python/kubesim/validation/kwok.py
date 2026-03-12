@@ -143,6 +143,24 @@ def create_kwok_nodes(cluster: str, count: int = 10) -> None:
              input=json.dumps(node_manifest), capture=False)
 
 
+# ── Instance pricing (on-demand us-east-1) ───────────────────────
+
+_INSTANCE_COST_PER_HOUR: dict[str, float] = {
+    "m5.large": 0.096, "m5.xlarge": 0.192, "m5.2xlarge": 0.384,
+    "m5.4xlarge": 0.768, "m5.8xlarge": 1.536,
+    "c5.large": 0.085, "c5.xlarge": 0.170, "c5.2xlarge": 0.340,
+    "c5.4xlarge": 0.680,
+    "m6i.large": 0.096, "m6i.xlarge": 0.192, "m6i.2xlarge": 0.384,
+    "r5.large": 0.126, "r5.xlarge": 0.252, "r5.2xlarge": 0.504,
+    "t3.medium": 0.0416, "t3.large": 0.0832, "t3.xlarge": 0.1664,
+}
+
+_KARPENTER_REASONS = frozenset({
+    "Provisioning", "Deprovisioning", "Consolidation",
+    "Disruption", "Drift", "Expiration", "Emptiness",
+})
+
+
 # ── Metrics collection ───────────────────────────────────────────
 
 def _get_pods_json(cluster: str) -> list[dict[str, Any]]:
@@ -153,6 +171,12 @@ def _get_pods_json(cluster: str) -> list[dict[str, Any]]:
 
 def _get_nodes_json(cluster: str) -> list[dict[str, Any]]:
     r = _kubectl(["get", "nodes", "-o", "json"], cluster)
+    data = json.loads(r.stdout)
+    return data.get("items", [])
+
+
+def _get_events_json(cluster: str) -> list[dict[str, Any]]:
+    r = _kubectl(["get", "events", "--all-namespaces", "-o", "json"], cluster)
     data = json.loads(r.stdout)
     return data.get("items", [])
 
@@ -173,6 +197,25 @@ def _parse_timestamp_ns(ts: str | None) -> int:
     return 0
 
 
+def _estimate_node_cost(nodes: list[dict[str, Any]]) -> float:
+    """Sum hourly cost from node instance-type labels."""
+    total = 0.0
+    for node in nodes:
+        itype = node.get("metadata", {}).get("labels", {}).get(
+            "node.kubernetes.io/instance-type", "")
+        total += _INSTANCE_COST_PER_HOUR.get(itype, 0.10)
+    return total
+
+
+def _count_karpenter_events(cluster: str) -> int:
+    """Count Karpenter-specific events (provisioning, consolidation, disruption)."""
+    try:
+        events = _get_events_json(cluster)
+        return sum(1 for e in events if e.get("reason") in _KARPENTER_REASONS)
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return 0
+
+
 def collect_metrics(cluster: str) -> KwokResult:
     """Collect metrics from the KWOK/KIND cluster."""
     result = KwokResult()
@@ -180,6 +223,7 @@ def collect_metrics(cluster: str) -> KwokResult:
     # Node metrics
     nodes = _get_nodes_json(cluster)
     result.node_count = len(nodes)
+    result.total_cost_per_hour = _estimate_node_cost(nodes)
     result.node_count_over_time.append({
         "time_ns": int(time.time() * 1e9),
         "count": result.node_count,
@@ -229,38 +273,86 @@ def collect_metrics(cluster: str) -> KwokResult:
     return result
 
 
+def collect_timeseries(
+    cluster: str, duration: int = 300, interval: int = 30,
+) -> list[dict[str, Any]]:
+    """Poll cluster at ``interval`` seconds for ``duration`` seconds.
+
+    Returns list of dicts with columns:
+        timestamp, node_count, running_pods, pending_pods, cost_per_hour, disruption_events
+    """
+    snapshots: list[dict[str, Any]] = []
+    deadline = time.time() + duration
+    while time.time() < deadline:
+        ts = time.time()
+        try:
+            nodes = _get_nodes_json(cluster)
+            pods = _get_pods_json(cluster)
+            running = sum(1 for p in pods if p.get("status", {}).get("phase") == "Running")
+            pending = sum(1 for p in pods if p.get("status", {}).get("phase") == "Pending")
+            snapshots.append({
+                "timestamp": ts,
+                "node_count": len(nodes),
+                "running_pods": running,
+                "pending_pods": pending,
+                "cost_per_hour": _estimate_node_cost(nodes),
+                "disruption_events": _count_karpenter_events(cluster),
+            })
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            pass
+        elapsed = time.time() - ts
+        remaining = interval - elapsed
+        if remaining > 0 and time.time() < deadline:
+            time.sleep(min(remaining, deadline - time.time()))
+    return snapshots
+
+
 # ── Export ────────────────────────────────────────────────────────
+
+def _write_parquet(rows: list[dict[str, Any]], output: Path) -> bool:
+    """Write rows to parquet using polars or pyarrow. Returns True on success."""
+    try:
+        import polars as pl
+        pl.DataFrame(rows).write_parquet(output)
+        return True
+    except ImportError:
+        pass
+    try:
+        import pyarrow as pa, pyarrow.parquet as pq
+        pq.write_table(pa.Table.from_pylist(rows), str(output))
+        return True
+    except ImportError:
+        return False
+
 
 def export_results(result: KwokResult, output: Path) -> None:
     """Export KwokResult to parquet (or JSON fallback)."""
     sim_dict = result.to_sim_result_dict()
 
     if output.suffix == ".parquet":
-        try:
-            import pyarrow as pa
-            import pyarrow.parquet as pq
-
-            table = pa.Table.from_pylist([sim_dict])
-            pq.write_table(table, str(output))
+        if _write_parquet([sim_dict], output):
             return
-        except ImportError:
-            pass
-        # Fallback: try polars
-        try:
-            import polars as pl
+        print("Warning: no parquet library available, writing JSON", file=sys.stderr)
+        output = output.with_suffix(".json")
 
-            df = pl.DataFrame([sim_dict])
-            df.write_parquet(str(output))
-            return
-        except ImportError:
-            # Last resort: write JSON with .parquet name (warn user)
-            print("Warning: neither pyarrow nor polars available, writing JSON", file=sys.stderr)
-            output = output.with_suffix(".json")
-
-    # JSON output
     with open(output, "w") as f:
         json.dump(sim_dict, f, indent=2)
     print(f"Results written to {output}")
+
+
+def export_timeseries(snapshots: list[dict[str, Any]], output: Path) -> None:
+    """Export time-series snapshots to parquet.
+
+    Schema: timestamp, node_count, running_pods, pending_pods, cost_per_hour, disruption_events
+    """
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if _write_parquet(snapshots, output):
+        print(f"Wrote {len(snapshots)} snapshots to {output}")
+        return
+    fallback = output.with_suffix(".json")
+    print(f"Warning: no parquet library, writing {fallback}", file=sys.stderr)
+    with open(fallback, "w") as f:
+        json.dump(snapshots, f, indent=2)
 
 
 # ── Main runner ──────────────────────────────────────────────────
@@ -272,6 +364,8 @@ def run_kwok_validation(
     node_count: int = 10,
     settle_seconds: int = 30,
     cleanup: bool = True,
+    timeseries_output: Path | None = None,
+    poll_interval: int = 30,
 ) -> KwokResult:
     """Full KWOK/KIND validation run.
 
@@ -279,10 +373,14 @@ def run_kwok_validation(
     2. Install KWOK
     3. Create fake nodes
     4. Apply manifests
-    5. Wait for pods to settle
-    6. Collect metrics
+    5. Poll time-series metrics during settle period
+    6. Collect final metrics
     7. Export results
     8. Cleanup
+
+    Args:
+        timeseries_output: If set, export time-series snapshots to this parquet file.
+        poll_interval: Polling interval in seconds for time-series collection (default: 30).
     """
     for tool in ("kind", "kubectl"):
         if not _check_tool(tool):
@@ -309,9 +407,13 @@ def run_kwok_validation(
         for mf in manifest_files:
             _kubectl(["apply", "-f", str(mf)], cluster_name)
 
-        # Wait for pods to settle
+        # Wait for pods to settle — collect time-series if requested
         print(f"Waiting {settle_seconds}s for pods to settle...")
-        time.sleep(settle_seconds)
+        if timeseries_output:
+            snapshots = collect_timeseries(cluster_name, settle_seconds, poll_interval)
+            export_timeseries(snapshots, timeseries_output)
+        else:
+            time.sleep(settle_seconds)
 
         # Collect metrics
         print("Collecting metrics...")
