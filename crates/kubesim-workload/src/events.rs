@@ -71,6 +71,12 @@ pub enum Event {
         priority: i32,
         deletion_cost_strategy: DeletionCostStrategy,
     },
+    /// Scale down a ReplicaSet by reducing desired replicas.
+    ReplicaSetScaleDown {
+        time: SimTime,
+        owner_id: u32,
+        reduce_by: u32,
+    },
 }
 
 impl Event {
@@ -86,7 +92,8 @@ impl Event {
             | Event::TrafficChange { time, .. }
             | Event::MetricsSnapshot { time } => *time,
             Event::ConfigureScheduler { .. } | Event::ConfigureDeletionCost { .. } => SimTime(0),
-            Event::ReplicaSetSubmitted { time, .. } => *time,
+            Event::ReplicaSetSubmitted { time, .. }
+            | Event::ReplicaSetScaleDown { time, .. } => *time,
         }
     }
 }

@@ -494,11 +494,10 @@ impl EventHandler for ConsolidationHandler {
             }
         }
 
-        // Re-schedule next consolidation loop only if there are nodes AND we
-        // didn't take any actions this round. If we took actions (drain/terminate),
-        // the evicted pods go pending → provisioning fires → new nodes appear.
-        // Re-scheduling consolidation immediately causes an infinite ping-pong.
-        if total_nodes > 0 && follow_ups.is_empty() {
+        // Re-schedule next consolidation loop if there are nodes remaining.
+        // Even after taking actions, we reschedule to continue consolidating
+        // once evicted pods are rescheduled.
+        if total_nodes > 0 {
             follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0 + self.loop_interval_ns),
                 event: Event::KarpenterConsolidationLoop,
@@ -628,11 +627,10 @@ mod tests {
             SimTime(1000),
             &mut state,
         );
-        // Should have NodeCordoned + NodeTerminated but NO re-schedule
-        // (actions taken → let system settle to prevent ping-pong)
+        // Should have NodeCordoned + NodeTerminated + re-schedule for continued consolidation
         assert!(events.len() >= 2);
         let has_reschedule = events.iter().any(|e| matches!(e.event, kubesim_engine::Event::KarpenterConsolidationLoop));
-        assert!(!has_reschedule);
+        assert!(has_reschedule);
     }
 
     #[test]

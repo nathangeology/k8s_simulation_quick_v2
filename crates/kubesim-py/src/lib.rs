@@ -271,6 +271,12 @@ fn run_single(
                 });
                 engine.schedule(*time, EngineEvent::ReplicaSetReconcile(owner));
             }
+            WorkloadEvent::ReplicaSetScaleDown { time, owner_id, reduce_by } => {
+                engine.schedule(
+                    *time,
+                    EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
+                );
+            }
             _ => {}
         }
     }
@@ -338,7 +344,8 @@ fn run_single(
     if let Some(strategy) = variant.and_then(|v| v.deletion_cost_strategy) {
         if strategy != DeletionCostStrategy::None {
             engine.add_handler(Box::new(DeletionCostController::new(strategy)));
-            engine.schedule(SimTime(0), EngineEvent::DeletionCostReconcile);
+            // Schedule after initial pod creation (t=0 RS submit, t=1 reconcile)
+            engine.schedule(SimTime(2), EngineEvent::DeletionCostReconcile);
         }
     }
 
@@ -786,6 +793,12 @@ impl StepSimulation {
                         deletion_cost_strategy: *deletion_cost_strategy,
                     });
                     engine.schedule(*time, EngineEvent::ReplicaSetReconcile(owner));
+                }
+                WorkloadEvent::ReplicaSetScaleDown { time, owner_id, reduce_by } => {
+                    engine.schedule(
+                        *time,
+                        EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
+                    );
                 }
                 _ => {}
             }
