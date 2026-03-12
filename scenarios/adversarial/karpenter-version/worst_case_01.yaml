@@ -1,0 +1,126 @@
+# Adversarial scenario #1 — divergence: 0.0452
+# Karpenter v0.35 vs v1.x
+study:
+  name: r7vglr
+  runs: 3066
+  time_mode: wall_clock
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.2xlarge
+      - m6i.2xlarge
+      - p3.8xlarge
+      - c5.xlarge
+      - c5.4xlarge
+      - m6i.large
+      min_nodes: 6
+      max_nodes: 106
+      karpenter:
+        consolidation:
+          policy: WhenUnderutilized
+    - instance_types:
+      - c6i.large
+      - m5.xlarge
+      - p3.2xlarge
+      - c5.4xlarge
+      - m5.large
+      - m5.4xlarge
+      min_nodes: 5
+      max_nodes: 23
+    - instance_types:
+      - c5.large
+      - c6i.2xlarge
+      - c5.2xlarge
+      - g4dn.xlarge
+      - c6i.large
+      - r5.xlarge
+      min_nodes: 4
+      max_nodes: 128
+      karpenter:
+        consolidation:
+          policy: WhenUnderutilized
+  workloads:
+  - type: ml_training
+    count: 3
+    replicas:
+      fixed: 1
+    priority: high
+  - type: web_app
+    count: 1
+    replicas:
+      min: 10
+      max: 13
+    churn: low
+    traffic: diurnal
+    topology_spread:
+      max_skew: 1
+      topology_key: kubernetes.io/hostname
+    memory_request:
+      dist: normal
+      mean: 3239Mi
+      std: 3081Mi
+    cpu_request:
+      dist: uniform
+      min: 599m
+      max: 21883m
+    pdb:
+      min_available: '1'
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+  - type: web_app
+    count: 1
+    replicas:
+      min: 1
+      max: 1
+    churn: low
+    traffic: steady
+    pdb:
+      min_available: '1'
+  - type: ml_training
+    count: 4
+    replicas:
+      fixed: 1
+    priority: high
+    gpu_request:
+      dist: choice
+      values:
+      - 1
+      - 2
+      - 4
+      - 8
+    cpu_request:
+      dist: uniform
+      min: 563m
+      max: 26196m
+    memory_request:
+      dist: uniform
+      min: 1743Mi
+      max: 74063Mi
+  - type: batch_job
+    count: 42
+    priority: medium
+    cpu_request:
+      dist: normal
+      mean: 7061m
+      std: 1433m
+    memory_request:
+      dist: uniform
+      min: 1681Mi
+      max: 120065Mi
+    duration:
+      dist: lognormal
+      mean: 12h
+      std: 6h
+  variants:
+  - name: karpenter-v0.35
+    karpenter_version: v0.35
+  - name: karpenter-v1.x
+    karpenter_version: v1
+  metrics:
+    compare: []
+  traffic_pattern:
+    type: spike
+    peak_multiplier: 7.763692431282881
+    duration: 24h

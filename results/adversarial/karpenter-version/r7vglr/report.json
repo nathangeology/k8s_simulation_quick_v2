@@ -1,0 +1,142 @@
+{
+  "study": "r7vglr",
+  "variants": [
+    "karpenter-v0.35",
+    "karpenter-v1.x"
+  ],
+  "runs_per_variant": 50,
+  "per_variant": {
+    "karpenter-v0.35": {
+      "total_cost_per_hour": {
+        "mean": 9.174,
+        "median": 8.187999999999999,
+        "p90": 11.247999999999998,
+        "p99": 13.287999999999997
+      },
+      "node_count": {
+        "mean": 22.98,
+        "median": 22.0,
+        "p90": 27.0,
+        "p99": 32.0
+      },
+      "running_pods": {
+        "mean": 17.9,
+        "median": 17.5,
+        "p90": 23.0,
+        "p99": 26.0
+      },
+      "pending_pods": {
+        "mean": 42.1,
+        "median": 42.5,
+        "p90": 47.0,
+        "p99": 48.0
+      },
+      "events_processed": {
+        "mean": 100000.0,
+        "median": 100000.0,
+        "p90": 100000.0,
+        "p99": 100000.0
+      },
+      "final_time": {
+        "mean": 420000000001.0,
+        "median": 420000000001.0,
+        "p90": 420000000001.0,
+        "p99": 420000000001.0
+      }
+    },
+    "karpenter-v1.x": {
+      "total_cost_per_hour": {
+        "mean": 8.570159999999994,
+        "median": 8.04,
+        "p90": 10.36,
+        "p99": 12.399999999999999
+      },
+      "node_count": {
+        "mean": 22.98,
+        "median": 22.0,
+        "p90": 27.0,
+        "p99": 32.0
+      },
+      "running_pods": {
+        "mean": 18.1,
+        "median": 18.0,
+        "p90": 23.0,
+        "p99": 26.0
+      },
+      "pending_pods": {
+        "mean": 41.9,
+        "median": 42.0,
+        "p90": 47.0,
+        "p99": 48.0
+      },
+      "events_processed": {
+        "mean": 100000.0,
+        "median": 100000.0,
+        "p90": 100000.0,
+        "p99": 100000.0
+      },
+      "final_time": {
+        "mean": 420000000001.0,
+        "median": 420000000001.0,
+        "p90": 420000000001.0,
+        "p99": 420000000001.0
+      }
+    }
+  },
+  "comparison": [
+    {
+      "metric": "total_cost_per_hour",
+      "winner": "karpenter-v1.x",
+      "delta": 0.60384,
+      "effect_pct": 7.0458,
+      "p_value": 0.050802,
+      "ci_low": -0.067216,
+      "ci_high": 1.311062
+    },
+    {
+      "metric": "node_count",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": -1.18,
+      "ci_high": 1.22
+    },
+    {
+      "metric": "running_pods",
+      "winner": "karpenter-v0.35",
+      "delta": -0.2,
+      "effect_pct": -1.105,
+      "p_value": 0.765511,
+      "ci_low": -1.58,
+      "ci_high": 1.16
+    },
+    {
+      "metric": "pending_pods",
+      "winner": "karpenter-v1.x",
+      "delta": 0.2,
+      "effect_pct": 0.4773,
+      "p_value": 0.765511,
+      "ci_low": -1.16,
+      "ci_high": 1.58
+    },
+    {
+      "metric": "events_processed",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "final_time",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    }
+  ]
+}

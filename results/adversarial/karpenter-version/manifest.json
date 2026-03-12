@@ -1,0 +1,109 @@
+{
+  "generated_at": "2026-03-12T04:19:54.428655+00:00",
+  "budget": 500,
+  "seeds": [
+    42,
+    100,
+    200
+  ],
+  "top_k": 10,
+  "objectives": [
+    "cost_efficiency",
+    "availability",
+    "consolidation_waste"
+  ],
+  "variant_a": "karpenter-v0.35",
+  "variant_b": "karpenter-v1.x",
+  "scenarios": [
+    {
+      "filename": "worst_case_01.yaml",
+      "divergence_score": 0.045153,
+      "objective_scores": [
+        0.555119,
+        0.327778,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_02.yaml",
+      "divergence_score": 0.041765,
+      "objective_scores": [
+        0.030479,
+        0.586592,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_03.yaml",
+      "divergence_score": 0.041765,
+      "objective_scores": [
+        0.030479,
+        0.586592,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_04.yaml",
+      "divergence_score": 0.038559,
+      "objective_scores": [
+        0.026314,
+        0.577368,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_05.yaml",
+      "divergence_score": 0.037882,
+      "objective_scores": [
+        0.026207,
+        0.595791,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_06.yaml",
+      "divergence_score": 0.034712,
+      "objective_scores": [
+        0.023405,
+        0.593297,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_07.yaml",
+      "divergence_score": 0.033829,
+      "objective_scores": [
+        0.723771,
+        0.555556,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_08.yaml",
+      "divergence_score": 0.025955,
+      "objective_scores": [
+        0.029467,
+        0.632385,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_09.yaml",
+      "divergence_score": 0.024806,
+      "objective_scores": [
+        0.255164,
+        0.509259,
+        1.0
+      ]
+    },
+    {
+      "filename": "worst_case_10.yaml",
+      "divergence_score": 0.024806,
+      "objective_scores": [
+        0.255164,
+        0.509259,
+        1.0
+      ]
+    }
+  ]
+}
