@@ -14,12 +14,17 @@ study:
   workloads:
     - type: web_app
       count: {dist: uniform, min: 5, max: 20}
+      replicas: {fixed: 30}
+      scale_down:
+        - {at: "50", reduce_by: 20}
     - type: saas_microservice
       count: {dist: uniform, min: 3, max: 15}
-      replicas: {min: 3, max: 200}
+      replicas: {fixed: 25}
       scaling: {type: hpa, metric: rps, target: 1000}
       topology_spread: {max_skew: 1, topology_key: topology.kubernetes.io/zone}
       pdb: {min_available: "50%"}
+      scale_down:
+        - {at: "50", reduce_by: 15}
     - type: batch_job
       count: {dist: poisson, lambda: 5}
 
