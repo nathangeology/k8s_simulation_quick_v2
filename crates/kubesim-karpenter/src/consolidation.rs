@@ -94,7 +94,8 @@ fn sort_candidates(state: &ClusterState, candidates: &mut [(NodeId, &Node)]) {
     });
 }
 
-/// Check whether all pods on `candidate` can fit on other ready, non-cordoned nodes.
+/// Check whether all pods on `candidate` can fit on other ready, non-cordoned nodes,
+/// excluding any nodes already selected for removal in this consolidation round.
 ///
 /// Uses a greedy first-fit approach: for each pod, find any other node with
 /// enough available resources AND passing scheduling constraints (affinity,
@@ -103,6 +104,7 @@ fn sort_candidates(state: &ClusterState, candidates: &mut [(NodeId, &Node)]) {
 fn pods_can_reschedule(
     state: &ClusterState,
     candidate: NodeId,
+    nodes_being_removed: &[NodeId],
 ) -> Option<Vec<PodId>> {
     use kubesim_scheduler::{
         FilterResult, TaintToleration, NodeAffinity,
@@ -128,11 +130,16 @@ fn pods_can_reschedule(
         .filter_map(|&pid| state.pods.get(pid).map(|p| (pid, p)))
         .collect();
 
-    // Build available capacity on other nodes (mutable copy for greedy allocation)
+    // Build available capacity on other nodes, excluding candidate and nodes already being removed
     let mut other_avail: Vec<(NodeId, Resources)> = state
         .nodes
         .iter()
-        .filter(|(nid, n)| *nid != candidate && n.conditions.ready && !n.cordoned)
+        .filter(|(nid, n)| {
+            *nid != candidate
+                && !nodes_being_removed.contains(nid)
+                && n.conditions.ready
+                && !n.cordoned
+        })
         .map(|(nid, n)| (nid, n.allocatable.saturating_sub(&n.allocated)))
         .collect();
 
@@ -166,9 +173,18 @@ fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
 }
 
 /// Find underutilized nodes whose pods can all be rescheduled elsewhere.
-fn find_underutilized_nodes(state: &ClusterState, pool_name: &str) -> Vec<ConsolidationAction> {
+///
+/// For `SingleNode` strategy: evaluates one candidate at a time, returns at most 1 action.
+/// For `MultiNode` strategy: builds a candidate set greedily — each candidate is checked
+/// against remaining capacity excluding nodes already selected for removal.
+fn find_underutilized_nodes(
+    state: &ClusterState,
+    pool_name: &str,
+    strategy: ConsolidationStrategy,
+) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
-    // Sort candidates by multi-factor disruption score — consolidate least-disruptive nodes first
+    let mut nodes_being_removed: Vec<NodeId> = Vec::new();
+
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
@@ -178,11 +194,15 @@ fn find_underutilized_nodes(state: &ClusterState, pool_name: &str) -> Vec<Consol
     sort_candidates(state, &mut candidates);
 
     for (nid, _) in candidates {
-        if let Some(pod_ids) = pods_can_reschedule(state, nid) {
+        if let Some(pod_ids) = pods_can_reschedule(state, nid, &nodes_being_removed) {
+            nodes_being_removed.push(nid);
             actions.push(ConsolidationAction::DrainAndTerminate {
                 node_id: nid,
                 pod_ids,
             });
+            if strategy == ConsolidationStrategy::SingleNode {
+                break;
+            }
         }
     }
     actions
@@ -218,7 +238,7 @@ fn find_replace_candidates(
 
     for (nid, node) in candidates {
         // Skip if pods can already be rescheduled (delete path handles these)
-        if pods_can_reschedule(state, nid).is_some() {
+        if pods_can_reschedule(state, nid, &[]).is_some() {
             continue;
         }
 
@@ -356,7 +376,7 @@ pub fn evaluate_versioned(
 
     if policy == ConsolidationPolicy::WhenUnderutilized && total_used < max_disrupted {
         let mut underutil_used: u32 = 0;
-        for action in find_underutilized_nodes(state, pool_name) {
+        for action in find_underutilized_nodes(state, pool_name, strategy) {
             if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                 break;
             }
@@ -448,6 +468,11 @@ impl EventHandler for ConsolidationHandler {
         let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name);
         let mut follow_ups = Vec::new();
 
+        // Stabilization delay (15s) between drain actions — real Karpenter waits
+        // for pods to reschedule before evaluating the next candidate.
+        const STABILIZATION_NS: u64 = 15_000_000_000;
+        let mut action_offset: u64 = 0;
+
         for action in actions {
             match action {
                 ConsolidationAction::TerminateEmpty(nid) => {
@@ -456,13 +481,14 @@ impl EventHandler for ConsolidationHandler {
                         n.cordoned = true;
                     }
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 1),
+                        time: SimTime(time.0 + action_offset + 1),
                         event: Event::NodeCordoned(nid),
                     });
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 2),
+                        time: SimTime(time.0 + action_offset + 2),
                         event: Event::NodeTerminated(nid),
                     });
+                    action_offset += STABILIZATION_NS;
                 }
                 ConsolidationAction::DrainAndTerminate { node_id, pod_ids } => {
                     // Cordon
@@ -470,7 +496,7 @@ impl EventHandler for ConsolidationHandler {
                         n.cordoned = true;
                     }
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 1),
+                        time: SimTime(time.0 + action_offset + 1),
                         event: Event::NodeCordoned(node_id),
                     });
                     // Evict pods (they return to pending queue for rescheduling)
@@ -478,13 +504,14 @@ impl EventHandler for ConsolidationHandler {
                         state.evict_pod(pid);
                     }
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 2),
+                        time: SimTime(time.0 + action_offset + 2),
                         event: Event::NodeDrained(node_id),
                     });
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 3),
+                        time: SimTime(time.0 + action_offset + 3),
                         event: Event::NodeTerminated(node_id),
                     });
+                    action_offset += STABILIZATION_NS;
                 }
                 ConsolidationAction::Replace { node_id, pod_ids, replacement_instance_type } => {
                     // v1.x replacement: cordon old node, drain, terminate, launch replacement
@@ -492,23 +519,23 @@ impl EventHandler for ConsolidationHandler {
                         n.cordoned = true;
                     }
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 1),
+                        time: SimTime(time.0 + action_offset + 1),
                         event: Event::NodeCordoned(node_id),
                     });
                     for pid in pod_ids {
                         state.evict_pod(pid);
                     }
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 2),
+                        time: SimTime(time.0 + action_offset + 2),
                         event: Event::NodeDrained(node_id),
                     });
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 3),
+                        time: SimTime(time.0 + action_offset + 3),
                         event: Event::NodeTerminated(node_id),
                     });
                     // Launch cheaper replacement
                     follow_ups.push(ScheduledEvent {
-                        time: SimTime(time.0 + 4),
+                        time: SimTime(time.0 + action_offset + 4),
                         event: Event::NodeLaunching(NodeSpec {
                             instance_type: replacement_instance_type,
                             labels: kubesim_core::LabelSet(self.pool.labels.clone()),
@@ -517,6 +544,7 @@ impl EventHandler for ConsolidationHandler {
                             do_not_disrupt: self.pool.do_not_disrupt,
                         }),
                     });
+                    action_offset += STABILIZATION_NS;
                 }
             }
         }
