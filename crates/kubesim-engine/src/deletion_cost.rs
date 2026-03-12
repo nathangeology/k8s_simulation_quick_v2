@@ -153,14 +153,10 @@ fn rank_nodes(
             nodes.sort_by_key(|(nid, _)| nid.index);
         }
         DeletionCostStrategy::PreferEmptyingNodes => {
-            // SmallestToLargest: rank by node allocatable CPU ascending
-            // Empties small nodes first so Karpenter can terminate them.
-            nodes.sort_by_key(|(nid, _)| {
-                state
-                    .nodes
-                    .get(*nid)
-                    .map_or(0, |n| n.allocatable.cpu_millis)
-            });
+            // Fewest running pods first: nodes with fewer pods get lower
+            // deletion costs so RS scale-down removes their pods first,
+            // creating fully empty nodes for consolidation to terminate.
+            nodes.sort_by_key(|(_, pods)| pods.len());
         }
         DeletionCostStrategy::LargestFirst => {
             // LargestToSmallest: rank by node allocatable CPU descending
