@@ -1,0 +1,144 @@
+# Adversarial scenario #4 — divergence: 0.0558
+# 5-way deletion cost ranking comparison
+study:
+  name: 1ksh
+  runs: 5000
+  time_mode: wall_clock
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.xlarge
+      - c6i.large
+      - m6i.2xlarge
+      - c5.xlarge
+      - c5.2xlarge
+      min_nodes: 5
+      max_nodes: 91
+    - instance_types:
+      - c6i.large
+      - m6i.2xlarge
+      - m6i.xlarge
+      - m5.4xlarge
+      - r5.xlarge
+      - p3.8xlarge
+      min_nodes: 7
+      max_nodes: 83
+      karpenter:
+        consolidation:
+          policy: WhenUnderutilized
+  workloads:
+  - type: web_app
+    count: 2
+    replicas:
+      min: 19
+      max: 30
+    churn: low
+    traffic: steady
+    pod_anti_affinity:
+      topology_key: kubernetes.io/hostname
+    topology_spread:
+      max_skew: 1
+      topology_key: topology.kubernetes.io/zone
+  - type: batch_job
+    count: 11
+    priority: medium
+    cpu_request:
+      dist: uniform
+      min: 1822m
+      max: 32000m
+    memory_request:
+      dist: uniform
+      min: 500Mi
+      max: 13092Mi
+    duration:
+      dist: lognormal
+      mean: 12h
+      std: 6h
+  - type: ml_training
+    count: 4
+    replicas:
+      fixed: 1
+    priority: high
+    gpu_request:
+      dist: choice
+      values:
+      - 1
+      - 2
+      - 4
+      - 8
+    cpu_request:
+      dist: normal
+      mean: 7428m
+      std: 713m
+    memory_request:
+      dist: normal
+      mean: 20129Mi
+      std: 6147Mi
+  - type: batch_job
+    count: 17
+    priority: low
+  - type: saas_microservice
+    count: 14
+    replicas:
+      min: 8
+      max: 46
+    churn: low
+    cpu_request:
+      dist: uniform
+      min: 1491m
+      max: 30001m
+    topology_spread:
+      max_skew: 5
+      topology_key: kubernetes.io/hostname
+    pdb:
+      min_available: '2'
+  - type: ml_training
+    count: 1
+    replicas:
+      fixed: 1
+    priority: high
+    gpu_request:
+      dist: choice
+      values:
+      - 1
+      - 2
+      - 4
+      - 8
+    cpu_request:
+      dist: uniform
+      min: 50m
+      max: 2001m
+    memory_request:
+      dist: uniform
+      min: 64Mi
+      max: 4097Mi
+  - type: batch_job
+    count: 14
+    priority: medium
+    cpu_request:
+      dist: uniform
+      min: 1069m
+      max: 21005m
+    memory_request:
+      dist: uniform
+      min: 1402Mi
+      max: 4910Mi
+    duration:
+      dist: lognormal
+      mean: 12h
+      std: 6h
+  traffic_pattern:
+    type: spike
+    peak_multiplier: 2.00001
+    duration: 24h
+  variants:
+  - name: baseline
+    deletion_cost_strategy: none
+  - name: smallest_first
+    deletion_cost_strategy: prefer_emptying_nodes
+  - name: largest_first
+    deletion_cost_strategy: largest_first
+  - name: unallocated_vcpu
+    deletion_cost_strategy: unallocated_vcpu
+  - name: random
+    deletion_cost_strategy: random

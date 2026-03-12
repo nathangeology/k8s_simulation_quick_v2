@@ -1,0 +1,58 @@
+# Adversarial scenario #8 — divergence: 0.0400
+# 5-way deletion cost ranking comparison
+study:
+  name: chaos-y9l88tclpa
+  runs: 2100
+  time_mode: logical
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.4xlarge
+      min_nodes: 1
+      max_nodes: 152
+    - instance_types:
+      - t3.small
+      min_nodes: 1
+      max_nodes: 79
+  workloads:
+  - type: batch_job
+    count: 39
+    priority: low
+    cpu_request:
+      dist: normal
+      mean: 780m
+      std: 134m
+    memory_request:
+      dist: uniform
+      min: 1887Mi
+      max: 47735Mi
+    duration:
+      dist: exponential
+      mean: 1m
+  - type: batch_job
+    count: 26
+    priority: low
+    cpu_request:
+      dist: normal
+      mean: 100m
+      std: 1551m
+    memory_request:
+      dist: normal
+      mean: 10517Mi
+      std: 5000Mi
+  scale_down_pattern: staggered
+  traffic_pattern:
+    type: steady
+    peak_multiplier: 4.367533716548548
+    duration: 12h
+  variants:
+  - name: baseline
+    deletion_cost_strategy: none
+  - name: smallest_first
+    deletion_cost_strategy: prefer_emptying_nodes
+  - name: largest_first
+    deletion_cost_strategy: largest_first
+  - name: unallocated_vcpu
+    deletion_cost_strategy: unallocated_vcpu
+  - name: random
+    deletion_cost_strategy: random

@@ -1,0 +1,404 @@
+{
+  "generated_at": "2026-03-12T16:25:39.778794+00:00",
+  "budget": 500,
+  "seeds": [
+    42,
+    100,
+    200
+  ],
+  "top_k": 10,
+  "objectives": [
+    "availability",
+    "cost_efficiency",
+    "disruption_rate"
+  ],
+  "variants": [
+    "baseline",
+    "smallest_first",
+    "largest_first",
+    "unallocated_vcpu",
+    "random"
+  ],
+  "scenarios": [
+    {
+      "filename": "worst_case_01.yaml",
+      "divergence": 1.36,
+      "per_variant_cost": {
+        "baseline": 0.68,
+        "smallest_first": 0.68,
+        "largest_first": 0.68,
+        "unallocated_vcpu": 0.68,
+        "random": 0.68
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.002209,
+          "cost_efficiency": 0.68,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.000736,
+          "cost_efficiency": 2.04,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.000736,
+          "cost_efficiency": 2.04,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.000736,
+          "cost_efficiency": 2.04,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.000736,
+          "cost_efficiency": 2.04,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_02.yaml",
+      "divergence": 0.3,
+      "per_variant_cost": {
+        "baseline": 0.614,
+        "smallest_first": 0.71,
+        "largest_first": 0.71,
+        "unallocated_vcpu": 0.71,
+        "random": 0.71
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.7,
+          "cost_efficiency": 0.087714,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.071,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.071,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.071,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.071,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_03.yaml",
+      "divergence": 0.133333,
+      "per_variant_cost": {
+        "baseline": 1.459,
+        "smallest_first": 1.289,
+        "largest_first": 1.289,
+        "unallocated_vcpu": 1.289,
+        "random": 1.289
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 1.0,
+          "cost_efficiency": 0.097267,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.866667,
+          "cost_efficiency": 0.099154,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.866667,
+          "cost_efficiency": 0.099154,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.866667,
+          "cost_efficiency": 0.099154,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.866667,
+          "cost_efficiency": 0.099154,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_04.yaml",
+      "divergence": 0.055838,
+      "per_variant_cost": {
+        "baseline": 28.985,
+        "smallest_first": 31.289,
+        "largest_first": 31.289,
+        "unallocated_vcpu": 31.289,
+        "random": 31.289
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.563452,
+          "cost_efficiency": 0.261126,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.619289,
+          "cost_efficiency": 0.256467,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.619289,
+          "cost_efficiency": 0.256467,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.619289,
+          "cost_efficiency": 0.256467,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.619289,
+          "cost_efficiency": 0.256467,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_05.yaml",
+      "divergence": 0.051515,
+      "per_variant_cost": {
+        "baseline": 2.438,
+        "smallest_first": 2.608,
+        "largest_first": 2.608,
+        "unallocated_vcpu": 2.608,
+        "random": 2.608
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.948485,
+          "cost_efficiency": 0.011684,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.011855,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.011855,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.011855,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.011855,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_06.yaml",
+      "divergence": 0.048,
+      "per_variant_cost": {
+        "baseline": 1.824,
+        "smallest_first": 1.632,
+        "largest_first": 1.632,
+        "unallocated_vcpu": 1.632,
+        "random": 1.632
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 1.0,
+          "cost_efficiency": 0.456,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.408,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.408,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.408,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.408,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_07.yaml",
+      "divergence": 0.041667,
+      "per_variant_cost": {
+        "baseline": 2.6,
+        "smallest_first": 2.6,
+        "largest_first": 2.6,
+        "unallocated_vcpu": 2.6,
+        "random": 2.6
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.666667,
+          "cost_efficiency": 0.4875,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.708333,
+          "cost_efficiency": 0.458824,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.666667,
+          "cost_efficiency": 0.4875,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.708333,
+          "cost_efficiency": 0.458824,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.708333,
+          "cost_efficiency": 0.458824,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_08.yaml",
+      "divergence": 0.04,
+      "per_variant_cost": {
+        "baseline": 0.96,
+        "smallest_first": 0.96,
+        "largest_first": 0.96,
+        "unallocated_vcpu": 0.96,
+        "random": 0.96
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.04918,
+          "cost_efficiency": 0.32,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.044199,
+          "cost_efficiency": 0.36,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.044199,
+          "cost_efficiency": 0.36,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.044199,
+          "cost_efficiency": 0.36,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.044199,
+          "cost_efficiency": 0.36,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_09.yaml",
+      "divergence": 0.039088,
+      "per_variant_cost": {
+        "baseline": 4.604,
+        "smallest_first": 4.774,
+        "largest_first": 4.774,
+        "unallocated_vcpu": 4.774,
+        "random": 4.774
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 0.5,
+          "cost_efficiency": 0.014997,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.539088,
+          "cost_efficiency": 0.014423,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.539088,
+          "cost_efficiency": 0.014423,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.539088,
+          "cost_efficiency": 0.014423,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.539088,
+          "cost_efficiency": 0.014423,
+          "disruption_rate": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_10.yaml",
+      "divergence": 0.0384,
+      "per_variant_cost": {
+        "baseline": 5.114,
+        "smallest_first": 4.73,
+        "largest_first": 4.73,
+        "unallocated_vcpu": 4.73,
+        "random": 4.73
+      },
+      "objectives": {
+        "baseline": {
+          "availability": 1.0,
+          "cost_efficiency": 0.5114,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.473,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.473,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.473,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.473,
+          "disruption_rate": 0.0
+        }
+      }
+    }
+  ]
+}
