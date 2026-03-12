@@ -1,0 +1,36 @@
+study:
+  name: '000'
+  runs: 1
+  time_mode: logical
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.large
+      - p3.8xlarge
+      - m5.xlarge
+      - c6i.large
+      - g4dn.xlarge
+      min_nodes: 5
+      max_nodes: 68
+      karpenter:
+        consolidation:
+          policy: WhenUnderutilized
+  workloads:
+  - type: web_app
+    count: 13
+    replicas:
+      min: 5
+      max: 11
+    churn: low
+    traffic: diurnal
+    cpu_request:
+      dist: uniform
+      min: 50m
+      max: 2001m
+  - type: web_app
+    count: 1
+    replicas:
+      min: 2
+      max: 11
+    churn: low
+    traffic: diurnal
