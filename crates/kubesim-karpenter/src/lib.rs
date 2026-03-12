@@ -9,7 +9,7 @@ pub mod spot;
 pub mod version;
 
 pub use kubesim_core;
-pub use consolidation::{ConsolidationAction, ConsolidationHandler, ConsolidationPolicy};
+pub use consolidation::{ConsolidationAction, ConsolidationHandler, ConsolidationPolicy, DrainHandler};
 pub use drift::{DriftConfig, DriftHandler};
 pub use handler::ProvisioningHandler;
 pub use nodepool::{NodePool, NodePoolLimits, NodePoolUsage};

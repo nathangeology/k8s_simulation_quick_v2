@@ -11,7 +11,7 @@ use kubesim_core::{
 use kubesim_ec2::Catalog;
 use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
 use kubesim_karpenter::{
-    ConsolidationHandler, ConsolidationPolicy, NodePool, NodePoolLimits,
+    ConsolidationHandler, ConsolidationPolicy, DrainHandler, NodePool, NodePoolLimits,
     ProvisioningHandler, SpotInterruptionHandler,
     KarpenterVersion, VersionProfile,
 };
@@ -202,8 +202,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 Vec::new()
             }
             EngineEvent::NodeDrained(_node_id) => {
-                // Drain is handled by the consolidation handler which evicts pods.
-                // This event is informational for SimHandler.
+                // Eviction is handled by DrainHandler (registered as engine handler).
                 Vec::new()
             }
             EngineEvent::NodeTerminated(node_id) => {
@@ -490,6 +489,8 @@ fn run_single(
                 consol = consol.with_version(vp);
             }
             engine.add_handler(Box::new(consol));
+
+            engine.add_handler(Box::new(DrainHandler));
 
             engine.add_handler(Box::new(SpotInterruptionHandler::new(seed)));
         }
@@ -1127,6 +1128,8 @@ impl StepSimulation {
                     ConsolidationHandler::new(pool, consolidation_policy)
                         .with_catalog(Catalog::for_provider(provider).map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?),
                 ));
+
+                engine.add_handler(Box::new(DrainHandler));
 
                 engine.add_handler(Box::new(SpotInterruptionHandler::new(42)));
             }

@@ -13,7 +13,7 @@ use kubesim_core::*;
 use kubesim_ec2::Catalog;
 use kubesim_engine::*;
 use kubesim_karpenter::{
-    ConsolidationHandler, ConsolidationPolicy, NodePool, NodePoolLimits, ProvisioningHandler,
+    ConsolidationHandler, ConsolidationPolicy, DrainHandler, NodePool, NodePoolLimits, ProvisioningHandler,
 };
 use kubesim_metrics::{MetricsCollector, MetricsConfig};
 use kubesim_scheduler::{ScheduleResult, Scheduler, SchedulerProfile, ScoringStrategy};
@@ -142,6 +142,7 @@ fn full_simulation_loop() {
         pool.clone(),
         ConsolidationPolicy::WhenUnderutilized,
     )));
+    engine.add_handler(Box::new(DrainHandler));
     engine.add_handler(Box::new(MetricsCollector::new(MetricsConfig::default())));
 
     // ── Phase 1: Submit pods that need more capacity ────────────
