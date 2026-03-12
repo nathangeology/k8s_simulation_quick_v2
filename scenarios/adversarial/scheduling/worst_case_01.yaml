@@ -1,0 +1,76 @@
+study:
+  name: xus
+  runs: 6372
+  time_mode: logical
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.2xlarge
+      - p3.8xlarge
+      - c5.xlarge
+      - c6i.large
+      - g4dn.xlarge
+      min_nodes: 5
+      max_nodes: 68
+      karpenter:
+        consolidation:
+          policy: WhenUnderutilized
+  workloads:
+  - type: batch_job
+    count: 39
+    priority: low
+    cpu_request:
+      dist: normal
+      mean: 1354m
+      std: 1026m
+    memory_request:
+      dist: normal
+      mean: 12087Mi
+      std: 33Mi
+    duration:
+      dist: lognormal
+      mean: 12h
+      std: 6h
+  - type: web_app
+    count: 1
+    replicas:
+      min: 1
+      max: 1
+    churn: low
+    traffic: steady
+    pdb:
+      min_available: '1'
+  - type: web_app
+    count: 11
+    replicas:
+      min: 9
+      max: 27
+    churn: low
+    traffic: diurnal
+    scaling:
+      type: hpa
+      metric: cpu
+      target: 70%
+    topology_spread:
+      max_skew: 1
+      topology_key: topology.kubernetes.io/zone
+    cpu_request:
+      dist: uniform
+      min: 584m
+      max: 6470m
+    pdb:
+      min_available: 50%
+  - type: batch_job
+    count: 18
+    priority: low
+    memory_request:
+      dist: normal
+      mean: 128Mi
+      std: 32Mi
+    duration:
+      dist: exponential
+      mean: 200m
+    cpu_request:
+      dist: uniform
+      min: 1506m
+      max: 8000m

@@ -1,152 +1,721 @@
 {
-  "generated_at": "2026-03-11T20:38:14.294491+00:00",
-  "budget": 1000,
+  "generated_at": "2026-03-12T04:04:29.413333+00:00",
+  "budget": 500,
   "seeds": [
     42,
     100,
     200
   ],
   "top_k_per_category": 10,
+  "objectives": [
+    "cost_efficiency",
+    "availability",
+    "scheduling_failure_rate",
+    "entropy_deviation"
+  ],
   "scenarios": [
     {
       "filename": "worst_case_01.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.096,
-      "least_cost": 0.096,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_most",
+      "signed_delta": 3.072,
+      "abs_delta": 3.072,
+      "combined_divergence": 0.174638,
+      "most_cost": 18.943,
+      "least_cost": 15.871,
+      "most_running": 113.7,
+      "least_running": 100.7,
+      "most_pending": 40.7,
+      "least_pending": 53.3,
+      "most_nodes": 51.7,
+      "least_nodes": 43.7,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.166654,
+          "least": 0.157659,
+          "delta": 0.008995
+        },
+        "availability": {
+          "most": 0.736501,
+          "least": 0.65368,
+          "delta": 0.082821
+        },
+        "scheduling_failure_rate": {
+          "most": 0.263499,
+          "least": 0.34632,
+          "delta": -0.082821
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_02.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.192,
-      "least_cost": 0.192,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_most",
+      "signed_delta": 0.128,
+      "abs_delta": 0.128,
+      "combined_divergence": 0.017708,
+      "most_cost": 16.255,
+      "least_cost": 16.127,
+      "most_running": 109.3,
+      "least_running": 108.0,
+      "most_pending": 47.0,
+      "least_pending": 48.3,
+      "most_nodes": 44.7,
+      "least_nodes": 44.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.148674,
+          "least": 0.149324,
+          "delta": -0.00065
+        },
+        "availability": {
+          "most": 0.69936,
+          "least": 0.690832,
+          "delta": 0.008529
+        },
+        "scheduling_failure_rate": {
+          "most": 0.30064,
+          "least": 0.309168,
+          "delta": -0.008529
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_03.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 1.599,
-      "least_cost": 1.599,
-      "most_running": 13.0,
-      "least_running": 12.7,
-      "most_pending": 3.0,
-      "least_pending": 3.3,
-      "most_nodes": 10.0,
-      "least_nodes": 10.0
+      "category": "adversarial_to_most",
+      "signed_delta": 0.028333,
+      "abs_delta": 0.028333,
+      "combined_divergence": 0.016981,
+      "most_cost": 3.309667,
+      "least_cost": 3.281333,
+      "most_running": 63.3,
+      "least_running": 62.7,
+      "most_pending": 15.7,
+      "least_pending": 16.3,
+      "most_nodes": 18.7,
+      "least_nodes": 18.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.052258,
+          "least": 0.052362,
+          "delta": -0.000104
+        },
+        "availability": {
+          "most": 0.801688,
+          "least": 0.793249,
+          "delta": 0.008439
+        },
+        "scheduling_failure_rate": {
+          "most": 0.198312,
+          "least": 0.206751,
+          "delta": -0.008439
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_04.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.384,
-      "least_cost": 0.384,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_most",
+      "signed_delta": 0.128,
+      "abs_delta": 0.128,
+      "combined_divergence": 0.015444,
+      "most_cost": 25.215,
+      "least_cost": 25.087,
+      "most_running": 174.0,
+      "least_running": 172.7,
+      "most_pending": 3.0,
+      "least_pending": 4.3,
+      "most_nodes": 68.0,
+      "least_nodes": 67.7,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.144914,
+          "least": 0.145292,
+          "delta": -0.000378
+        },
+        "availability": {
+          "most": 0.983051,
+          "least": 0.975518,
+          "delta": 0.007533
+        },
+        "scheduling_failure_rate": {
+          "most": 0.016949,
+          "least": 0.024482,
+          "delta": -0.007533
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_05.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.192,
-      "least_cost": 0.192,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_least",
+      "signed_delta": -0.064,
+      "abs_delta": 0.064,
+      "combined_divergence": 0.068417,
+      "most_cost": 3.217333,
+      "least_cost": 3.281333,
+      "most_running": 67.3,
+      "least_running": 70.0,
+      "most_pending": 11.7,
+      "least_pending": 9.0,
+      "most_nodes": 18.0,
+      "least_nodes": 18.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.047782,
+          "least": 0.046876,
+          "delta": 0.000906
+        },
+        "availability": {
+          "most": 0.852321,
+          "least": 0.886076,
+          "delta": -0.033755
+        },
+        "scheduling_failure_rate": {
+          "most": 0.147679,
+          "least": 0.113924,
+          "delta": 0.033755
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_06.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.192,
-      "least_cost": 0.192,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_least",
+      "signed_delta": -0.064,
+      "abs_delta": 0.064,
+      "combined_divergence": 0.068417,
+      "most_cost": 3.217333,
+      "least_cost": 3.281333,
+      "most_running": 67.3,
+      "least_running": 70.0,
+      "most_pending": 11.7,
+      "least_pending": 9.0,
+      "most_nodes": 18.0,
+      "least_nodes": 18.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.047782,
+          "least": 0.046876,
+          "delta": 0.000906
+        },
+        "availability": {
+          "most": 0.852321,
+          "least": 0.886076,
+          "delta": -0.033755
+        },
+        "scheduling_failure_rate": {
+          "most": 0.147679,
+          "least": 0.113924,
+          "delta": 0.033755
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_07.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.192,
-      "least_cost": 0.192,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_least",
+      "signed_delta": -0.064,
+      "abs_delta": 0.064,
+      "combined_divergence": 0.068417,
+      "most_cost": 3.217333,
+      "least_cost": 3.281333,
+      "most_running": 67.3,
+      "least_running": 70.0,
+      "most_pending": 11.7,
+      "least_pending": 9.0,
+      "most_nodes": 18.0,
+      "least_nodes": 18.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.047782,
+          "least": 0.046876,
+          "delta": 0.000906
+        },
+        "availability": {
+          "most": 0.852321,
+          "least": 0.886076,
+          "delta": -0.033755
+        },
+        "scheduling_failure_rate": {
+          "most": 0.147679,
+          "least": 0.113924,
+          "delta": 0.033755
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_08.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 2.784,
-      "least_cost": 2.784,
-      "most_running": 22.0,
-      "least_running": 22.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 11.0,
-      "least_nodes": 11.0
+      "category": "adversarial_to_least",
+      "signed_delta": -0.035667,
+      "abs_delta": 0.035667,
+      "combined_divergence": 0.00056,
+      "most_cost": 3.245667,
+      "least_cost": 3.281333,
+      "most_running": 63.7,
+      "least_running": 63.7,
+      "most_pending": 3.3,
+      "least_pending": 3.3,
+      "most_nodes": 18.3,
+      "least_nodes": 18.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.050979,
+          "least": 0.051539,
+          "delta": -0.00056
+        },
+        "availability": {
+          "most": 0.950249,
+          "least": 0.950249,
+          "delta": 0.0
+        },
+        "scheduling_failure_rate": {
+          "most": 0.049751,
+          "least": 0.049751,
+          "delta": 0.0
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_09.yaml",
-      "category": "both_degrade",
-      "signed_delta": 0.0,
-      "abs_delta": 0.0,
-      "most_cost": 0.192,
-      "least_cost": 0.192,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
-      "least_pending": 0.0,
-      "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "category": "adversarial_to_least",
+      "signed_delta": -0.035667,
+      "abs_delta": 0.035667,
+      "combined_divergence": 0.00056,
+      "most_cost": 3.245667,
+      "least_cost": 3.281333,
+      "most_running": 63.7,
+      "least_running": 63.7,
+      "most_pending": 3.3,
+      "least_pending": 3.3,
+      "most_nodes": 18.3,
+      "least_nodes": 18.3,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.050979,
+          "least": 0.051539,
+          "delta": -0.00056
+        },
+        "availability": {
+          "most": 0.950249,
+          "least": 0.950249,
+          "delta": 0.0
+        },
+        "scheduling_failure_rate": {
+          "most": 0.049751,
+          "least": 0.049751,
+          "delta": 0.0
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     },
     {
       "filename": "worst_case_10.yaml",
       "category": "both_degrade",
       "signed_delta": 0.0,
       "abs_delta": 0.0,
-      "most_cost": 0.384,
-      "least_cost": 0.384,
-      "most_running": 0.0,
-      "least_running": 0.0,
-      "most_pending": 0.0,
+      "combined_divergence": 1.18925,
+      "most_cost": 0.757,
+      "least_cost": 0.757,
+      "most_running": 2.0,
+      "least_running": 4.0,
+      "most_pending": 2.0,
       "least_pending": 0.0,
+      "most_nodes": 5.0,
+      "least_nodes": 5.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": 0.3785,
+          "least": 0.18925,
+          "delta": 0.18925
+        },
+        "availability": {
+          "most": 0.5,
+          "least": 1.0,
+          "delta": -0.5
+        },
+        "scheduling_failure_rate": {
+          "most": 0.5,
+          "least": 0.0,
+          "delta": 0.5
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_11.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 1.142857,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 4.0,
+      "most_pending": 7.0,
+      "least_pending": 3.0,
       "most_nodes": 1.0,
-      "least_nodes": 1.0
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.024,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.571429,
+          "delta": -0.571429
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.428571,
+          "delta": 0.571429
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_12.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 1.0,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 2.0,
+      "most_pending": 4.0,
+      "least_pending": 2.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.048,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.5,
+          "delta": -0.5
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.5,
+          "delta": 0.5
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_13.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 1.0,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 2.0,
+      "most_pending": 4.0,
+      "least_pending": 2.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.048,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.5,
+          "delta": -0.5
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.5,
+          "delta": 0.5
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_14.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 1.0,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 2.0,
+      "most_pending": 4.0,
+      "least_pending": 2.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.048,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.5,
+          "delta": -0.5
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.5,
+          "delta": 0.5
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_15.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 0.857143,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 3.0,
+      "most_pending": 7.0,
+      "least_pending": 4.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.032,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.428571,
+          "delta": -0.428571
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.571429,
+          "delta": 0.428571
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_16.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 0.857143,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 3.0,
+      "most_pending": 7.0,
+      "least_pending": 4.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.032,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.428571,
+          "delta": -0.428571
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.571429,
+          "delta": 0.428571
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_17.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 0.833333,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 1.7,
+      "most_pending": 4.0,
+      "least_pending": 2.3,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.0576,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.416667,
+          "delta": -0.416667
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.583333,
+          "delta": 0.416667
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_18.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 0.666667,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 1.0,
+      "most_pending": 3.0,
+      "least_pending": 2.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.096,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.333333,
+          "delta": -0.333333
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.666667,
+          "delta": 0.333333
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
+    },
+    {
+      "filename": "worst_case_19.yaml",
+      "category": "both_degrade",
+      "signed_delta": 0.0,
+      "abs_delta": 0.0,
+      "combined_divergence": 0.666667,
+      "most_cost": 0.096,
+      "least_cost": 0.096,
+      "most_running": 0.0,
+      "least_running": 2.0,
+      "most_pending": 6.0,
+      "least_pending": 4.0,
+      "most_nodes": 1.0,
+      "least_nodes": 1.0,
+      "objectives": {
+        "cost_efficiency": {
+          "most": null,
+          "least": 0.048,
+          "delta": 0.0
+        },
+        "availability": {
+          "most": 0.0,
+          "least": 0.333333,
+          "delta": -0.333333
+        },
+        "scheduling_failure_rate": {
+          "most": 1.0,
+          "least": 0.666667,
+          "delta": 0.333333
+        },
+        "entropy_deviation": {
+          "most": 0.0,
+          "least": 0.0,
+          "delta": 0.0
+        }
+      }
     }
   ]
 }
