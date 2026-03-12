@@ -29,7 +29,7 @@ BUDGET = 500
 TOP_K = 10
 SEEDS = [42, 100, 200]
 BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
-SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios", "adversarial", "scheduling")
+SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios", "adversarial")
 RESULTS_DIR = os.path.join(BASE_DIR, "results", "adversarial")
 
 VARIANTS = [
@@ -167,6 +167,51 @@ def write_manifest(entries: list[dict]) -> None:
     print(f"Manifest: {os.path.abspath(path)}")
 
 
+def write_summary(manifest_entries: list[dict], total: int) -> None:
+    """Write human-readable summary.md alongside the manifest."""
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    lines = [
+        "# Adversarial Scenario Results\n",
+        f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC",
+        f"Budget: {BUDGET} scenarios evaluated per search mode\n",
+    ]
+
+    cat_labels = {
+        "adversarial_to_most": "MostAllocated costs more",
+        "adversarial_to_least": "LeastAllocated costs more",
+        "both_degrade": "Both degrade (mixed signals)",
+    }
+
+    for cat, label in cat_labels.items():
+        group = [e for e in manifest_entries if e["category"] == cat]
+        lines.append(f"\n## {label} ({len(group)} scenarios)\n")
+        if not group:
+            lines.append("_No scenarios found in this category._\n")
+            continue
+        lines.append(f"{'File':<30} {'Δ cost/hr':>10} {'Combined':>10} {'Most $/hr':>10} {'Least $/hr':>10}")
+        lines.append("-" * 72)
+        for e in group:
+            lines.append(
+                f"{e['filename']:<30} {e['signed_delta']:>+10.4f} {e['combined_divergence']:>10.4f} "
+                f"{e['most_cost']:10.4f} {e['least_cost']:10.4f}"
+            )
+
+    # Stats
+    divs = [e["combined_divergence"] for e in manifest_entries]
+    nonzero = [d for d in divs if d > 0]
+    lines.append(f"\n## Summary\n")
+    lines.append(f"- Total scenarios saved: {len(manifest_entries)}")
+    lines.append(f"- Total evaluated: {total}")
+    if nonzero:
+        lines.append(f"- Max combined divergence: {max(nonzero):.6f}")
+        lines.append(f"- Mean divergence (nonzero): {sum(nonzero)/len(nonzero):.6f}")
+
+    path = os.path.join(RESULTS_DIR, "summary.md")
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Summary: {os.path.abspath(path)}")
+
+
 def main():
     import argparse
 
@@ -259,22 +304,7 @@ def main():
             )
 
     write_manifest(manifest_entries)
-
-    # Summary
-    all_divs = [s[0]["combined_divergence"] for s in all_scored]
-    nonzero = [d for d in all_divs if d > 0]
-    print(f"\nSummary:")
-    print(f"  Total scenarios: {len(all_divs)}")
-    print(f"  With divergence > 0: {len(nonzero)}")
-    if nonzero:
-        print(f"  Max combined divergence: {max(nonzero):.6f}")
-        print(f"  Mean (nonzero): {sum(nonzero)/len(nonzero):.6f}")
-
-    cat_counts = {}
-    for s in all_scored:
-        cat_counts[s[0]["category"]] = cat_counts.get(s[0]["category"], 0) + 1
-    for cat, count in sorted(cat_counts.items()):
-        print(f"  {cat}: {count}")
+    write_summary(manifest_entries, len(all_scored))
 
     print(f"\nScenarios: {os.path.abspath(SCENARIO_DIR)}/")
     print(f"Results: {os.path.abspath(RESULTS_DIR)}/")
