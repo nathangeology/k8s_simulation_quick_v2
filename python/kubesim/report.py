@@ -17,16 +17,24 @@ from scipy import stats
 from kubesim.analysis import results_to_df, bootstrap_ci
 
 METRICS = [
+    "cumulative_cost", "time_weighted_node_count", "time_to_stable",
+    "cumulative_pending_pod_seconds", "disruption_count", "disruption_seconds",
+    "peak_node_count", "peak_cost_rate",
+]
+
+# End-state metrics kept for diagnostics
+DIAGNOSTIC_METRICS = [
     "total_cost_per_hour", "node_count", "running_pods",
     "pending_pods", "events_processed", "final_time",
 ]
 
 
-def _variant_summary(df: pl.DataFrame, variant: str) -> dict:
+def _variant_summary(df: pl.DataFrame, variant: str, metrics: list[str] | None = None) -> dict:
     """Mean/median/p90/p99 for each metric for one variant."""
     vdf = df.filter(pl.col("variant") == variant)
+    metric_list = metrics if metrics is not None else METRICS
     summary = {}
-    for m in METRICS:
+    for m in metric_list:
         if m not in vdf.columns:
             continue
         vals = vdf[m].drop_nulls()
@@ -39,12 +47,13 @@ def _variant_summary(df: pl.DataFrame, variant: str) -> dict:
     return summary
 
 
-def _comparison_table(df: pl.DataFrame, variant_a: str, variant_b: str) -> list[dict]:
+def _comparison_table(df: pl.DataFrame, variant_a: str, variant_b: str, metrics: list[str] | None = None) -> list[dict]:
     """Per-metric comparison: winner, signed delta, % effect size, p-value."""
+    metric_list = metrics if metrics is not None else METRICS
     rows = []
     a_df = df.filter(pl.col("variant") == variant_a)
     b_df = df.filter(pl.col("variant") == variant_b)
-    for m in METRICS:
+    for m in metric_list:
         if m not in df.columns:
             continue
         a_vals = a_df[m].drop_nulls().to_numpy()
@@ -81,10 +90,12 @@ def generate_report(results: list[dict], study_name: str) -> dict:
         "variants": variants,
         "runs_per_variant": int(df.filter(pl.col("variant") == variants[0]).height),
         "per_variant": {v: _variant_summary(df, v) for v in variants},
+        "per_variant_diagnostic": {v: _variant_summary(df, v, DIAGNOSTIC_METRICS) for v in variants},
     }
 
     if len(variants) == 2:
         report["comparison"] = _comparison_table(df, variants[0], variants[1])
+        report["comparison_diagnostic"] = _comparison_table(df, variants[0], variants[1], DIAGNOSTIC_METRICS)
 
     return report
 
@@ -99,9 +110,11 @@ def report_to_markdown(report: dict) -> str:
         "",
     ]
 
-    # Per-variant summary
+    # Per-variant cumulative metrics (primary)
     for v in report["variants"]:
         lines.append(f"## Variant: {v}")
+        lines.append("")
+        lines.append("### Cumulative Metrics (Primary)")
         lines.append("")
         lines.append("| Metric | Mean | Median | p90 | p99 |")
         lines.append("|--------|------|--------|-----|-----|")
@@ -109,13 +122,37 @@ def report_to_markdown(report: dict) -> str:
             lines.append(f"| {m} | {s['mean']:.4f} | {s['median']:.4f} | {s['p90']:.4f} | {s['p99']:.4f} |")
         lines.append("")
 
-    # Comparison table
+        # Diagnostic end-state metrics
+        if "per_variant_diagnostic" in report and v in report["per_variant_diagnostic"]:
+            lines.append("### End-State Metrics (Diagnostic)")
+            lines.append("")
+            lines.append("| Metric | Mean | Median | p90 | p99 |")
+            lines.append("|--------|------|--------|-----|-----|")
+            for m, s in report["per_variant_diagnostic"][v].items():
+                lines.append(f"| {m} | {s['mean']:.4f} | {s['median']:.4f} | {s['p90']:.4f} | {s['p99']:.4f} |")
+            lines.append("")
+
+    # Comparison table (cumulative — primary)
     if "comparison" in report:
-        lines.append("## Comparison")
+        lines.append("## Comparison (Cumulative Metrics)")
         lines.append("")
         lines.append("| Metric | Winner | Delta (A−B) | Effect % | p-value | 95% CI |")
         lines.append("|--------|--------|-------------|----------|---------|--------|")
         for r in report["comparison"]:
+            ci = f"[{r['ci_low']:.4f}, {r['ci_high']:.4f}]"
+            lines.append(
+                f"| {r['metric']} | {r['winner']} | {r['delta']:.4f} | "
+                f"{r['effect_pct']:.2f}% | {r['p_value']:.4g} | {ci} |"
+            )
+        lines.append("")
+
+    # Comparison table (diagnostic — end-state)
+    if "comparison_diagnostic" in report:
+        lines.append("## Comparison (End-State Diagnostics)")
+        lines.append("")
+        lines.append("| Metric | Winner | Delta (A−B) | Effect % | p-value | 95% CI |")
+        lines.append("|--------|--------|-------------|----------|---------|--------|")
+        for r in report["comparison_diagnostic"]:
             ci = f"[{r['ci_low']:.4f}, {r['ci_high']:.4f}]"
             lines.append(
                 f"| {r['metric']} | {r['winner']} | {r['delta']:.4f} | "

@@ -218,6 +218,7 @@ impl kubesim_engine::EventHandler for SimHandler {
             _ => Vec::new(),
         }
     }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
 
 // ── Single simulation run ───────────────────────────────────────
@@ -249,6 +250,73 @@ struct SimRunResult {
     pod_placement_entropy_normalized: f64,
     cpu_weighted_entropy: f64,
     cpu_weighted_entropy_normalized: f64,
+    // Cumulative / time-integrated metrics
+    cumulative_cost: f64,
+    time_weighted_node_count: f64,
+    time_to_stable: f64,
+    cumulative_pending_pod_seconds: f64,
+    disruption_count: u64,
+    disruption_seconds: f64,
+    peak_node_count: u32,
+    peak_cost_rate: f64,
+}
+
+/// Compute cumulative/time-integrated metrics from a series of snapshots.
+fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot]) -> (f64, f64, f64, f64, u64, f64, u32, f64) {
+    if snapshots.is_empty() {
+        return (0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0.0);
+    }
+
+    let mut cumulative_cost = 0.0f64;
+    let mut time_weighted_nodes = 0.0f64;
+    let mut cumulative_pending_seconds = 0.0f64;
+    let mut disruption_seconds = 0.0f64;
+    let mut peak_node_count = 0u32;
+    let mut peak_cost_rate = 0.0f64;
+
+    // Time-to-stable: last time node_count changed
+    let mut time_to_stable = 0.0f64;
+    let mut prev_node_count: Option<u32> = None;
+
+    for i in 0..snapshots.len() {
+        let s = &snapshots[i];
+        let t_secs = s.time.0 as f64 / 1e9;
+
+        if s.node_count > peak_node_count { peak_node_count = s.node_count; }
+        if s.total_cost_per_hour > peak_cost_rate { peak_cost_rate = s.total_cost_per_hour; }
+
+        if let Some(prev_nc) = prev_node_count {
+            if s.node_count != prev_nc {
+                time_to_stable = t_secs;
+            }
+        }
+        prev_node_count = Some(s.node_count);
+
+        // Trapezoidal integration between consecutive snapshots
+        if i > 0 {
+            let prev = &snapshots[i - 1];
+            let dt_hours = (s.time.0 as f64 - prev.time.0 as f64) / 1e9 / 3600.0;
+            let dt_secs = (s.time.0 as f64 - prev.time.0 as f64) / 1e9;
+
+            // Cost integral: cost_rate ($/hr) * dt (hr) = $
+            cumulative_cost += (prev.total_cost_per_hour + s.total_cost_per_hour) / 2.0 * dt_hours;
+            // Node-count integral: nodes * seconds
+            time_weighted_nodes += (prev.node_count as f64 + s.node_count as f64) / 2.0 * dt_secs;
+            // Pending-pod-seconds
+            cumulative_pending_seconds += (prev.pending_count as f64 + s.pending_count as f64) / 2.0 * dt_secs;
+            // Disruption-seconds (disruption_count is cumulative, so use delta)
+            let d_prev = prev.disruption_count as f64;
+            let d_curr = s.disruption_count as f64;
+            if d_curr > d_prev {
+                disruption_seconds += (d_curr - d_prev) * dt_secs;
+            }
+        }
+    }
+
+    let final_disruptions = snapshots.last().map_or(0, |s| s.disruption_count);
+
+    (cumulative_cost, time_weighted_nodes, time_to_stable, cumulative_pending_seconds,
+     final_disruptions, disruption_seconds, peak_node_count, peak_cost_rate)
 }
 
 fn run_single(
@@ -414,6 +482,18 @@ fn run_single(
 
     let events_processed = engine.run_to_completion(&mut state);
 
+    // Extract snapshots from SimHandler for cumulative metrics
+    let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0);
+    for h in engine.handlers_mut() {
+        if let Some(sh) = h.as_any_mut().downcast_mut::<SimHandler>() {
+            cumulative = compute_cumulative(sh.metrics.snapshots());
+            break;
+        }
+    }
+    let (cumulative_cost, time_weighted_node_count, time_to_stable,
+     cumulative_pending_pod_seconds, disruption_count, disruption_seconds,
+     peak_node_count, peak_cost_rate) = cumulative;
+
     // Collect final state summary
     let mut total_cost = 0.0f64;
     let mut node_count = 0u32;
@@ -452,6 +532,14 @@ fn run_single(
         pod_placement_entropy_normalized,
         cpu_weighted_entropy,
         cpu_weighted_entropy_normalized,
+        cumulative_cost,
+        time_weighted_node_count,
+        time_to_stable,
+        cumulative_pending_pod_seconds,
+        disruption_count,
+        disruption_seconds,
+        peak_node_count,
+        peak_cost_rate,
     }
 }
 
@@ -486,6 +574,22 @@ struct SimResult {
     cpu_weighted_entropy: f64,
     #[pyo3(get)]
     cpu_weighted_entropy_normalized: f64,
+    #[pyo3(get)]
+    cumulative_cost: f64,
+    #[pyo3(get)]
+    time_weighted_node_count: f64,
+    #[pyo3(get)]
+    time_to_stable: f64,
+    #[pyo3(get)]
+    cumulative_pending_pod_seconds: f64,
+    #[pyo3(get)]
+    disruption_count: u64,
+    #[pyo3(get)]
+    disruption_seconds: f64,
+    #[pyo3(get)]
+    peak_node_count: u32,
+    #[pyo3(get)]
+    peak_cost_rate: f64,
 }
 
 #[pymethods]
@@ -514,6 +618,14 @@ impl SimResult {
         dict.set_item("pod_placement_entropy_normalized", self.pod_placement_entropy_normalized)?;
         dict.set_item("cpu_weighted_entropy", self.cpu_weighted_entropy)?;
         dict.set_item("cpu_weighted_entropy_normalized", self.cpu_weighted_entropy_normalized)?;
+        dict.set_item("cumulative_cost", self.cumulative_cost)?;
+        dict.set_item("time_weighted_node_count", self.time_weighted_node_count)?;
+        dict.set_item("time_to_stable", self.time_to_stable)?;
+        dict.set_item("cumulative_pending_pod_seconds", self.cumulative_pending_pod_seconds)?;
+        dict.set_item("disruption_count", self.disruption_count)?;
+        dict.set_item("disruption_seconds", self.disruption_seconds)?;
+        dict.set_item("peak_node_count", self.peak_node_count)?;
+        dict.set_item("peak_cost_rate", self.peak_cost_rate)?;
         Ok(dict)
     }
 }
@@ -582,6 +694,14 @@ impl Simulation {
             pod_placement_entropy_normalized: r.pod_placement_entropy_normalized,
             cpu_weighted_entropy: r.cpu_weighted_entropy,
             cpu_weighted_entropy_normalized: r.cpu_weighted_entropy_normalized,
+            cumulative_cost: r.cumulative_cost,
+            time_weighted_node_count: r.time_weighted_node_count,
+            time_to_stable: r.time_to_stable,
+            cumulative_pending_pod_seconds: r.cumulative_pending_pod_seconds,
+            disruption_count: r.disruption_count,
+            disruption_seconds: r.disruption_seconds,
+            peak_node_count: r.peak_node_count,
+            peak_cost_rate: r.peak_cost_rate,
         })
     }
 
@@ -607,6 +727,14 @@ impl Simulation {
                 pod_placement_entropy_normalized: r.pod_placement_entropy_normalized,
                 cpu_weighted_entropy: r.cpu_weighted_entropy,
                 cpu_weighted_entropy_normalized: r.cpu_weighted_entropy_normalized,
+                cumulative_cost: r.cumulative_cost,
+                time_weighted_node_count: r.time_weighted_node_count,
+                time_to_stable: r.time_to_stable,
+                cumulative_pending_pod_seconds: r.cumulative_pending_pod_seconds,
+                disruption_count: r.disruption_count,
+                disruption_seconds: r.disruption_seconds,
+                peak_node_count: r.peak_node_count,
+                peak_cost_rate: r.peak_cost_rate,
             }
         }).collect())
     }
@@ -682,6 +810,14 @@ fn batch_run<'py>(
         dict.set_item("pod_placement_entropy_normalized", r.pod_placement_entropy_normalized)?;
         dict.set_item("cpu_weighted_entropy", r.cpu_weighted_entropy)?;
         dict.set_item("cpu_weighted_entropy_normalized", r.cpu_weighted_entropy_normalized)?;
+        dict.set_item("cumulative_cost", r.cumulative_cost)?;
+        dict.set_item("time_weighted_node_count", r.time_weighted_node_count)?;
+        dict.set_item("time_to_stable", r.time_to_stable)?;
+        dict.set_item("cumulative_pending_pod_seconds", r.cumulative_pending_pod_seconds)?;
+        dict.set_item("disruption_count", r.disruption_count)?;
+        dict.set_item("disruption_seconds", r.disruption_seconds)?;
+        dict.set_item("peak_node_count", r.peak_node_count)?;
+        dict.set_item("peak_cost_rate", r.peak_cost_rate)?;
         list.append(dict)?;
     }
 

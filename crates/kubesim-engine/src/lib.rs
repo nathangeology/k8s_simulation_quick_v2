@@ -119,6 +119,9 @@ pub trait EventHandler {
         time: SimTime,
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent>;
+
+    /// Downcast support for extracting concrete handler types after simulation.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
 // ── Engine ──────────────────────────────────────────────────────
@@ -228,6 +231,16 @@ impl Engine {
         }
         count
     }
+
+    /// Get mutable references to handlers (for post-run inspection).
+    pub fn handlers_mut(&mut self) -> &mut [Box<dyn EventHandler>] {
+        &mut self.handlers
+    }
+
+    /// Consume the engine and return all registered handlers.
+    pub fn into_handlers(self) -> Vec<Box<dyn EventHandler>> {
+        self.handlers
+    }
 }
 
 #[cfg(test)]
@@ -256,6 +269,7 @@ mod tests {
             self.count += 1;
             Vec::new()
         }
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
     }
 
     #[test]
@@ -351,6 +365,7 @@ mod tests {
                     Vec::new()
                 }
             }
+            fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
         }
 
         let mut engine = Engine::new(TimeMode::Logical);

@@ -74,6 +74,7 @@ impl EventHandler for ReplicaSetController {
             _ => Vec::new(),
         }
     }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
 
 /// Find the ReplicaSet with the given owner_id.
