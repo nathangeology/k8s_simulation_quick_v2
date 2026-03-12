@@ -126,9 +126,9 @@ impl kubesim_engine::EventHandler for SimHandler {
         state: &mut ClusterState,
     ) -> Vec<kubesim_engine::ScheduledEvent> {
         // Forward to metrics collector
-        let _ = self.metrics.handle(event, time, state);
+        let mut follow_ups = self.metrics.handle(event, time, state);
 
-        match event {
+        let mut result = match event {
             EngineEvent::PodSubmitted(spec) => {
                 let duration_ns = spec.duration_ns;
                 let pod = Pod {
@@ -216,7 +216,9 @@ impl kubesim_engine::EventHandler for SimHandler {
                 Vec::new()
             }
             _ => Vec::new(),
-        }
+        };
+        result.append(&mut follow_ups);
+        result
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }

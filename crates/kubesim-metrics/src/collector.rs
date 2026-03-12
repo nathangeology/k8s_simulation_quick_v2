@@ -241,6 +241,12 @@ impl EventHandler for MetricsCollector {
             }
             Event::MetricsSnapshot => {
                 self.take_snapshot(time, state);
+                // Reschedule: use same order of magnitude as current time
+                let interval = if time.0 >= 1_000_000_000 { 30_000_000_000 } else { 30 };
+                return vec![ScheduledEvent {
+                    time: SimTime(time.0 + interval),
+                    event: Event::MetricsSnapshot,
+                }];
             }
             _ => {}
         }

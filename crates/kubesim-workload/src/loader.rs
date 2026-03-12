@@ -189,9 +189,13 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
         emit_traffic_events(&mut events, pattern);
     }
 
-    // Periodic metrics snapshots
+    // Periodic metrics snapshots — use appropriate interval for time mode
+    let first_snapshot = match study.time_mode {
+        crate::TimeMode::Logical => SimTime(10),
+        crate::TimeMode::WallClock => SimTime(60_000_000_000), // 60s
+    };
     events.push(Event::MetricsSnapshot {
-        time: SimTime(60_000_000_000), // first snapshot at 60s
+        time: first_snapshot,
     });
 
     events.sort_by_key(|e| e.time());
