@@ -115,6 +115,12 @@ impl kubesim_engine::EventHandler for SimHandler {
                     self.scheduler.schedule_one(state, pod_id)
                 {
                     state.bind_pod(pod_id, node_id);
+                } else {
+                    // Pod couldn't be scheduled — trigger provisioning
+                    return vec![kubesim_engine::ScheduledEvent {
+                        time: SimTime(time.0 + 1),
+                        event: EngineEvent::KarpenterProvisioningLoop,
+                    }];
                 }
                 Vec::new()
             }

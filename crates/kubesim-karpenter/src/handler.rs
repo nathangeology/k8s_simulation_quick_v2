@@ -74,10 +74,12 @@ impl EventHandler for ProvisioningHandler {
             });
         }
 
-        // Re-schedule next provisioning loop only if there are still pending pods
-        // that weren't addressed by current decisions
+        // Re-schedule only if we actually made progress (launched at least one node)
+        // and there are still unaddressed pending pods.
+        // If pending pods exist but we couldn't provision anything, re-scheduling
+        // would loop forever — the same pods will fail again.
         let addressed_pods: usize = decisions.iter().map(|d| d.pod_ids.len()).sum();
-        if state.pending_queue.len() > addressed_pods {
+        if !decisions.is_empty() && state.pending_queue.len() > addressed_pods {
             follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0 + self.loop_interval_ns),
                 event: Event::KarpenterProvisioningLoop,

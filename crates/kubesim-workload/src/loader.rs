@@ -87,16 +87,16 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
             });
         }
 
-        // Schedule karpenter loops if configured
+        // Schedule karpenter loops if configured (at t=1 so initial pods are submitted first)
         if pool.karpenter.is_some() {
             events.push(Event::KarpenterProvisioningLoop {
-                time: SimTime(0),
+                time: SimTime(1),
             });
             events.push(Event::KarpenterConsolidationLoop {
-                time: SimTime(0),
+                time: SimTime(1),
             });
             events.push(Event::SpotInterruptionCheck {
-                time: SimTime(0),
+                time: SimTime(1),
             });
         }
     }

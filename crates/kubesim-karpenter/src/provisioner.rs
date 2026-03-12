@@ -180,6 +180,58 @@ pub fn provision_versioned(
                 running_usage.memory_bytes += (it.memory_gib as u64) * 1024 * 1024 * 1024;
             }
             decisions.push(decision);
+        } else if batch.pod_ids.len() > 1 {
+            // Batch too large for any single instance — bin-pack pods individually.
+
+            // Greedily fill the largest available instance, then open a new one.
+            let largest = find_largest_instance(catalog, pool, &running_usage);
+            let Some(largest_it) = largest else { continue };
+            let mut remaining_cpu = (largest_it.vcpu as u64) * 1000;
+            let mut remaining_mem = (largest_it.memory_gib as u64) * 1024 * 1024 * 1024;
+            let mut current_pods: Vec<PodId> = Vec::new();
+
+            for &pid in &batch.pod_ids {
+                let Some(pod) = state.pods.get(pid) else { continue };
+                let pcpu = pod.requests.cpu_millis;
+                let pmem = pod.requests.memory_bytes;
+
+                if pcpu > remaining_cpu || pmem > remaining_mem {
+                    // Flush current node
+                    if !current_pods.is_empty() {
+                        if let Some(it) = catalog.get(&largest_it.instance_type) {
+                            running_usage.node_count += 1;
+                            running_usage.cpu_millis += (it.vcpu as u64) * 1000;
+                            running_usage.memory_bytes += (it.memory_gib as u64) * 1024 * 1024 * 1024;
+                        }
+                        decisions.push(ProvisionDecision {
+                            instance_type: largest_it.instance_type.clone(),
+                            cost_per_hour: largest_it.on_demand_price_per_hour,
+                            pod_ids: std::mem::take(&mut current_pods),
+                        });
+                        if !pool.can_launch(&running_usage, 0, 0) { break; }
+                    }
+                    // Reset capacity for new node
+                    let Some(next_it) = find_largest_instance(catalog, pool, &running_usage) else { break };
+                    remaining_cpu = (next_it.vcpu as u64) * 1000;
+                    remaining_mem = (next_it.memory_gib as u64) * 1024 * 1024 * 1024;
+                }
+                remaining_cpu = remaining_cpu.saturating_sub(pcpu);
+                remaining_mem = remaining_mem.saturating_sub(pmem);
+                current_pods.push(pid);
+            }
+            // Flush last node
+            if !current_pods.is_empty() {
+                if let Some(it) = catalog.get(&largest_it.instance_type) {
+                    running_usage.node_count += 1;
+                    running_usage.cpu_millis += (it.vcpu as u64) * 1000;
+                    running_usage.memory_bytes += (it.memory_gib as u64) * 1024 * 1024 * 1024;
+                }
+                decisions.push(ProvisionDecision {
+                    instance_type: largest_it.instance_type.clone(),
+                    cost_per_hour: largest_it.on_demand_price_per_hour,
+                    pod_ids: current_pods,
+                });
+            }
         }
     }
     decisions
@@ -189,6 +241,22 @@ pub fn provision_versioned(
 /// Higher weight = higher priority. Returns pools sorted by descending weight.
 pub fn sort_pools_by_weight(pools: &mut [&NodePool]) {
     pools.sort_by(|a, b| b.weight.cmp(&a.weight));
+}
+
+/// Find the largest allowed instance type that can still be launched.
+fn find_largest_instance<'a>(
+    catalog: &'a Catalog,
+    pool: &NodePool,
+    usage: &NodePoolUsage,
+) -> Option<&'a kubesim_ec2::InstanceType> {
+    let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
+        catalog.all().iter().collect()
+    } else {
+        pool.instance_types.iter().filter_map(|n| catalog.get(n)).collect()
+    };
+    allowed.into_iter()
+        .filter(|it| pool.can_launch(usage, (it.vcpu as u64) * 1000, (it.memory_gib as u64) * 1024 * 1024 * 1024))
+        .max_by_key(|it| (it.vcpu as u64) * 1000 + it.memory_gib as u64)
 }
 
 #[cfg(test)]
