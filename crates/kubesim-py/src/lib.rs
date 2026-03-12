@@ -52,6 +52,13 @@ fn scoring_from_workload(s: kubesim_workload::ScoringStrategy) -> ScoringStrateg
     }
 }
 
+fn resolve_pool_name(pools: &[kubesim_workload::NodePoolDef], pool_index: u32) -> String {
+    let idx = pool_index as usize;
+    pools.get(idx)
+        .and_then(|p| p.name.clone())
+        .unwrap_or_else(|| if pools.len() == 1 { "default".into() } else { format!("pool-{}", idx) })
+}
+
 fn nodepool_from_def(pool_def: &kubesim_workload::NodePoolDef, pool_name: String, variant_budget: Option<&kubesim_workload::DisruptionBudgetDef>) -> NodePool {
     let (pct, count) = match variant_budget.or(pool_def.disruption_budget.as_ref()) {
         Some(db) => (db.max_percent, db.max_count),
@@ -354,8 +361,9 @@ fn run_single(
     // Seed engine from workload events
     for we in workload_events {
         match we {
-            WorkloadEvent::NodeLaunching { instance_type, .. } => {
-                let node = instance_to_node(&catalog, instance_type);
+            WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
+                let mut node = instance_to_node(&catalog, instance_type);
+                node.pool_name = resolve_pool_name(&scenario.study.cluster.node_pools, *pool_index);
                 state.add_node(node);
             }
             WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
@@ -958,8 +966,9 @@ impl StepSimulation {
 
         for we in &self.workload_events {
             match we {
-                WorkloadEvent::NodeLaunching { instance_type, .. } => {
-                    let node = instance_to_node(&catalog, instance_type);
+                WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
+                    let mut node = instance_to_node(&catalog, instance_type);
+                    node.pool_name = resolve_pool_name(&self.scenario.study.cluster.node_pools, *pool_index);
                     state.add_node(node);
                 }
                 WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
