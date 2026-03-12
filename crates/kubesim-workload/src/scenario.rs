@@ -121,6 +121,10 @@ pub struct WorkloadDef {
     /// Scale-down events: reduce replicas at specified times.
     #[serde(default)]
     pub scale_down: Option<Vec<ScaleDownEvent>>,
+    /// Per-instance stagger interval for scale-down when count > 1 (e.g. "5m", "10m").
+    /// Defaults to "5m" if not specified.
+    #[serde(default)]
+    pub scale_down_stagger: Option<String>,
 }
 
 /// A scale-down event that reduces replicas at a given time.

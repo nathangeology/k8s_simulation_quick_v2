@@ -17,6 +17,7 @@ study:
       replicas: {fixed: 30}
       scale_down:
         - {at: "50", reduce_by: 20}
+      scale_down_stagger: "5m"
     - type: saas_microservice
       count: {dist: uniform, min: 3, max: 15}
       replicas: {fixed: 25}
@@ -25,6 +26,7 @@ study:
       pdb: {min_available: "50%"}
       scale_down:
         - {at: "50", reduce_by: 15}
+      scale_down_stagger: "3m"
     - type: batch_job
       count: {dist: poisson, lambda: 5}
 
