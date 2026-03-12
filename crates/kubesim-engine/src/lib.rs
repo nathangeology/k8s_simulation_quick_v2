@@ -34,6 +34,7 @@ pub struct PodSpec {
     pub priority: i32,
     pub labels: kubesim_core::LabelSet,
     pub scheduling_constraints: kubesim_core::SchedulingConstraints,
+    pub do_not_disrupt: bool,
 }
 
 /// All discrete events in the simulation.

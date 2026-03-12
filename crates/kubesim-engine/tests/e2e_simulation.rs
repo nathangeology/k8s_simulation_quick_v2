@@ -54,6 +54,7 @@ impl EventHandler for SimGlueHandler {
                     qos_class: QoSClass::Burstable,
                     priority: spec.priority,
                     labels: spec.labels.clone(),
+                    do_not_disrupt: spec.do_not_disrupt,
                 };
                 let pod_id = state.submit_pod(pod);
                 if let ScheduleResult::Bound(node_id) =
@@ -165,6 +166,7 @@ fn full_simulation_loop() {
                 priority: 0,
                 labels: LabelSet::default(),
                 scheduling_constraints: constraints,
+                do_not_disrupt: false,
             }),
         );
     }
