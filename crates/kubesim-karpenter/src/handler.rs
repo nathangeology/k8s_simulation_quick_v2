@@ -12,12 +12,18 @@ use crate::version::VersionProfile;
 ///
 /// On `KarpenterProvisioningLoop` events, batches pending pods, selects
 /// instance types, and emits `NodeLaunching` events.
+///
+/// Also runs a periodic reconcile loop (every `reconcile_interval_ns`) that
+/// re-checks the pending queue for unschedulable pods, catching pods that
+/// were evicted by consolidation or other disruptions.
 pub struct ProvisioningHandler {
     pub catalog: Catalog,
     pub pool: NodePool,
     pub usage: NodePoolUsage,
     /// Interval (ns) between provisioning loops in WallClock mode.
     pub loop_interval_ns: u64,
+    /// Interval (ns) between periodic reconcile checks (default 10s).
+    pub reconcile_interval_ns: u64,
     /// Version profile (reserved for future version-specific provisioning behavior).
     pub version_profile: Option<VersionProfile>,
 }
@@ -29,6 +35,7 @@ impl ProvisioningHandler {
             pool,
             usage: NodePoolUsage::default(),
             loop_interval_ns: 5_000_000_000, // 5s default
+            reconcile_interval_ns: 10_000_000_000, // 10s default
             version_profile: None,
         }
     }
@@ -76,10 +83,11 @@ impl EventHandler for ProvisioningHandler {
             });
         }
 
-        // Re-schedule only if we actually made progress (launched at least one node)
-        // and there are still unaddressed pending pods.
-        // If pending pods exist but we couldn't provision anything, re-scheduling
-        // would loop forever — the same pods will fail again.
+        // Re-schedule the periodic reconcile loop unconditionally.
+        // This ensures evicted pods (from consolidation, spot interruptions, etc.)
+        // are always picked up even if no provisioning progress was made this round.
+        // If progress was made and more pending pods remain, also schedule an
+        // immediate follow-up for faster convergence.
         let addressed_pods: usize = decisions.iter().map(|d| d.pod_ids.len()).sum();
         if !decisions.is_empty() && state.pending_queue.len() > addressed_pods {
             follow_ups.push(ScheduledEvent {
@@ -87,6 +95,12 @@ impl EventHandler for ProvisioningHandler {
                 event: Event::KarpenterProvisioningLoop,
             });
         }
+
+        // Always schedule the next periodic reconcile
+        follow_ups.push(ScheduledEvent {
+            time: SimTime(time.0 + self.reconcile_interval_ns),
+            event: Event::KarpenterProvisioningLoop,
+        });
 
         follow_ups
     }
