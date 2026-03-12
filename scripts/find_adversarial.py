@@ -23,7 +23,10 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from kubesim._native import batch_run
-from kubesim.strategies import cluster_scenario
+from kubesim.strategies import cluster_scenario, chaos_scenario, ALL_WORKLOAD_TYPES
+from kubesim.objectives import (
+    cost_efficiency, availability, scheduling_failure_rate, OBJECTIVES,
+)
 
 BUDGET = 1000
 TOP_K = 10
@@ -155,41 +158,61 @@ def write_summary(entries: list[dict]) -> None:
 
 
 def main():
+    import argparse
     from hypothesis import HealthCheck, given, settings
 
-    strat = cluster_scenario(
-        max_nodes=200,
-        min_workloads=1,
-        max_workloads=8,
-        min_pools=1,
-        max_pools=3,
-    )
+    parser = argparse.ArgumentParser(description="Adversarial scenario finder")
+    parser.add_argument("--budget", type=int, default=BUDGET)
+    parser.add_argument("--top-k", type=int, default=TOP_K)
+    parser.add_argument("--chaos", action="store_true", help="Enable chaos mode")
+    parser.add_argument("--objective", choices=list(OBJECTIVES), default=None,
+                        help="Additional objective to track")
+    args = parser.parse_args()
+
+    budget = args.budget
+    top_k = args.top_k
+
+    if args.chaos:
+        strat = chaos_scenario(max_nodes=200)
+    else:
+        strat = cluster_scenario(
+            max_nodes=200,
+            min_workloads=1,
+            max_workloads=8,
+            min_pools=1,
+            max_pools=3,
+        )
 
     scored = []
     counter = {"n": 0}
 
     @settings(
-        max_examples=BUDGET,
+        max_examples=budget,
         database=None,
         suppress_health_check=[HealthCheck.too_slow],
         derandomize=True,
     )
     @given(scenario=strat)
     def search(scenario):
-        if counter["n"] >= BUDGET:
+        if counter["n"] >= budget:
             return
         counter["n"] += 1
         metrics = evaluate(scenario)
         if metrics:
+            # Track additional objective if requested
+            if args.objective:
+                obj_fn = OBJECTIVES[args.objective]
+                # We don't have raw results here, but metrics dict has the data
+                metrics["extra_objective"] = args.objective
             scored.append((metrics, scenario))
         if counter["n"] % 100 == 0:
             if scored:
                 best = max(s[0]["abs_delta"] for s in scored)
-                print(f"  evaluated {counter['n']}/{BUDGET}, best abs delta: {best:.6f}")
+                print(f"  evaluated {counter['n']}/{budget}, best abs delta: {best:.6f}")
             else:
-                print(f"  evaluated {counter['n']}/{BUDGET}, no valid results yet")
+                print(f"  evaluated {counter['n']}/{budget}, no valid results yet")
 
-    print(f"Running adversarial search (budget={BUDGET}, seeds={SEEDS})...")
+    print(f"Running adversarial search (budget={budget}, seeds={SEEDS}, chaos={args.chaos})...")
     try:
         search()
     except Exception as e:
@@ -205,7 +228,7 @@ def main():
 
     for cat in by_cat:
         by_cat[cat].sort(key=lambda x: x[0]["abs_delta"], reverse=True)
-        by_cat[cat] = by_cat[cat][:TOP_K]
+        by_cat[cat] = by_cat[cat][:top_k]
 
     # Write clean scenario YAMLs and collect manifest entries
     os.makedirs(SCENARIO_DIR, exist_ok=True)

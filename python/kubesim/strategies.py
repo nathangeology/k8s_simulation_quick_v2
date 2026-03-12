@@ -31,9 +31,20 @@ INSTANCE_TYPES = [
     "p3.2xlarge", "p3.8xlarge", "g4dn.xlarge", "g4dn.2xlarge",
 ]
 
+TINY_INSTANCE_TYPES = ["t3.micro", "t3.small", "t3.medium"]
+
 GPU_INSTANCE_TYPES = ["p3.2xlarge", "p3.8xlarge", "g4dn.xlarge", "g4dn.2xlarge"]
 
 WORKLOAD_TYPES = ["web_app", "ml_training", "batch_job", "saas_microservice"]
+
+EDGE_CASE_WORKLOAD_TYPES = [
+    "gpu_on_non_gpu", "extreme_replicas", "overcommit",
+    "anti_affinity", "varying_batch",
+]
+
+ALL_WORKLOAD_TYPES = WORKLOAD_TYPES + EDGE_CASE_WORKLOAD_TYPES
+
+SCALE_DOWN_PATTERNS = ["cliff", "staggered", "oscillating"]
 
 TOPOLOGY_KEYS = [
     "topology.kubernetes.io/zone",
@@ -137,13 +148,60 @@ def node_affinity_term() -> SearchStrategy[dict]:
     })
 
 
+def pod_anti_affinity() -> SearchStrategy[dict]:
+    """Strategy for pod anti-affinity (pods that can't co-locate)."""
+    return st.fixed_dictionaries({
+        "topology_key": st.sampled_from(["kubernetes.io/hostname", "topology.kubernetes.io/zone"]),
+    })
+
+
 def scheduling_constraints() -> SearchStrategy[dict]:
     """Strategy for optional scheduling constraints on a workload."""
     return st.fixed_dictionaries({}, optional={
         "topology_spread": topology_spread(),
         "pdb": pdb(),
         "node_affinity": st.lists(node_affinity_term(), min_size=1, max_size=2),
+        "pod_anti_affinity": pod_anti_affinity(),
     })
+
+
+# ── Edge-case node pool strategies ──────────────────────────────
+
+def single_instance_pool(
+    *,
+    instance_type: SearchStrategy[str] | None = None,
+    max_nodes: SearchStrategy[int] | None = None,
+) -> SearchStrategy[dict]:
+    """Single instance type pool — forces exact bin-packing, no fallback."""
+    return st.fixed_dictionaries({
+        "instance_types": (instance_type or st.sampled_from(INSTANCE_TYPES)).map(lambda t: [t]),
+        "min_nodes": st.just(1),
+        "max_nodes": max_nodes or st.integers(5, 100),
+    })
+
+
+def tiny_instance_pool() -> SearchStrategy[dict]:
+    """Tiny instances (t3.micro/small) — stress bin-packing with large pods."""
+    return st.fixed_dictionaries({
+        "instance_types": st.sampled_from(TINY_INSTANCE_TYPES).map(lambda t: [t]),
+        "min_nodes": st.just(1),
+        "max_nodes": st.integers(10, 200),
+    })
+
+
+def mixed_spot_ondemand_pools() -> SearchStrategy[list[dict]]:
+    """Mixed spot/on-demand pools with different instance families."""
+    spot = st.fixed_dictionaries({
+        "instance_types": st.lists(st.sampled_from(["m5.xlarge", "m5.2xlarge", "c5.xlarge"]), min_size=2, max_size=3, unique=True),
+        "min_nodes": st.just(0),
+        "max_nodes": st.integers(10, 100),
+    })
+    ondemand = st.fixed_dictionaries({
+        "instance_types": st.lists(st.sampled_from(["m6i.large", "m6i.xlarge", "r5.large"]), min_size=1, max_size=2, unique=True),
+        "min_nodes": st.integers(1, 5),
+        "max_nodes": st.integers(10, 50),
+    })
+    return st.tuples(spot, ondemand).map(list)
 
 
 # ── Workload strategies ─────────────────────────────────────────
@@ -205,11 +263,91 @@ def _saas_microservice_workload() -> SearchStrategy[dict]:
     })
 
 
+def _gpu_on_non_gpu_workload() -> SearchStrategy[dict]:
+    """GPU pods targeting non-GPU pools — should fail gracefully."""
+    return st.fixed_dictionaries({
+        "type": st.just("ml_training"),
+        "count": st.integers(1, 5),
+        "replicas": st.fixed_dictionaries({"fixed": st.just(1)}),
+        "priority": st.just("high"),
+        "gpu_request": _gpu_dist(),
+        "cpu_request": _cpu_dist(),
+        "memory_request": _memory_dist(),
+    })
+
+
+def _extreme_replica_workload() -> SearchStrategy[dict]:
+    """Extreme replica counts — 1 replica with PDB or 500 replicas."""
+    return st.one_of(
+        # Single replica with strict PDB
+        st.fixed_dictionaries({
+            "type": st.just("web_app"),
+            "count": st.just(1),
+            "replicas": st.fixed_dictionaries({"min": st.just(1), "max": st.just(1)}),
+            "churn": st.just("low"), "traffic": st.just("steady"),
+            "pdb": st.just({"min_available": "1"}),
+        }),
+        # Massive replica count
+        st.fixed_dictionaries({
+            "type": st.just("web_app"),
+            "count": st.just(1),
+            "replicas": st.fixed_dictionaries({"min": st.integers(200, 500), "max": st.integers(500, 1000)}),
+            "churn": st.sampled_from(["low", "medium"]),
+            "traffic": st.just("steady"),
+        }),
+    )
+
+
+def _overcommit_workload() -> SearchStrategy[dict]:
+    """Workloads requesting more resources than cluster can provide."""
+    return st.fixed_dictionaries({
+        "type": st.just("batch_job"),
+        "count": st.integers(20, 100),
+        "priority": st.sampled_from(["low", "medium", "high"]),
+        "cpu_request": st.just({"dist": "uniform", "min": "4000m", "max": "8000m"}),
+        "memory_request": st.just({"dist": "uniform", "min": "16384Mi", "max": "65536Mi"}),
+        "duration": _duration_dist(),
+    })
+
+
+def _anti_affinity_workload() -> SearchStrategy[dict]:
+    """Pods with anti-affinity that can't co-locate."""
+    return st.fixed_dictionaries({
+        "type": st.just("web_app"),
+        "count": st.integers(1, 5),
+        "replicas": st.fixed_dictionaries({"min": st.integers(3, 20), "max": st.integers(20, 50)}),
+        "churn": st.just("low"), "traffic": st.just("steady"),
+        "pod_anti_affinity": st.just({"topology_key": "kubernetes.io/hostname"}),
+        "topology_spread": st.just({"max_skew": 1, "topology_key": "topology.kubernetes.io/zone"}),
+    })
+
+
+def _varying_batch_workload() -> SearchStrategy[dict]:
+    """Batch jobs with varying lifetimes (1min to 24h)."""
+    return st.fixed_dictionaries({
+        "type": st.just("batch_job"),
+        "count": st.integers(5, 50),
+        "priority": st.sampled_from(["low", "medium"]),
+        "cpu_request": _cpu_dist(),
+        "memory_request": _memory_dist(),
+        "duration": st.one_of(
+            st.just({"dist": "exponential", "mean": "1m"}),
+            st.just({"dist": "exponential", "mean": "60m"}),
+            st.just({"dist": "lognormal", "mean": "12h", "std": "6h"}),
+        ),
+    })
+
+
 _ARCHETYPE_STRATEGIES = {
     "web_app": _web_app_workload,
     "ml_training": _ml_training_workload,
     "batch_job": _batch_job_workload,
     "saas_microservice": _saas_microservice_workload,
+    "gpu_on_non_gpu": _gpu_on_non_gpu_workload,
+    "extreme_replicas": _extreme_replica_workload,
+    "overcommit": _overcommit_workload,
+    "anti_affinity": _anti_affinity_workload,
+    "varying_batch": _varying_batch_workload,
 }
 
 
@@ -370,6 +508,53 @@ def cluster_scenario(
         }
         if include_traffic:
             scenario["study"]["traffic_pattern"] = draw(traffic_pattern())
+        return scenario
+
+    return _build()
+
+
+def chaos_scenario(
+    *,
+    max_nodes: int = 100,
+) -> SearchStrategy[dict]:
+    """Worst-case chaos scenario: single-instance pools + overcommit + topology + edge-case workloads.
+
+    Combines the hardest config dimensions to maximize divergence between strategies.
+    """
+    @st.composite
+    def _build(draw):
+        # Single-instance pool (no fallback)
+        pool = draw(single_instance_pool(max_nodes=st.integers(5, max_nodes)))
+        # Optionally add a tiny instance pool
+        pools = [pool]
+        if draw(st.booleans()):
+            pools.append(draw(tiny_instance_pool()))
+
+        # Mix edge-case and normal workloads
+        edge_wls = draw(st.lists(
+            workload(workload_types=EDGE_CASE_WORKLOAD_TYPES), min_size=1, max_size=3,
+        ))
+        normal_wls = draw(st.lists(
+            workload(workload_types=WORKLOAD_TYPES), min_size=1, max_size=3,
+        ))
+
+        scenario = {
+            "study": {
+                "name": "chaos-" + draw(st.text(
+                    alphabet="abcdefghijklmnopqrstuvwxyz0123456789",
+                    min_size=3, max_size=10,
+                )),
+                "runs": draw(st.integers(100, 5000)),
+                "time_mode": "logical",
+                "cluster": {"node_pools": pools},
+                "workloads": edge_wls + normal_wls,
+                "scale_down_pattern": draw(st.sampled_from(SCALE_DOWN_PATTERNS)),
+                "variants": [],
+                "metrics": {"compare": []},
+            }
+        }
+        # Always include traffic for chaos
+        scenario["study"]["traffic_pattern"] = draw(traffic_pattern())
         return scenario
 
     return _build()
