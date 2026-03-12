@@ -19,6 +19,7 @@ pub enum Event {
         limits: Resources,
         priority: i32,
         deletion_cost: Option<i32>,
+        duration_ns: Option<u64>,
     },
     /// Launch a node from a node pool.
     NodeLaunching {

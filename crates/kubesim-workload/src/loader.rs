@@ -131,6 +131,8 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
 
             let requests = sample_resources(workload, rng);
 
+            let duration_ns = workload.duration.as_ref().and_then(|d| sample_duration(d, rng));
+
             if replicas > 1 || workload.replicas.is_some() {
                 // Workload with replicas → emit ReplicaSet
                 events.push(Event::ReplicaSetSubmitted {
@@ -152,6 +154,7 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     limits: requests,
                     priority,
                     deletion_cost: None,
+                    duration_ns,
                 });
             }
 
@@ -229,6 +232,34 @@ fn sample_dist_u32(d: &Distribution, rng: &mut StdRng) -> u32 {
             box_muller_clamped(rng, m, s, 0.0, m * 4.0) as u32
         }
         _ => 1,
+    }
+}
+
+/// Sample a duration in nanoseconds from a Distribution.
+fn sample_duration(d: &Distribution, rng: &mut StdRng) -> Option<u64> {
+    match d {
+        Distribution::Uniform { min, max } => {
+            let lo = min.to_duration_ns()?;
+            let hi = max.to_duration_ns()?;
+            Some(rng.gen_range(lo..=hi))
+        }
+        Distribution::Normal { mean, std } => {
+            let m = mean.to_duration_ns()? as f64;
+            let s = std.to_duration_ns().unwrap_or(0) as f64;
+            Some(box_muller_clamped(rng, m, s, 1.0, m * 4.0) as u64)
+        }
+        _ => mean_duration(d),
+    }
+}
+
+fn mean_duration(d: &Distribution) -> Option<u64> {
+    match d {
+        Distribution::Uniform { min, max } => {
+            Some((min.to_duration_ns()? + max.to_duration_ns()?) / 2)
+        }
+        Distribution::Normal { mean, .. } => mean.to_duration_ns(),
+        Distribution::Exponential { mean } => mean.to_duration_ns(),
+        _ => None,
     }
 }
 

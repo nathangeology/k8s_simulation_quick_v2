@@ -37,6 +37,8 @@ pub struct PodSpec {
     pub labels: kubesim_core::LabelSet,
     pub scheduling_constraints: kubesim_core::SchedulingConstraints,
     pub do_not_disrupt: bool,
+    /// Optional pod lifetime in nanoseconds (for batch jobs).
+    pub duration_ns: Option<u64>,
 }
 
 /// All discrete events in the simulation.
@@ -60,6 +62,7 @@ pub enum Event {
     ScaleDown(DeploymentId, u32),
     ScaleUp(DeploymentId, u32),
     ReplicaSetReconcile(OwnerId),
+    PodCompleted(PodId),
     DeletionCostReconcile,
     MetricsSnapshot,
 }
