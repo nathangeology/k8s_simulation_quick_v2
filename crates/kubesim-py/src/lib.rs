@@ -406,7 +406,7 @@ fn run_single(
     // Wire DeletionCostController if variant specifies a strategy
     if let Some(strategy) = variant.and_then(|v| v.deletion_cost_strategy) {
         if strategy != DeletionCostStrategy::None {
-            engine.add_handler(Box::new(DeletionCostController::new(strategy)));
+            engine.add_handler(Box::new(DeletionCostController::new(strategy, time_mode)));
             // Schedule after initial pod creation (t=0 RS submit, t=1 reconcile)
             engine.schedule(SimTime(2), EngineEvent::DeletionCostReconcile);
         }
