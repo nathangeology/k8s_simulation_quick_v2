@@ -13,6 +13,7 @@ use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSp
 use kubesim_karpenter::{
     ConsolidationHandler, ConsolidationPolicy, NodePool, NodePoolLimits,
     ProvisioningHandler, SpotInterruptionHandler,
+    KarpenterVersion, VersionProfile,
 };
 use kubesim_metrics::{MetricsCollector, MetricsConfig as RustMetricsConfig};
 use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
@@ -48,6 +49,14 @@ fn scoring_from_workload(s: kubesim_workload::ScoringStrategy) -> ScoringStrateg
     match s {
         kubesim_workload::ScoringStrategy::MostAllocated => ScoringStrategy::MostAllocated,
         kubesim_workload::ScoringStrategy::LeastAllocated => ScoringStrategy::LeastAllocated,
+    }
+}
+
+fn parse_karpenter_version(s: &str) -> Option<KarpenterVersion> {
+    match s {
+        "v0.35" | "v0_35" | "0.35" => Some(KarpenterVersion::V0_35),
+        "v1" | "v1.x" | "v1.0" | "1" => Some(KarpenterVersion::V1),
+        _ => None,
     }
 }
 
@@ -275,6 +284,11 @@ fn run_single(
     engine.add_handler(Box::new(ReplicaSetController));
 
     // Register karpenter handlers for pools that have karpenter config
+    let version_profile = variant
+        .and_then(|v| v.karpenter_version.as_deref())
+        .and_then(parse_karpenter_version)
+        .map(VersionProfile::new);
+
     for pool_def in &scenario.study.cluster.node_pools {
         if let Some(karpenter) = &pool_def.karpenter {
             let pool = NodePool {
@@ -291,12 +305,14 @@ fn run_single(
                 weight: 0,
             };
 
-            engine.add_handler(Box::new(
-                ProvisioningHandler::new(
-                    Catalog::embedded().expect("embedded EC2 catalog"),
-                    pool.clone(),
-                ),
-            ));
+            let mut prov = ProvisioningHandler::new(
+                Catalog::embedded().expect("embedded EC2 catalog"),
+                pool.clone(),
+            );
+            if let Some(ref vp) = version_profile {
+                prov = prov.with_version(vp.clone());
+            }
+            engine.add_handler(Box::new(prov));
 
             let consolidation_policy = karpenter
                 .consolidation
@@ -307,10 +323,12 @@ fn run_single(
                 })
                 .unwrap_or(ConsolidationPolicy::WhenUnderutilized);
 
-            engine.add_handler(Box::new(
-                ConsolidationHandler::new(pool, consolidation_policy)
-                    .with_catalog(Catalog::embedded().expect("embedded EC2 catalog")),
-            ));
+            let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
+                .with_catalog(Catalog::embedded().expect("embedded EC2 catalog"));
+            if let Some(ref vp) = version_profile {
+                consol = consol.with_version(vp.clone());
+            }
+            engine.add_handler(Box::new(consol));
 
             engine.add_handler(Box::new(SpotInterruptionHandler::new(seed)));
         }
