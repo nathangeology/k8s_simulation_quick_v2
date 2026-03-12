@@ -1,0 +1,47 @@
+{
+  "study": "validation-baseline",
+  "variants": [
+    "baseline"
+  ],
+  "runs_per_variant": 100,
+  "per_variant": {
+    "baseline": {
+      "total_cost_per_hour": {
+        "mean": 0.19200000000000014,
+        "median": 0.192,
+        "p90": 0.192,
+        "p99": 0.192
+      },
+      "node_count": {
+        "mean": 1.0,
+        "median": 1.0,
+        "p90": 1.0,
+        "p99": 1.0
+      },
+      "running_pods": {
+        "mean": 2.0,
+        "median": 2.0,
+        "p90": 2.0,
+        "p99": 2.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 100000.0,
+        "median": 100000.0,
+        "p90": 100000.0,
+        "p99": 100000.0
+      },
+      "final_time": {
+        "mean": 2999310000000000.5,
+        "median": 2999310000000001.0,
+        "p90": 2999310000000001.0,
+        "p99": 2999310000000001.0
+      }
+    }
+  }
+}

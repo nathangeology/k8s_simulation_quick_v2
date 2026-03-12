@@ -1,0 +1,29 @@
+study:
+  name: validation-baseline
+  runs: 1000
+  time_mode: wall_clock
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge]
+        min_nodes: 0
+        max_nodes: 20
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+  workloads:
+    - type: web_app
+      count: 3
+      replicas: {min: 2, max: 10}
+      scaling: {type: hpa, metric: cpu, target: 70}
+      scale_down:
+        - at: "10m"
+          reduce_by: 5
+    - type: batch_job
+      count: 2
+      replicas: {fixed: 1}
+      duration: {dist: uniform, min: "3m", max: "8m"}
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}
