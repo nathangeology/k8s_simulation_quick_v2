@@ -188,6 +188,15 @@ def run_report(scenario_path: str, seeds: int = 5, output_dir: str = "results") 
     (out / "report.json").write_text(json.dumps(report, indent=2))
     (out / "report.md").write_text(md)
 
+    # Generate diagnostic plots if matplotlib is available
+    try:
+        from kubesim.plots import generate_plots
+        plot_paths = generate_plots(results, out)
+        if plot_paths:
+            print(f"Generated {len(plot_paths)} diagnostic plots in {out}/")
+    except ImportError:
+        pass  # matplotlib not installed — skip plots
+
     print(f"Report written to {out}/report.json and {out}/report.md")
     return 0
 
