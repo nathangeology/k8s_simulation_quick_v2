@@ -258,7 +258,8 @@ fn run_single(
     time_mode: TimeMode,
     seed: u64,
 ) -> SimRunResult {
-    let catalog = Catalog::embedded().expect("embedded EC2 catalog");
+    let provider = scenario.study.catalog_provider;
+    let catalog = Catalog::for_provider(provider).expect("embedded catalog");
 
     let mut state = ClusterState::new();
     let mut engine = Engine::new(time_mode);
@@ -336,7 +337,7 @@ fn run_single(
     let handler = SimHandler {
         scheduler: Scheduler::new(SchedulerProfile::with_scoring("default", scoring)),
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
-        catalog: Catalog::embedded().expect("embedded EC2 catalog"),
+        catalog: Catalog::for_provider(provider).expect("embedded catalog"),
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -363,7 +364,7 @@ fn run_single(
             let pool = nodepool_from_def(pool_def, pool_name, variant.and_then(|v| v.disruption_budget.as_ref()));
 
             let mut prov = ProvisioningHandler::new(
-                Catalog::embedded().expect("embedded EC2 catalog"),
+                Catalog::for_provider(provider).expect("embedded catalog"),
                 pool.clone(),
             );
             if let Some(ref vp) = version_profile {
@@ -381,7 +382,7 @@ fn run_single(
                 .unwrap_or(ConsolidationPolicy::WhenUnderutilized);
 
             let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
-                .with_catalog(Catalog::embedded().expect("embedded EC2 catalog"));
+                .with_catalog(Catalog::for_provider(provider).expect("embedded catalog"));
             if let Some(ref vp) = version_profile {
                 let mut vp = vp.clone();
                 let effective_db = variant.and_then(|v| v.disruption_budget.as_ref()).or(pool_def.disruption_budget.as_ref());
@@ -785,7 +786,8 @@ impl StepSimulation {
     /// Reset the simulation. Returns initial observation.
     #[pyo3(signature = (variant=None))]
     fn reset(&mut self, variant: Option<&str>) -> PyResult<StepObs> {
-        let catalog = Catalog::embedded()
+        let provider = self.scenario.study.catalog_provider;
+        let catalog = Catalog::for_provider(provider)
             .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?;
 
         let v = match variant {
@@ -872,7 +874,7 @@ impl StepSimulation {
                 SchedulerProfile::with_scoring("default", scoring),
             ),
             metrics: MetricsCollector::new(RustMetricsConfig::default()),
-            catalog: Catalog::embedded()
+            catalog: Catalog::for_provider(provider)
                 .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
         };
         engine.add_handler(Box::new(handler));
@@ -896,7 +898,7 @@ impl StepSimulation {
 
                 engine.add_handler(Box::new(
                     ProvisioningHandler::new(
-                        Catalog::embedded().map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
+                        Catalog::for_provider(provider).map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
                         pool.clone(),
                     ),
                 ));
@@ -912,7 +914,7 @@ impl StepSimulation {
 
                 engine.add_handler(Box::new(
                     ConsolidationHandler::new(pool, consolidation_policy)
-                        .with_catalog(Catalog::embedded().map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?),
+                        .with_catalog(Catalog::for_provider(provider).map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?),
                 ));
 
                 engine.add_handler(Box::new(SpotInterruptionHandler::new(42)));
