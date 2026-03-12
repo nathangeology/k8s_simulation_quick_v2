@@ -1,8 +1,9 @@
 """Translate KubeSim scenario YAML into real K8s manifests.
 
-Generates Deployments, HPAs, PDBs, Services, and Karpenter NodePool CRDs
-from a KubeSim study definition. Output is a directory of YAML files
-ready for ``kubectl apply -f manifests/``.
+Generates Deployments, Jobs, HPAs, PDBs, Services, PriorityClasses,
+KWOK Node templates, and Karpenter NodePool CRDs from a KubeSim study
+definition. Output is a directory of YAML files ready for
+``kubectl apply -f manifests/``.
 
 Usage::
 
@@ -11,12 +12,53 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import os
 import math
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# ── KWOK catalog (loaded once) ───────────────────────────────────
+
+_KWOK_CATALOG_PATH = Path(__file__).resolve().parents[3] / "crates" / "kubesim-ec2" / "src" / "kwok_instance_types.json"
+
+_KWOK_CATALOG: list[dict[str, Any]] | None = None
+
+
+def _load_kwok_catalog() -> list[dict[str, Any]]:
+    global _KWOK_CATALOG
+    if _KWOK_CATALOG is None:
+        with open(_KWOK_CATALOG_PATH) as f:
+            _KWOK_CATALOG = json.load(f)
+    return _KWOK_CATALOG
+
+
+# Well-known EC2 instance type specs: (vCPU, memory_GiB, family)
+# family: c=compute, s=standard(general), m=memory
+_EC2_SPECS: dict[str, tuple[int, int, str]] = {
+    "t3.medium": (2, 4, "s"), "t3.large": (2, 8, "s"), "t3.xlarge": (4, 16, "s"),
+    "m5.large": (2, 8, "s"), "m5.xlarge": (4, 16, "s"), "m5.2xlarge": (8, 32, "s"),
+    "m5.4xlarge": (16, 64, "s"), "m5.8xlarge": (32, 128, "s"),
+    "m6i.large": (2, 8, "s"), "m6i.xlarge": (4, 16, "s"), "m6i.2xlarge": (8, 32, "s"),
+    "c5.large": (2, 4, "c"), "c5.xlarge": (4, 8, "c"), "c5.2xlarge": (8, 16, "c"),
+    "c5.4xlarge": (16, 32, "c"),
+    "r5.large": (2, 16, "m"), "r5.xlarge": (4, 32, "m"), "r5.2xlarge": (8, 64, "m"),
+}
+
+
+def _ec2_to_kwok_resources(instance_type: str) -> dict[str, str]:
+    """Map an EC2 instance type to KWOK catalog resources."""
+    spec = _EC2_SPECS.get(instance_type)
+    if spec:
+        cpu, mem_gi, family = spec
+        kwok_name = f"{family}-{cpu}x-amd64-linux"
+        for entry in _load_kwok_catalog():
+            if entry["name"] == kwok_name:
+                return dict(entry["resources"])
+    # Fallback: 4 cpu, 16Gi (m5.xlarge equivalent)
+    return {"cpu": "4", "memory": "16Gi", "ephemeral-storage": "20Gi", "pods": "64"}
 
 # ── Workload archetype defaults ──────────────────────────────────
 
@@ -146,13 +188,7 @@ def _deployment(study_name: str, workload: dict, idx: int, variant: dict | None 
         resources["limits"]["nvidia.com/gpu"] = gpu_val
 
     priority = workload.get("priority")
-    priority_class = None
-    if priority == "low":
-        priority_class = "low-priority"
-    elif priority == "high":
-        priority_class = "high-priority"
-    elif priority == "critical":
-        priority_class = "system-cluster-critical"
+    priority_class = _priority_class_name(priority) if priority and priority in _PRIORITY_CLASSES else None
 
     container: dict[str, Any] = {
         "name": safe,
@@ -380,6 +416,114 @@ def _ec2nodeclass(pool_idx: int) -> dict:
     }
 
 
+def _kwok_node(instance_type: str, node_idx: int, pool_idx: int) -> dict:
+    """Generate a KWOK fake Node manifest with allocatable resources from the catalog."""
+    resources = _ec2_to_kwok_resources(instance_type)
+    return {
+        "apiVersion": "v1",
+        "kind": "Node",
+        "metadata": {
+            "name": f"kwok-pool{pool_idx}-node-{node_idx}",
+            "annotations": {
+                "node.alpha.kubernetes.io/ttl": "0",
+                "kwok.x-k8s.io/node": "fake",
+            },
+            "labels": {
+                "type": "kwok",
+                "node.kubernetes.io/instance-type": instance_type,
+                "topology.kubernetes.io/zone": f"us-east-1{'abc'[node_idx % 3]}",
+            },
+        },
+        "spec": {"taints": []},
+        "status": {
+            "allocatable": resources,
+            "capacity": resources,
+            "conditions": [
+                {"type": "Ready", "status": "True",
+                 "reason": "KubeletReady", "message": "kwok fake node"},
+            ],
+        },
+    }
+
+
+def _job(study_name: str, workload: dict, idx: int, variant: dict | None = None) -> dict:
+    """Generate a Job manifest for batch_job workloads."""
+    wtype = workload.get("type", "workload")
+    safe = wtype.replace("_", "-")
+    name = f"{safe}-{idx}"
+    labels = _make_labels(study_name, wtype, idx)
+
+    cpu_req = _resolve_resource(workload, "cpu_request", "cpu_request")
+    mem_req = _resolve_resource(workload, "memory_request", "memory_request")
+    cpu_lim = _resolve_resource(workload, "cpu_limit", "cpu_limit")
+    mem_lim = _resolve_resource(workload, "memory_limit", "memory_limit")
+    if workload.get("cpu_limit") is None:
+        cpu_lim = _ARCHETYPE_DEFAULTS.get(wtype, _FALLBACK)["cpu_limit"]
+    if workload.get("memory_limit") is None:
+        mem_lim = _ARCHETYPE_DEFAULTS.get(wtype, _FALLBACK)["memory_limit"]
+
+    resources: dict[str, Any] = {
+        "requests": {"cpu": cpu_req, "memory": mem_req},
+        "limits": {"cpu": cpu_lim, "memory": mem_lim},
+    }
+
+    priority = workload.get("priority")
+    priority_class = _priority_class_name(priority) if priority else None
+
+    pod_spec: dict[str, Any] = {
+        "containers": [{
+            "name": safe,
+            "image": f"kubesim/{safe}:latest",
+            "resources": resources,
+        }],
+        "restartPolicy": "Never",
+    }
+    if priority_class:
+        pod_spec["priorityClassName"] = priority_class
+
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {"name": name, "labels": labels},
+        "spec": {
+            "completions": 1,
+            "parallelism": 1,
+            "backoffLimit": 3,
+            "template": {
+                "metadata": {"labels": labels},
+                "spec": pod_spec,
+            },
+        },
+    }
+
+
+_PRIORITY_CLASSES: dict[str, int] = {
+    "low": 100,
+    "medium": 1000,
+    "high": 10000,
+    "critical": 100000,
+}
+
+
+def _priority_class_name(priority: str) -> str:
+    return f"{priority}-priority"
+
+
+def _priority_class_manifests() -> list[dict]:
+    """Generate PriorityClass definitions for all standard levels."""
+    return [
+        {
+            "apiVersion": "scheduling.k8s.io/v1",
+            "kind": "PriorityClass",
+            "metadata": {"name": _priority_class_name(name)},
+            "value": value,
+            "globalDefault": False,
+            "description": f"KubeSim {name} priority class",
+        }
+        for name, value in _PRIORITY_CLASSES.items()
+    ]
+
+
 def _namespace(study_name: str) -> dict:
     return {
         "apiVersion": "v1",
@@ -428,20 +572,33 @@ def translate_scenario(
     # Namespace
     manifests.append(_namespace(study_name))
 
-    # Node pools → Karpenter NodePool CRDs + EC2NodeClass
+    # PriorityClasses (emitted before workloads that reference them)
+    manifests.extend(_priority_class_manifests())
+
+    # Node pools → Karpenter NodePool CRDs + EC2NodeClass + KWOK Node templates
     for i, pool in enumerate(study.get("cluster", {}).get("node_pools", [])):
         manifests.append(_nodepool_crd(pool, i))
         manifests.append(_ec2nodeclass(i))
+        # KWOK fake nodes for min_nodes
+        min_nodes = pool.get("min_nodes", 0)
+        instance_types = pool.get("instance_types", [])
+        for n in range(min_nodes):
+            itype = instance_types[n % len(instance_types)] if instance_types else "m5.xlarge"
+            manifests.append(_kwok_node(itype, n, i))
 
-    # Workloads → Deployments, HPAs, PDBs, Services
+    # Workloads → Deployments/Jobs, HPAs, PDBs, Services
     owner_idx = 0
     for workload in study.get("workloads", []):
         count = _resolve_count(workload.get("count", 1))
+        wtype = workload.get("type", "")
         for c in range(count):
             idx = owner_idx
             owner_idx += 1
 
-            manifests.append(_deployment(study_name, workload, idx, variant))
+            if wtype == "batch_job":
+                manifests.append(_job(study_name, workload, idx, variant))
+            else:
+                manifests.append(_deployment(study_name, workload, idx, variant))
 
             hpa = _hpa(study_name, workload, idx)
             if hpa:
