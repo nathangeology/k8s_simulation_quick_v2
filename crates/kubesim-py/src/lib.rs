@@ -264,10 +264,21 @@ struct SimRunResult {
 }
 
 /// Compute cumulative/time-integrated metrics from a series of snapshots.
-fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot]) -> (f64, f64, f64, f64, u64, f64, u32, f64) {
+///
+/// In `WallClock` mode, `SimTime` values are nanoseconds.
+/// In `Logical` mode, each tick is treated as 1 second.
+fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot], time_mode: TimeMode) -> (f64, f64, f64, f64, u64, f64, u32, f64) {
     if snapshots.is_empty() {
         return (0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0.0);
     }
+
+    // Convert raw SimTime delta to seconds based on time mode
+    let to_secs = |raw: f64| -> f64 {
+        match time_mode {
+            TimeMode::WallClock => raw / 1e9,
+            TimeMode::Logical => raw, // each tick = 1 second
+        }
+    };
 
     let mut cumulative_cost = 0.0f64;
     let mut time_weighted_nodes = 0.0f64;
@@ -282,7 +293,7 @@ fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot]) -> (f64, f
 
     for i in 0..snapshots.len() {
         let s = &snapshots[i];
-        let t_secs = s.time.0 as f64 / 1e9;
+        let t_secs = to_secs(s.time.0 as f64);
 
         if s.node_count > peak_node_count { peak_node_count = s.node_count; }
         if s.total_cost_per_hour > peak_cost_rate { peak_cost_rate = s.total_cost_per_hour; }
@@ -297,8 +308,9 @@ fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot]) -> (f64, f
         // Trapezoidal integration between consecutive snapshots
         if i > 0 {
             let prev = &snapshots[i - 1];
-            let dt_hours = (s.time.0 as f64 - prev.time.0 as f64) / 1e9 / 3600.0;
-            let dt_secs = (s.time.0 as f64 - prev.time.0 as f64) / 1e9;
+            let dt_raw = s.time.0 as f64 - prev.time.0 as f64;
+            let dt_secs = to_secs(dt_raw);
+            let dt_hours = dt_secs / 3600.0;
 
             // Cost integral: cost_rate ($/hr) * dt (hr) = $
             cumulative_cost += (prev.total_cost_per_hour + s.total_cost_per_hour) / 2.0 * dt_hours;
@@ -488,7 +500,7 @@ fn run_single(
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0);
     for h in engine.handlers_mut() {
         if let Some(sh) = h.as_any_mut().downcast_mut::<SimHandler>() {
-            cumulative = compute_cumulative(sh.metrics.snapshots());
+            cumulative = compute_cumulative(sh.metrics.snapshots(), time_mode);
             break;
         }
     }
