@@ -70,7 +70,25 @@ pub struct NodePoolDef {
     pub weight: u32,
     #[serde(default)]
     pub karpenter: Option<KarpenterConfig>,
+    #[serde(default)]
+    pub disruption_budget: Option<DisruptionBudgetDef>,
 }
+
+/// Disruption budget configuration from scenario YAML.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisruptionBudgetDef {
+    /// Maximum percentage of nodes that may be disrupted (default: 10).
+    #[serde(default = "default_disruption_max_percent")]
+    pub max_percent: u32,
+    /// Absolute count cap (optional, overrides percentage when set).
+    #[serde(default)]
+    pub max_count: Option<u32>,
+    /// Cron schedule for time-gated overrides (v1.x only, optional).
+    #[serde(default)]
+    pub schedule: Option<String>,
+}
+
+fn default_disruption_max_percent() -> u32 { 10 }
 
 fn default_min_nodes() -> u32 {
     1

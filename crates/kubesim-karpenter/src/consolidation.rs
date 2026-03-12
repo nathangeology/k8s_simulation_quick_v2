@@ -376,7 +376,11 @@ pub fn evaluate_versioned(
 /// Compute the max number of nodes that may be disrupted given the pool config
 /// and current node count.
 pub fn disruption_budget(pool: &NodePool, total_nodes: u32) -> u32 {
-    ((total_nodes as u64 * pool.max_disrupted_pct as u64) / 100).max(1) as u32
+    if let Some(max_count) = pool.max_disrupted_count {
+        max_count.min(total_nodes).max(1)
+    } else {
+        ((total_nodes as u64 * pool.max_disrupted_pct as u64) / 100).max(1) as u32
+    }
 }
 
 // ── EventHandler integration ────────────────────────────────────
@@ -567,6 +571,7 @@ mod tests {
             labels: vec![],
             taints: vec![],
             max_disrupted_pct: 10,
+            max_disrupted_count: None,
             weight: 0,
         }
     }
@@ -629,6 +634,22 @@ mod tests {
         assert_eq!(disruption_budget(&pool, 100), 10); // 10% of 100
         assert_eq!(disruption_budget(&pool, 1), 1);    // min 1
         assert_eq!(disruption_budget(&pool, 0), 1);    // min 1
+    }
+
+    #[test]
+    fn disruption_budget_max_count_overrides_percent() {
+        let mut pool = test_pool();
+        pool.max_disrupted_count = Some(3);
+        // max_count=3 on 100 nodes → only 3 (not 10% = 10)
+        assert_eq!(disruption_budget(&pool, 100), 3);
+    }
+
+    #[test]
+    fn disruption_budget_max_percent_20() {
+        let mut pool = test_pool();
+        pool.max_disrupted_pct = 20;
+        // max_percent=20 on 50 nodes → 10
+        assert_eq!(disruption_budget(&pool, 50), 10);
     }
 
     #[test]
