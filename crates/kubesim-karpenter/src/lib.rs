@@ -1,6 +1,8 @@
 //! KubeSim Karpenter — Karpenter provisioner and consolidator model.
 
 pub mod conformance;
+pub mod conformance_consolidation;
+pub mod conformance_provisioning;
 pub mod conformance_replicaset;
 pub mod conformance_scheduler;
 pub mod conformance_version;
