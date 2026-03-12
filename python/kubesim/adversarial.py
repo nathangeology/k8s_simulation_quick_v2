@@ -168,6 +168,7 @@ class AdversarialFinder:
             database=None,
             suppress_health_check=[HealthCheck.too_slow],
             derandomize=True,
+            deadline=None,
         )
         @given(scenario=strat)
         def _search(scenario: dict) -> None:
@@ -217,6 +218,7 @@ class AdversarialFinder:
             database=None,
             suppress_health_check=[HealthCheck.too_slow],
             derandomize=True,
+            deadline=None,
         )
         @given(candidate=strat)
         def _shrink(candidate: dict) -> None:
