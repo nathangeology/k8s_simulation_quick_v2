@@ -195,6 +195,20 @@ impl kubesim_engine::EventHandler for SimHandler {
                     event: EngineEvent::NodeReady(node_id),
                 }]
             }
+            EngineEvent::KarpenterProvisioningLoop => {
+                // Try to schedule pending pods onto existing nodes before the
+                // provisioner launches new ones. This catches evicted pods that
+                // were returned to pending by DrainHandler.
+                let pending: Vec<_> = state.pending_queue.clone();
+                for pod_id in pending {
+                    if let kubesim_scheduler::ScheduleResult::Bound(nid) =
+                        self.scheduler.schedule_one(state, pod_id)
+                    {
+                        state.bind_pod(pod_id, nid);
+                    }
+                }
+                Vec::new()
+            }
             EngineEvent::NodeCordoned(node_id) => {
                 if let Some(node) = state.nodes.get_mut(*node_id) {
                     node.cordoned = true;

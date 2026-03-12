@@ -728,11 +728,17 @@ impl EventHandler for ConsolidationHandler {
 // ── Drain handler ───────────────────────────────────────────────
 
 /// Handles `NodeDrained` events by evicting all pods from the drained node
-/// and triggering a provisioning loop so evicted pods get rescheduled.
+/// and triggering rescheduling via the provisioning loop and RS reconcile.
 ///
 /// This separates the EXECUTE phase from the PLAN phase: the consolidation
 /// handler schedules staggered `NodeDrained` events, and this handler performs
 /// the actual pod eviction one node at a time — preventing cascade eviction.
+///
+/// After eviction, emits:
+/// - `KarpenterProvisioningLoop` so the provisioner (and glue handler) can
+///   place evicted pods onto existing nodes or launch new ones
+/// - `ReplicaSetReconcile` for each affected owner so the RS controller can
+///   detect actual < desired and create replacement pods if needed
 pub struct DrainHandler;
 
 impl EventHandler for DrainHandler {
@@ -751,19 +757,40 @@ impl EventHandler for DrainHandler {
             None => return Vec::new(),
         };
 
+        // Collect unique owners before eviction
+        let mut owners = Vec::new();
+        for &pid in &pod_ids {
+            if let Some(pod) = state.pods.get(pid) {
+                if !owners.contains(&pod.owner) {
+                    owners.push(pod.owner);
+                }
+            }
+        }
+
         for pid in pod_ids {
             state.evict_pod(pid);
         }
 
+        let mut follow_ups = Vec::new();
+
+        // Trigger RS reconcile for each affected owner so the controller
+        // can create replacement pods if actual < desired
+        for owner in owners {
+            follow_ups.push(ScheduledEvent {
+                time: SimTime(time.0 + 1),
+                event: Event::ReplicaSetReconcile(owner),
+            });
+        }
+
         // Trigger provisioning so evicted pods get rescheduled on remaining nodes
         if !state.pending_queue.is_empty() {
-            vec![ScheduledEvent {
+            follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0 + 1),
                 event: Event::KarpenterProvisioningLoop,
-            }]
-        } else {
-            Vec::new()
+            });
         }
+
+        follow_ups
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }
 }
