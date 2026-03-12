@@ -348,6 +348,8 @@ pub struct Variant {
     pub deletion_cost_strategy: Option<DeletionCostStrategy>,
     #[serde(default)]
     pub pdb: Option<PdbDef>,
+    #[serde(default)]
+    pub karpenter_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
