@@ -119,20 +119,27 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState) -> Vec<ScheduledEvent>
             state.submit_pod(pod);
         }
     } else if actual > desired {
-        // Scale down — select pods to delete
+        // Scale down — K8s victim selection order:
+        // 1. Pending pods first
+        // 2. Deletion cost ASC
+        // 3. More co-located replicas first
+        // 4. Newer pods first (higher index)
         let to_delete = (actual - desired) as usize;
+
+        let pending: Vec<_> = state.pods.iter()
+            .filter(|(_, p)| p.owner == owner_id && p.phase == PodPhase::Pending)
+            .map(|(id, _)| id)
+            .collect();
+
         let mut running = state.running_pods_for_owner(owner_id);
 
         // Apply deletion-cost strategy before sorting
         if rs.deletion_cost_strategy != DeletionCostStrategy::None {
-            // Costs are set by DeletionCostController for all strategies;
-            // for PreferEmptyingNodes we also do an inline update for backward compat.
             if rs.deletion_cost_strategy == DeletionCostStrategy::PreferEmptyingNodes {
                 update_deletion_costs(state, &running);
             }
         }
 
-        // Sort: (a) deletion_cost ASC, (b) fewer co-located replicas, (c) newer first (higher index)
         running.sort_by(|a, b| {
             let pa = state.pods.get(*a).unwrap();
             let pb = state.pods.get(*b).unwrap();
@@ -144,12 +151,13 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState) -> Vec<ScheduledEvent>
                 .then_with(|| {
                     let coloc_a = colocated_count(state, pa, owner_id);
                     let coloc_b = colocated_count(state, pb, owner_id);
-                    coloc_a.cmp(&coloc_b)
+                    coloc_b.cmp(&coloc_a) // MORE co-located replicas deleted first
                 })
                 .then_with(|| b.index.cmp(&a.index)) // newer (higher index) first
         });
 
-        for &pod_id in running.iter().take(to_delete) {
+        let victims: Vec<_> = pending.into_iter().chain(running).take(to_delete).collect();
+        for pod_id in victims {
             state.remove_pod(pod_id);
         }
     }
