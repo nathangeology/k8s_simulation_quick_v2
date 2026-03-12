@@ -268,6 +268,8 @@ struct SimRunResult {
     disruption_seconds: f64,
     peak_node_count: u32,
     peak_cost_rate: f64,
+    // Raw timeseries snapshots
+    timeseries: Vec<kubesim_metrics::MetricsSnapshot>,
 }
 
 /// Compute cumulative/time-integrated metrics from a series of snapshots.
@@ -504,11 +506,13 @@ fn run_single(
 
     let events_processed = engine.run_to_completion(&mut state);
 
-    // Extract snapshots from SimHandler for cumulative metrics
+    // Extract snapshots from SimHandler for cumulative metrics and timeseries
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0);
+    let mut timeseries = Vec::new();
     for h in engine.handlers_mut() {
         if let Some(sh) = h.as_any_mut().downcast_mut::<SimHandler>() {
             cumulative = compute_cumulative(sh.metrics.snapshots(), time_mode);
+            timeseries = sh.metrics.snapshots().to_vec();
             break;
         }
     }
@@ -562,6 +566,7 @@ fn run_single(
         disruption_seconds,
         peak_node_count,
         peak_cost_rate,
+        timeseries,
     }
 }
 
@@ -612,6 +617,27 @@ struct SimResult {
     peak_node_count: u32,
     #[pyo3(get)]
     peak_cost_rate: f64,
+    // Raw timeseries (not exposed via #[pyo3(get)] — use .timeseries property)
+    timeseries_data: Vec<kubesim_metrics::MetricsSnapshot>,
+}
+
+/// Convert a MetricsSnapshot to a Python dict.
+fn snapshot_to_dict<'py>(py: Python<'py>, s: &kubesim_metrics::MetricsSnapshot) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+    let d = pyo3::types::PyDict::new_bound(py);
+    d.set_item("time", s.time.0)?;
+    d.set_item("total_cost_per_hour", s.total_cost_per_hour)?;
+    d.set_item("disruption_count", s.disruption_count)?;
+    d.set_item("node_count", s.node_count)?;
+    d.set_item("pod_count", s.pod_count)?;
+    d.set_item("pending_count", s.pending_count)?;
+    d.set_item("availability", s.availability)?;
+    d.set_item("cpu_utilization_p50", s.cpu_utilization.p50)?;
+    d.set_item("cpu_utilization_p90", s.cpu_utilization.p90)?;
+    d.set_item("cpu_utilization_p99", s.cpu_utilization.p99)?;
+    d.set_item("memory_utilization_p50", s.memory_utilization.p50)?;
+    d.set_item("memory_utilization_p90", s.memory_utilization.p90)?;
+    d.set_item("memory_utilization_p99", s.memory_utilization.p99)?;
+    Ok(d)
 }
 
 #[pymethods]
@@ -648,7 +674,23 @@ impl SimResult {
         dict.set_item("disruption_seconds", self.disruption_seconds)?;
         dict.set_item("peak_node_count", self.peak_node_count)?;
         dict.set_item("peak_cost_rate", self.peak_cost_rate)?;
+        // Include timeseries as list of dicts
+        let ts_list = pyo3::types::PyList::empty_bound(py);
+        for s in &self.timeseries_data {
+            ts_list.append(snapshot_to_dict(py, s)?)?;
+        }
+        dict.set_item("timeseries", ts_list)?;
         Ok(dict)
+    }
+
+    /// Return timeseries snapshots as a list of dicts.
+    #[getter]
+    fn timeseries<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyList>> {
+        let list = pyo3::types::PyList::empty_bound(py);
+        for s in &self.timeseries_data {
+            list.append(snapshot_to_dict(py, s)?)?;
+        }
+        Ok(list)
     }
 }
 
@@ -724,6 +766,7 @@ impl Simulation {
             disruption_seconds: r.disruption_seconds,
             peak_node_count: r.peak_node_count,
             peak_cost_rate: r.peak_cost_rate,
+            timeseries_data: r.timeseries,
         })
     }
 
@@ -757,6 +800,7 @@ impl Simulation {
                 disruption_seconds: r.disruption_seconds,
                 peak_node_count: r.peak_node_count,
                 peak_cost_rate: r.peak_cost_rate,
+                timeseries_data: r.timeseries,
             }
         }).collect())
     }
@@ -840,6 +884,12 @@ fn batch_run<'py>(
         dict.set_item("disruption_seconds", r.disruption_seconds)?;
         dict.set_item("peak_node_count", r.peak_node_count)?;
         dict.set_item("peak_cost_rate", r.peak_cost_rate)?;
+        // Include timeseries as list of dicts
+        let ts_list = pyo3::types::PyList::empty_bound(py);
+        for s in &r.timeseries {
+            ts_list.append(snapshot_to_dict(py, s)?)?;
+        }
+        dict.set_item("timeseries", ts_list)?;
         list.append(dict)?;
     }
 
