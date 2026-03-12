@@ -71,6 +71,7 @@ impl EventHandler for ProvisioningHandler {
                     labels: kubesim_core::LabelSet(self.pool.labels.clone()),
                     taints: self.pool.taints.clone(),
                     pool_name: self.pool.name.clone(),
+                    do_not_disrupt: self.pool.do_not_disrupt,
                 }),
             });
         }

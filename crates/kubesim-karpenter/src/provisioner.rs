@@ -326,6 +326,7 @@ mod tests {
             max_disrupted_pct: 10,
             max_disrupted_count: None,
             weight: 0,
+            do_not_disrupt: false,
         }
     }
 

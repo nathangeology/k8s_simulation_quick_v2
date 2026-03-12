@@ -52,8 +52,8 @@ fn scoring_from_workload(s: kubesim_workload::ScoringStrategy) -> ScoringStrateg
     }
 }
 
-fn nodepool_from_def(pool_def: &kubesim_workload::NodePoolDef, pool_name: String) -> NodePool {
-    let (pct, count) = match &pool_def.disruption_budget {
+fn nodepool_from_def(pool_def: &kubesim_workload::NodePoolDef, pool_name: String, variant_budget: Option<&kubesim_workload::DisruptionBudgetDef>) -> NodePool {
+    let (pct, count) = match variant_budget.or(pool_def.disruption_budget.as_ref()) {
         Some(db) => (db.max_percent, db.max_count),
         None => (10, None),
     };
@@ -70,6 +70,7 @@ fn nodepool_from_def(pool_def: &kubesim_workload::NodePoolDef, pool_name: String
         max_disrupted_pct: pct,
         max_disrupted_count: count,
         weight: pool_def.weight,
+        do_not_disrupt: pool_def.do_not_disrupt,
     }
 }
 
@@ -105,6 +106,7 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
         cordoned: false,
         created_at: SimTime(0),
         pool_name: String::new(),
+        do_not_disrupt: false,
     }
 }
 
@@ -170,6 +172,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 node.labels = spec.labels.clone();
                 node.taints = spec.taints.iter().cloned().collect();
                 node.pool_name = spec.pool_name.clone();
+                node.do_not_disrupt = spec.do_not_disrupt;
                 let node_id = state.add_node(node);
                 // Try to schedule pending pods onto the new node
                 let pending: Vec<_> = state.pending_queue.clone();
@@ -357,7 +360,7 @@ fn run_single(
                 } else {
                     format!("pool-{}", idx)
                 });
-            let pool = nodepool_from_def(pool_def, pool_name);
+            let pool = nodepool_from_def(pool_def, pool_name, variant.and_then(|v| v.disruption_budget.as_ref()));
 
             let mut prov = ProvisioningHandler::new(
                 Catalog::embedded().expect("embedded EC2 catalog"),
@@ -381,7 +384,8 @@ fn run_single(
                 .with_catalog(Catalog::embedded().expect("embedded EC2 catalog"));
             if let Some(ref vp) = version_profile {
                 let mut vp = vp.clone();
-                if let Some(db) = &pool_def.disruption_budget {
+                let effective_db = variant.and_then(|v| v.disruption_budget.as_ref()).or(pool_def.disruption_budget.as_ref());
+                if let Some(db) = effective_db {
                     vp.budgets = vec![kubesim_karpenter::version::DisruptionBudgetConfig {
                         max_percent: db.max_percent,
                         reasons: Vec::new(),
@@ -888,7 +892,7 @@ impl StepSimulation {
                     } else {
                         format!("pool-{}", idx)
                     });
-                let pool = nodepool_from_def(pool_def, pool_name);
+                let pool = nodepool_from_def(pool_def, pool_name, None);
 
                 engine.add_handler(Box::new(
                     ProvisioningHandler::new(

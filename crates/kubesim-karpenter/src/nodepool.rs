@@ -36,6 +36,9 @@ pub struct NodePool {
     /// v1.x: priority weight for multi-pool ordering (higher = preferred). v0.35 ignores this.
     #[serde(default)]
     pub weight: u32,
+    /// When true, nodes launched from this pool have `do_not_disrupt` set.
+    #[serde(default)]
+    pub do_not_disrupt: bool,
 }
 
 fn default_disruption_pct() -> u32 { 10 }
@@ -78,6 +81,7 @@ mod tests {
             max_disrupted_pct: 10,
             max_disrupted_count: None,
             weight: 0,
+            do_not_disrupt: false,
         }
     }
 

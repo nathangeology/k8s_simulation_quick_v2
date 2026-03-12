@@ -248,6 +248,7 @@ mod tests {
             cordoned: false,
             created_at: SimTime(0),
             pool_name: String::new(),
+            do_not_disrupt: false,
         }
     }
 
@@ -261,6 +262,7 @@ mod tests {
             max_disrupted_pct: 10,
             max_disrupted_count: None,
             weight: 0,
+            do_not_disrupt: false,
         }
     }
 
