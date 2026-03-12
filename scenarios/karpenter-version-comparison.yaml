@@ -21,8 +21,7 @@ study:
     - type: web_app
       count: 8
       replicas:
-        min: 2
-        max: 10
+        fixed: 10
       scaling:
         type: hpa
         metric: cpu
@@ -37,6 +36,8 @@ study:
         max: "512Mi"
       priority: high
       traffic: diurnal
+      scale_down:
+        - {at: "12h", reduce_by: 7}
 
     - type: batch_job
       count: 6
@@ -56,8 +57,7 @@ study:
     - type: saas_microservice
       count: 10
       replicas:
-        min: 3
-        max: 8
+        fixed: 8
       scaling:
         type: hpa
         metric: cpu
@@ -72,6 +72,8 @@ study:
         max: "384Mi"
       priority: medium
       traffic: diurnal
+      scale_down:
+        - {at: "12h", reduce_by: 5}
 
   traffic_pattern:
     type: diurnal
