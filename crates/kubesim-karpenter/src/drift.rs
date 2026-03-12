@@ -58,7 +58,7 @@ impl DriftHandler {
     }
 
     /// Check if a node is drifted. v0.35: instance type only. v1.x: also hash-based.
-    fn is_drifted(&self, node: &Node) -> bool {
+    pub fn is_drifted(&self, node: &Node) -> bool {
         if self.pool.instance_types.is_empty() {
             return false;
         }
