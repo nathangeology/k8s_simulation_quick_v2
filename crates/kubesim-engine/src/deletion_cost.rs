@@ -9,7 +9,7 @@ use kubesim_core::{
     ClusterState, DeletionCostStrategy, NodeId, PodId, PodPhase,
 };
 
-use crate::{Event, EventHandler, ScheduledEvent, SimTime};
+use crate::{Event, EventHandler, ScheduledEvent, SimTime, TimeMode};
 
 const DO_NOT_DISRUPT_KEY: &str = "karpenter.sh/do-not-disrupt";
 const BASE_RANK: i32 = -1000;
@@ -17,15 +17,19 @@ const BASE_RANK: i32 = -1000;
 /// Periodic controller that sets `pod.deletion_cost` based on a ranking strategy.
 pub struct DeletionCostController {
     pub strategy: DeletionCostStrategy,
-    /// Interval (ns) between reconcile loops in WallClock mode.
+    /// Interval (ns) between reconcile loops.
     pub loop_interval_ns: u64,
 }
 
 impl DeletionCostController {
-    pub fn new(strategy: DeletionCostStrategy) -> Self {
+    pub fn new(strategy: DeletionCostStrategy, time_mode: TimeMode) -> Self {
+        let loop_interval_ns = match time_mode {
+            TimeMode::Logical => 10,
+            TimeMode::WallClock => 10_000_000_000, // 10s
+        };
         Self {
             strategy,
-            loop_interval_ns: 10_000_000_000, // 10s
+            loop_interval_ns,
         }
     }
 }
