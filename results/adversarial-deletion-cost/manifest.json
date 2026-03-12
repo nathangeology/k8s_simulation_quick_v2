@@ -1,0 +1,704 @@
+{
+  "generated_at": "2026-03-12T04:06:36.831746+00:00",
+  "budget": 500,
+  "seeds": [
+    42,
+    123,
+    7
+  ],
+  "variants": [
+    "baseline",
+    "smallest_first",
+    "largest_first",
+    "unallocated_vcpu",
+    "random"
+  ],
+  "objectives": [
+    "availability",
+    "cost_efficiency",
+    "disruption_rate"
+  ],
+  "top_k": 10,
+  "scenarios": [
+    {
+      "filename": "scenario_01.yaml",
+      "max_divergence": 0.096,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.5,
+          "cost_efficiency": 0.288,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.5,
+          "cost_efficiency": 0.288,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.5,
+          "cost_efficiency": 0.384,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.5,
+          "cost_efficiency": 0.384,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.5,
+          "cost_efficiency": 0.384,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.288,
+          "running_pods": 1.0,
+          "pending_pods": 1.0,
+          "node_count": 2.0,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.288,
+          "running_pods": 1.0,
+          "pending_pods": 1.0,
+          "node_count": 2.0,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.384,
+          "running_pods": 1.0,
+          "pending_pods": 1.0,
+          "node_count": 3.0,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.384,
+          "running_pods": 1.0,
+          "pending_pods": 1.0,
+          "node_count": 3.0,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.384,
+          "running_pods": 1.0,
+          "pending_pods": 1.0,
+          "node_count": 3.0,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_02.yaml",
+      "max_divergence": 0.044308,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.098485,
+          "cost_efficiency": 0.081231,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.098485,
+          "cost_efficiency": 0.125538,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.098485,
+          "cost_efficiency": 0.125538,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.098485,
+          "cost_efficiency": 0.081231,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.098485,
+          "cost_efficiency": 0.125538,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.352,
+          "running_pods": 4.3333,
+          "pending_pods": 39.6667,
+          "node_count": 2.3333,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.544,
+          "running_pods": 4.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.3333,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.544,
+          "running_pods": 4.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.3333,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.352,
+          "running_pods": 4.3333,
+          "pending_pods": 39.6667,
+          "node_count": 2.3333,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.544,
+          "running_pods": 4.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.3333,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_03.yaml",
+      "max_divergence": 0.036,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.118519,
+          "cost_efficiency": 0.066,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.118519,
+          "cost_efficiency": 0.102,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.118519,
+          "cost_efficiency": 0.102,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.118519,
+          "cost_efficiency": 0.066,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.118519,
+          "cost_efficiency": 0.102,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.352,
+          "running_pods": 5.3333,
+          "pending_pods": 39.6667,
+          "node_count": 2.3333,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.544,
+          "running_pods": 5.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.3333,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.544,
+          "running_pods": 5.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.3333,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.352,
+          "running_pods": 5.3333,
+          "pending_pods": 39.6667,
+          "node_count": 2.3333,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.544,
+          "running_pods": 5.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.3333,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_04.yaml",
+      "max_divergence": 0.032,
+      "objective_scores": {
+        "baseline": {
+          "availability": 1.0,
+          "cost_efficiency": 0.114667,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.125333,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.125333,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.093333,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.125333,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 1.376,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 7.6667,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 1.504,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.3333,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 1.504,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.3333,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 1.12,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 6.3333,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 1.504,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.3333,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_05.yaml",
+      "max_divergence": 0.032,
+      "objective_scores": {
+        "baseline": {
+          "availability": 1.0,
+          "cost_efficiency": 0.141333,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.130667,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.130667,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.109333,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.130667,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 1.696,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 9.3333,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 1.568,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.6667,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 1.568,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.6667,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 1.312,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 7.3333,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 1.568,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.6667,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_06.yaml",
+      "max_divergence": 0.030316,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.137681,
+          "cost_efficiency": 0.065684,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.137681,
+          "cost_efficiency": 0.096,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.137681,
+          "cost_efficiency": 0.096,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.137681,
+          "cost_efficiency": 0.065684,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.137681,
+          "cost_efficiency": 0.096,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.416,
+          "running_pods": 6.3333,
+          "pending_pods": 39.6667,
+          "node_count": 2.6667,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.608,
+          "running_pods": 6.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.608,
+          "running_pods": 6.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.416,
+          "running_pods": 6.3333,
+          "pending_pods": 39.6667,
+          "node_count": 2.6667,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.608,
+          "running_pods": 6.3333,
+          "pending_pods": 39.6667,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_07.yaml",
+      "max_divergence": 0.0288,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.151515,
+          "cost_efficiency": 0.1008,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.151515,
+          "cost_efficiency": 0.1296,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.151515,
+          "cost_efficiency": 0.1296,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.151515,
+          "cost_efficiency": 0.1008,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.151515,
+          "cost_efficiency": 0.1296,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.672,
+          "running_pods": 6.6667,
+          "pending_pods": 37.3333,
+          "node_count": 4.0,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.864,
+          "running_pods": 6.6667,
+          "pending_pods": 37.3333,
+          "node_count": 5.0,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.864,
+          "running_pods": 6.6667,
+          "pending_pods": 37.3333,
+          "node_count": 5.0,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.672,
+          "running_pods": 6.6667,
+          "pending_pods": 37.3333,
+          "node_count": 4.0,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.864,
+          "running_pods": 6.6667,
+          "pending_pods": 37.3333,
+          "node_count": 5.0,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_08.yaml",
+      "max_divergence": 0.027429,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.166667,
+          "cost_efficiency": 0.086857,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.166667,
+          "cost_efficiency": 0.114286,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.166667,
+          "cost_efficiency": 0.114286,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.166667,
+          "cost_efficiency": 0.086857,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.166667,
+          "cost_efficiency": 0.114286,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.608,
+          "running_pods": 7.0,
+          "pending_pods": 35.0,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.8,
+          "running_pods": 7.0,
+          "pending_pods": 35.0,
+          "node_count": 4.6667,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.8,
+          "running_pods": 7.0,
+          "pending_pods": 35.0,
+          "node_count": 4.6667,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.608,
+          "running_pods": 7.0,
+          "pending_pods": 35.0,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.8,
+          "running_pods": 7.0,
+          "pending_pods": 35.0,
+          "node_count": 4.6667,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_09.yaml",
+      "max_divergence": 0.027429,
+      "objective_scores": {
+        "baseline": {
+          "availability": 0.2,
+          "cost_efficiency": 0.086857,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 0.2,
+          "cost_efficiency": 0.114286,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 0.2,
+          "cost_efficiency": 0.114286,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 0.2,
+          "cost_efficiency": 0.086857,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 0.2,
+          "cost_efficiency": 0.114286,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 0.608,
+          "running_pods": 7.0,
+          "pending_pods": 28.0,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 0.8,
+          "running_pods": 7.0,
+          "pending_pods": 28.0,
+          "node_count": 4.6667,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 0.8,
+          "running_pods": 7.0,
+          "pending_pods": 28.0,
+          "node_count": 4.6667,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 0.608,
+          "running_pods": 7.0,
+          "pending_pods": 28.0,
+          "node_count": 3.6667,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 0.8,
+          "running_pods": 7.0,
+          "pending_pods": 28.0,
+          "node_count": 4.6667,
+          "pods_evicted": 0.0
+        }
+      }
+    },
+    {
+      "filename": "scenario_10.yaml",
+      "max_divergence": 0.026667,
+      "objective_scores": {
+        "baseline": {
+          "availability": 1.0,
+          "cost_efficiency": 0.114667,
+          "disruption_rate": 0.0
+        },
+        "smallest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.12,
+          "disruption_rate": 0.0
+        },
+        "largest_first": {
+          "availability": 1.0,
+          "cost_efficiency": 0.12,
+          "disruption_rate": 0.0
+        },
+        "unallocated_vcpu": {
+          "availability": 1.0,
+          "cost_efficiency": 0.093333,
+          "disruption_rate": 0.0
+        },
+        "random": {
+          "availability": 1.0,
+          "cost_efficiency": 0.12,
+          "disruption_rate": 0.0
+        }
+      },
+      "variant_metrics": {
+        "baseline": {
+          "cost_per_hour": 1.376,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 7.6667,
+          "pods_evicted": 0.0
+        },
+        "smallest_first": {
+          "cost_per_hour": 1.44,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.0,
+          "pods_evicted": 0.0
+        },
+        "largest_first": {
+          "cost_per_hour": 1.44,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.0,
+          "pods_evicted": 0.0
+        },
+        "unallocated_vcpu": {
+          "cost_per_hour": 1.12,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 6.3333,
+          "pods_evicted": 0.0
+        },
+        "random": {
+          "cost_per_hour": 1.44,
+          "running_pods": 12.0,
+          "pending_pods": 0.0,
+          "node_count": 8.0,
+          "pods_evicted": 0.0
+        }
+      }
+    }
+  ]
+}

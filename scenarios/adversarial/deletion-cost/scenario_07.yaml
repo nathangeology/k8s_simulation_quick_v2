@@ -1,0 +1,32 @@
+study:
+  name: '000'
+  runs: 1
+  time_mode: logical
+  cluster:
+    node_pools:
+    - instance_types:
+      - m5.large
+      - m5.xlarge
+      min_nodes: 1
+      max_nodes: 156
+      karpenter:
+        consolidation:
+          policy: WhenEmpty
+  workloads:
+  - type: web_app
+    count: 7
+    replicas:
+      min: 7
+      max: 11
+    churn: low
+    traffic: diurnal
+    memory_request:
+      dist: uniform
+      min: 64Mi
+      max: 75074Mi
+    scale_down:
+    - at: '50'
+      reduce_by: 6
+  - type: batch_job
+    count: 5
+    priority: low
