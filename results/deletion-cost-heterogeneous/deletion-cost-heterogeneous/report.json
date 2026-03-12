@@ -1,0 +1,455 @@
+{
+  "study": "deletion-cost-heterogeneous",
+  "variants": [
+    "baseline",
+    "largest_first",
+    "prefer_emptying",
+    "random",
+    "unallocated_vcpu"
+  ],
+  "runs_per_variant": 5,
+  "per_variant": {
+    "baseline": {
+      "cumulative_cost": {
+        "mean": 31998.111999464523,
+        "median": 31998.111999464527,
+        "p90": 31998.111999464527,
+        "p99": 31998.111999464527
+      },
+      "time_weighted_node_count": {
+        "mean": 149991150.0,
+        "median": 149991150.0,
+        "p90": 149991150.0,
+        "p99": 149991150.0
+      },
+      "time_to_stable": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "peak_cost_rate": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      }
+    },
+    "largest_first": {
+      "cumulative_cost": {
+        "mean": 7999.520000026547,
+        "median": 7999.520000026547,
+        "p90": 7999.520000026547,
+        "p99": 7999.520000026547
+      },
+      "time_weighted_node_count": {
+        "mean": 37497750.0,
+        "median": 37497750.0,
+        "p90": 37497750.0,
+        "p99": 37497750.0
+      },
+      "time_to_stable": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "peak_cost_rate": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      }
+    },
+    "prefer_emptying": {
+      "cumulative_cost": {
+        "mean": 7999.520000026547,
+        "median": 7999.520000026547,
+        "p90": 7999.520000026547,
+        "p99": 7999.520000026547
+      },
+      "time_weighted_node_count": {
+        "mean": 37497750.0,
+        "median": 37497750.0,
+        "p90": 37497750.0,
+        "p99": 37497750.0
+      },
+      "time_to_stable": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "peak_cost_rate": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      }
+    },
+    "random": {
+      "cumulative_cost": {
+        "mean": 7999.520000026547,
+        "median": 7999.520000026547,
+        "p90": 7999.520000026547,
+        "p99": 7999.520000026547
+      },
+      "time_weighted_node_count": {
+        "mean": 37497750.0,
+        "median": 37497750.0,
+        "p90": 37497750.0,
+        "p99": 37497750.0
+      },
+      "time_to_stable": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "peak_cost_rate": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      }
+    },
+    "unallocated_vcpu": {
+      "cumulative_cost": {
+        "mean": 7999.520000026547,
+        "median": 7999.520000026547,
+        "p90": 7999.520000026547,
+        "p99": 7999.520000026547
+      },
+      "time_weighted_node_count": {
+        "mean": 37497750.0,
+        "median": 37497750.0,
+        "p90": 37497750.0,
+        "p99": 37497750.0
+      },
+      "time_to_stable": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "peak_cost_rate": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      }
+    }
+  },
+  "per_variant_diagnostic": {
+    "baseline": {
+      "total_cost_per_hour": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      },
+      "node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "running_pods": {
+        "mean": 35.0,
+        "median": 35.0,
+        "p90": 35.0,
+        "p99": 35.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 29998240.0,
+        "median": 29998240.0,
+        "p90": 29998240.0,
+        "p99": 29998240.0
+      }
+    },
+    "largest_first": {
+      "total_cost_per_hour": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      },
+      "node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "running_pods": {
+        "mean": 35.0,
+        "median": 35.0,
+        "p90": 35.0,
+        "p99": 35.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 7499560.0,
+        "median": 7499560.0,
+        "p90": 7499560.0,
+        "p99": 7499560.0
+      }
+    },
+    "prefer_emptying": {
+      "total_cost_per_hour": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      },
+      "node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "running_pods": {
+        "mean": 35.0,
+        "median": 35.0,
+        "p90": 35.0,
+        "p99": 35.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 7499560.0,
+        "median": 7499560.0,
+        "p90": 7499560.0,
+        "p99": 7499560.0
+      }
+    },
+    "random": {
+      "total_cost_per_hour": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      },
+      "node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "running_pods": {
+        "mean": 35.0,
+        "median": 35.0,
+        "p90": 35.0,
+        "p99": 35.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 7499560.0,
+        "median": 7499560.0,
+        "p90": 7499560.0,
+        "p99": 7499560.0
+      }
+    },
+    "unallocated_vcpu": {
+      "total_cost_per_hour": {
+        "mean": 3.84,
+        "median": 3.84,
+        "p90": 3.84,
+        "p99": 3.84
+      },
+      "node_count": {
+        "mean": 5.0,
+        "median": 5.0,
+        "p90": 5.0,
+        "p99": 5.0
+      },
+      "running_pods": {
+        "mean": 35.0,
+        "median": 35.0,
+        "p90": 35.0,
+        "p99": 35.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 7499560.0,
+        "median": 7499560.0,
+        "p90": 7499560.0,
+        "p99": 7499560.0
+      }
+    }
+  }
+}

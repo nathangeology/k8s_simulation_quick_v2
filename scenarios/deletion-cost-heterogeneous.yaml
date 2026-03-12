@@ -1,0 +1,60 @@
+study:
+  name: deletion-cost-heterogeneous
+  runs: 10000
+  time_mode: logical
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge, m5.4xlarge, r5.xlarge, c5.2xlarge]
+        min_nodes: 0
+        max_nodes: 50
+        karpenter:
+          consolidation: {policy: WhenEmpty}
+
+  workloads:
+    # Tiny microservices — many instances, staggered scale-down
+    - type: saas_microservice
+      count: 8
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      scale_down:
+        - {at: "30", reduce_by: 9}
+      scale_down_stagger: "3"
+
+    # Memory-heavy pods — land on bigger nodes
+    - type: web_app
+      count: 4
+      replicas: {fixed: 6}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "8Gi", max: "8Gi"}
+      scale_down:
+        - {at: "60", reduce_by: 4}
+      scale_down_stagger: "5"
+
+    # CPU-heavy pods — few large pods
+    - type: web_app
+      count: 3
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "4Gi", max: "4Gi"}
+      scale_down:
+        - {at: "90", reduce_by: 3}
+      scale_down_stagger: "7"
+
+  variants:
+    - name: baseline
+      deletion_cost_strategy: none
+    - name: prefer_emptying
+      deletion_cost_strategy: prefer_emptying_nodes
+    - name: largest_first
+      deletion_cost_strategy: largest_first
+    - name: unallocated_vcpu
+      deletion_cost_strategy: unallocated_vcpu
+    - name: random
+      deletion_cost_strategy: random
+
+  metrics:
+    compare:
+      - total_cost
+      - node_count_over_time
