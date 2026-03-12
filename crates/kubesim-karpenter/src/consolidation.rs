@@ -521,15 +521,11 @@ impl EventHandler for ConsolidationHandler {
             }
         }
 
-        // Re-schedule next consolidation loop if there are nodes remaining.
-        // Even after taking actions, we reschedule to continue consolidating
-        // once evicted pods are rescheduled.
-        if total_nodes > 0 {
-            follow_ups.push(ScheduledEvent {
-                time: SimTime(time.0 + self.loop_interval_ns),
-                event: Event::KarpenterConsolidationLoop,
-            });
-        }
+        // Always re-schedule next consolidation loop
+        follow_ups.push(ScheduledEvent {
+            time: SimTime(time.0 + self.loop_interval_ns),
+            event: Event::KarpenterConsolidationLoop,
+        });
 
         follow_ups
     }
