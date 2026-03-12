@@ -519,7 +519,7 @@ fn run_single(
         }
     }
 
-    let events_processed = engine.run_to_completion(&mut state);
+    let events_processed = engine.run_to_completion_with_limit(&mut state, 5_000_000);
 
     // Extract snapshots from SimHandler for cumulative metrics and timeseries
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0);
