@@ -40,11 +40,16 @@ pub enum ConsolidationAction {
 }
 
 /// Identify empty nodes (ready, not cordoned, zero pods, not do-not-disrupt) belonging to the given pool.
-fn find_empty_nodes(state: &ClusterState, pool_name: &str) -> Vec<NodeId> {
+/// Nodes younger than `consolidate_after_ns` are exempt from consolidation.
+fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns: u64) -> Vec<NodeId> {
     state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.do_not_disrupt && n.pods.is_empty() && n.pool_name == pool_name)
+        .filter(|(_, n)| {
+            n.conditions.ready && !n.cordoned && !n.do_not_disrupt
+                && n.pods.is_empty() && n.pool_name == pool_name
+                && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+        })
         .map(|(id, _)| id)
         .collect()
 }
@@ -177,10 +182,12 @@ fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
 /// For `SingleNode` strategy: evaluates one candidate at a time, returns at most 1 action.
 /// For `MultiNode` strategy: builds a candidate set greedily — each candidate is checked
 /// against remaining capacity excluding nodes already selected for removal.
+/// Nodes younger than `consolidate_after_ns` are exempt from consolidation.
 fn find_underutilized_nodes(
     state: &ClusterState,
     pool_name: &str,
     strategy: ConsolidationStrategy,
+    consolidate_after_ns: u64,
 ) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
     let mut nodes_being_removed: Vec<NodeId> = Vec::new();
@@ -188,7 +195,10 @@ fn find_underutilized_nodes(
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool_name)
+        .filter(|(_, n)| {
+            n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool_name
+                && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+        })
         .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
     sort_candidates(state, &mut candidates);
@@ -295,13 +305,14 @@ pub fn evaluate(
     max_disrupted: u32,
     pool_name: &str,
 ) -> Vec<ConsolidationAction> {
-    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name)
+    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name, 0)
 }
 
 /// Version-aware consolidation evaluation.
 /// When `profile` is `None`, uses v1.x default behavior.
 /// When `catalog` is provided and replace_consolidation is enabled, evaluates
 /// the replace path for nodes that can't be consolidated by deletion.
+/// `consolidate_after_ns` exempts nodes younger than this duration from consolidation.
 pub fn evaluate_versioned(
     state: &ClusterState,
     policy: ConsolidationPolicy,
@@ -309,6 +320,7 @@ pub fn evaluate_versioned(
     profile: Option<&VersionProfile>,
     catalog: Option<(&Catalog, &NodePool)>,
     pool_name: &str,
+    consolidate_after_ns: u64,
 ) -> Vec<ConsolidationAction> {
     let strategy = profile
         .map(|p| p.consolidation_strategy)
@@ -365,7 +377,7 @@ pub fn evaluate_versioned(
 
     // WhenEmpty always runs (both policies include it)
     let mut empty_used: u32 = 0;
-    for nid in find_empty_nodes(state, pool_name) {
+    for nid in find_empty_nodes(state, pool_name, consolidate_after_ns) {
         if empty_used >= empty_budget || total_used >= max_disrupted {
             break;
         }
@@ -376,7 +388,7 @@ pub fn evaluate_versioned(
 
     if policy == ConsolidationPolicy::WhenUnderutilized && total_used < max_disrupted {
         let mut underutil_used: u32 = 0;
-        for action in find_underutilized_nodes(state, pool_name, strategy) {
+        for action in find_underutilized_nodes(state, pool_name, strategy, consolidate_after_ns) {
             if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                 break;
             }
@@ -513,6 +525,50 @@ fn simulate_and_validate(
     validated
 }
 
+/// Pre-execution validation: re-check that candidate nodes are still valid
+/// before executing the consolidation plan. Between planning and executing,
+/// new pods may have landed or nodes may have been cordoned.
+///
+/// For each action, verify:
+/// - The node still exists, is ready, and is not already cordoned/draining
+/// - Empty nodes are still empty
+/// - Underutilized nodes' pods still fit on remaining nodes
+///
+/// If any check fails, the action is dropped (abort and re-plan next loop).
+fn validate_before_execute(
+    state: &ClusterState,
+    actions: Vec<ConsolidationAction>,
+) -> Vec<ConsolidationAction> {
+    let mut validated = Vec::new();
+    let mut nodes_being_removed: Vec<NodeId> = Vec::new();
+
+    for action in actions {
+        let (nid, is_empty) = match &action {
+            ConsolidationAction::TerminateEmpty(nid) => (*nid, true),
+            ConsolidationAction::DrainAndTerminate { node_id, .. } => (*node_id, false),
+            ConsolidationAction::Replace { node_id, .. } => (*node_id, false),
+        };
+
+        let node = match state.nodes.get(nid) {
+            Some(n) if n.conditions.ready && !n.cordoned => n,
+            _ => continue, // node gone, not ready, or already cordoned
+        };
+
+        if is_empty {
+            if !node.pods.is_empty() {
+                continue; // pods landed since planning
+            }
+        } else if pods_can_reschedule(state, nid, &nodes_being_removed).is_none() {
+            continue; // pods no longer fit elsewhere
+        }
+
+        nodes_being_removed.push(nid);
+        validated.push(action);
+    }
+
+    validated
+}
+
 // ── EventHandler integration ────────────────────────────────────
 
 /// Karpenter consolidation handler for the simulation engine.
@@ -530,6 +586,9 @@ pub struct ConsolidationHandler {
     pub version_profile: Option<VersionProfile>,
     /// EC2 catalog for replace-path instance selection.
     pub catalog: Option<Catalog>,
+    /// Minimum node age (ns) before it becomes eligible for consolidation.
+    /// Prevents thrashing: provision → immediately consolidate → provision again.
+    pub consolidate_after_ns: u64,
 }
 
 impl ConsolidationHandler {
@@ -540,6 +599,7 @@ impl ConsolidationHandler {
             loop_interval_ns: 30_000_000_000, // 30s default
             version_profile: None,
             catalog: None,
+            consolidate_after_ns: 0,
         }
     }
 
@@ -570,11 +630,15 @@ impl EventHandler for ConsolidationHandler {
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name);
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after_ns);
 
         // PLAN phase: validate via scheduling simulation — shrink candidate set
         // until all displaced pods can be placed on remaining nodes.
         let actions = simulate_and_validate(state, actions);
+
+        // Pre-execution validation: re-check that candidates are still valid
+        // (not cordoned, still underutilized, pods still fit elsewhere).
+        let actions = validate_before_execute(state, actions);
 
         let mut follow_ups = Vec::new();
 
