@@ -12,7 +12,7 @@ use kubesim_ec2::Catalog;
 use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
 
 use crate::nodepool::NodePool;
-use crate::version::{ConsolidationStrategy, DisruptionReason, VersionProfile};
+use crate::version::{ConsolidationStrategy, DisruptionReason, VersionProfile, evaluate_schedule};
 
 /// Consolidation policy selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -308,19 +308,29 @@ pub fn evaluate_versioned(
         if has_per_reason {
             empty_cap = 0;
             underutil_cap = 0;
-            for b in &p.budgets {
-                let cap = ((total_nodes as u64 * b.max_percent as u64) / 100).max(1) as u32;
-                if b.reasons.is_empty() {
-                    // Global fallback
-                    empty_cap = empty_cap.max(cap);
-                    underutil_cap = underutil_cap.max(cap);
-                } else {
-                    for r in &b.reasons {
-                        match r {
-                            DisruptionReason::Empty => empty_cap = empty_cap.max(cap),
-                            DisruptionReason::Underutilized => underutil_cap = underutil_cap.max(cap),
-                            DisruptionReason::Drifted => {} // handled by drift handler
-                        }
+        }
+        for b in &p.budgets {
+            // Resolve effective percentage: if schedule is set, use active/inactive budget
+            let effective_pct = match (&b.schedule, p.version) {
+                (Some(sched), crate::version::KarpenterVersion::V1) => {
+                    if evaluate_schedule(state.time, sched) {
+                        b.active_budget.unwrap_or(b.max_percent)
+                    } else {
+                        b.inactive_budget.unwrap_or(b.max_percent)
+                    }
+                }
+                _ => b.max_percent,
+            };
+            let cap = ((total_nodes as u64 * effective_pct as u64) / 100).max(1) as u32;
+            if b.reasons.is_empty() {
+                empty_cap = if has_per_reason { empty_cap.max(cap) } else { cap };
+                underutil_cap = if has_per_reason { underutil_cap.max(cap) } else { cap };
+            } else {
+                for r in &b.reasons {
+                    match r {
+                        DisruptionReason::Empty => empty_cap = empty_cap.max(cap),
+                        DisruptionReason::Underutilized => underutil_cap = underutil_cap.max(cap),
+                        DisruptionReason::Drifted => {}
                     }
                 }
             }

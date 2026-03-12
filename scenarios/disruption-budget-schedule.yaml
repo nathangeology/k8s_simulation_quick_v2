@@ -1,0 +1,63 @@
+study:
+  name: disruption-budget-schedule
+  runs: 50
+  time_mode: wall_clock
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge, c5.xlarge]
+        min_nodes: 30
+        max_nodes: 50
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+  workloads:
+    - type: web_app
+      count: 5
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "250m", max: "750m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "512Mi"}
+      priority: high
+      scale_down:
+        - {at: "6h", reduce_by: 15}
+
+    - type: batch_job
+      count: 4
+      cpu_request: {dist: uniform, min: "500m", max: "1500m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "1Gi"}
+      duration: {dist: exponential, mean: "2h"}
+      priority: low
+
+  traffic_pattern:
+    type: diurnal
+    peak_multiplier: 3.0
+    duration: "24h"
+
+  variants:
+    - name: maintenance-window-scheduled
+      karpenter_version: v1
+      disruption_budget:
+        max_percent: 10
+        schedule: maintenance_window
+        active_budget: 100
+        inactive_budget: 5
+
+    - name: business-hours-restricted
+      karpenter_version: v1
+      disruption_budget:
+        max_percent: 10
+        schedule: weekday_business_hours
+        active_budget: 5
+        inactive_budget: 50
+
+    - name: unscheduled-baseline
+      karpenter_version: v1
+      disruption_budget:
+        max_percent: 10
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - node_count
+      - running_pods
+      - pending_pods

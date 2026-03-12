@@ -391,6 +391,8 @@ fn run_single(
                         max_percent: db.max_percent,
                         reasons: Vec::new(),
                         schedule: db.schedule.clone(),
+                        active_budget: db.active_budget,
+                        inactive_budget: db.inactive_budget,
                     }];
                 }
                 consol = consol.with_version(vp);
