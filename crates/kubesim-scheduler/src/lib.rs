@@ -758,6 +758,7 @@ mod tests {
             cordoned: false,
             created_at: SimTime(0),
             pool_name: String::new(),
+            do_not_disrupt: false,
         }
     }
 

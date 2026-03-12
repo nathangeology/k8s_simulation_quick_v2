@@ -72,6 +72,9 @@ pub struct NodePoolDef {
     pub karpenter: Option<KarpenterConfig>,
     #[serde(default)]
     pub disruption_budget: Option<DisruptionBudgetDef>,
+    /// When true, nodes in this pool have `karpenter.sh/do-not-disrupt` annotation.
+    #[serde(default)]
+    pub do_not_disrupt: bool,
 }
 
 /// Disruption budget configuration from scenario YAML.
@@ -392,6 +395,9 @@ pub struct Variant {
     pub pdb: Option<PdbDef>,
     #[serde(default)]
     pub karpenter_version: Option<String>,
+    /// Per-variant disruption budget override (overrides pool-level budget).
+    #[serde(default)]
+    pub disruption_budget: Option<DisruptionBudgetDef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

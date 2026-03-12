@@ -249,6 +249,8 @@ pub struct Node {
     pub created_at: SimTime,
     /// Which NodePool launched this node (for pool-scoped consolidation).
     pub pool_name: String,
+    /// When true, Karpenter consolidation will not disrupt this node.
+    pub do_not_disrupt: bool,
 }
 
 // ── Pod ─────────────────────────────────────────────────────────

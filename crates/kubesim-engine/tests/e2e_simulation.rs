@@ -89,6 +89,7 @@ impl EventHandler for SimGlueHandler {
                         cordoned: false,
                         created_at: time,
                         pool_name: spec.pool_name.clone(),
+                        do_not_disrupt: false,
                     };
                     state.add_node(node);
                     // Schedule pending pods onto available nodes
@@ -121,6 +122,7 @@ fn full_simulation_loop() {
         max_disrupted_pct: 50,
         max_disrupted_count: None,
         weight: 0,
+        do_not_disrupt: false,
     };
 
     let mut state = ClusterState::new();

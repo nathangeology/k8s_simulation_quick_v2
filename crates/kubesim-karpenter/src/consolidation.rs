@@ -39,12 +39,12 @@ pub enum ConsolidationAction {
     },
 }
 
-/// Identify empty nodes (ready, not cordoned, zero pods) belonging to the given pool.
+/// Identify empty nodes (ready, not cordoned, zero pods, not do-not-disrupt) belonging to the given pool.
 fn find_empty_nodes(state: &ClusterState, pool_name: &str) -> Vec<NodeId> {
     state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && n.pods.is_empty() && n.pool_name == pool_name)
+        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.do_not_disrupt && n.pods.is_empty() && n.pool_name == pool_name)
         .map(|(id, _)| id)
         .collect()
 }
@@ -158,9 +158,9 @@ fn pods_can_reschedule(
     Some(pod_ids)
 }
 
-/// Returns true if any pod on the node has `do_not_disrupt` set.
+/// Returns true if the node itself or any pod on the node has `do_not_disrupt` set.
 fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
-    node.pods.iter().any(|&pid| {
+    node.do_not_disrupt || node.pods.iter().any(|&pid| {
         state.pods.get(pid).map_or(false, |p| p.do_not_disrupt)
     })
 }
@@ -504,6 +504,7 @@ impl EventHandler for ConsolidationHandler {
                             labels: kubesim_core::LabelSet(self.pool.labels.clone()),
                             taints: self.pool.taints.clone(),
                             pool_name: self.pool.name.clone(),
+                            do_not_disrupt: self.pool.do_not_disrupt,
                         }),
                     });
                 }
@@ -543,6 +544,7 @@ mod tests {
             cordoned: false,
             created_at: SimTime(0),
             pool_name: "default".into(),
+            do_not_disrupt: false,
         }
     }
 
@@ -573,6 +575,7 @@ mod tests {
             max_disrupted_pct: 10,
             max_disrupted_count: None,
             weight: 0,
+            do_not_disrupt: false,
         }
     }
 

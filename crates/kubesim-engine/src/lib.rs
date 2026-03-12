@@ -25,6 +25,8 @@ pub struct NodeSpec {
     pub taints: Vec<kubesim_core::Taint>,
     /// Name of the NodePool that launched this node.
     pub pool_name: String,
+    /// When true, the node has `karpenter.sh/do-not-disrupt` annotation.
+    pub do_not_disrupt: bool,
 }
 
 /// Specification for submitting a new pod (carried by PodSubmitted event).
