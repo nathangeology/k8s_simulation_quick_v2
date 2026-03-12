@@ -1,5 +1,6 @@
 //! KubeSim Karpenter — Karpenter provisioner and consolidator model.
 
+pub mod conformance;
 pub mod consolidation;
 pub mod drift;
 pub mod handler;
@@ -9,6 +10,7 @@ pub mod spot;
 pub mod version;
 
 pub use kubesim_core;
+pub use conformance::{BehaviorSpec, ConformanceReport, SpecResult, VersionRange, run_conformance};
 pub use consolidation::{ConsolidationAction, ConsolidationHandler, ConsolidationPolicy, DrainHandler};
 pub use drift::{DriftConfig, DriftHandler};
 pub use handler::ProvisioningHandler;
