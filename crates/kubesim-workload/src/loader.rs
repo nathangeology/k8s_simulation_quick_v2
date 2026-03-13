@@ -295,7 +295,8 @@ fn build_scheduling_constraints(workload: &WorkloadDef, owner_id: u32) -> (Sched
             AffinityType::Preferred { weight: paa.weight as i32 }
         };
         let selector_key = paa.label_key.clone();
-        let selector_value = labels.get(&selector_key).unwrap_or("").to_string();
+        let selector_value = paa.target_label_value.clone()
+            .unwrap_or_else(|| labels.get(&selector_key).unwrap_or("").to_string());
         constraints.pod_affinity.push(PodAffinityTerm {
             affinity_type,
             label_selector: LabelSelector {
