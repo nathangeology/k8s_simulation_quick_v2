@@ -272,6 +272,8 @@ pub struct Pod {
     pub do_not_disrupt: bool,
     /// Optional pod lifetime in nanoseconds (for batch jobs).
     pub duration_ns: Option<u64>,
+    /// Daemonset pods are non-evictable and auto-created on NodeReady.
+    pub is_daemonset: bool,
 }
 
 // ── Deletion cost strategy ──────────────────────────────────────

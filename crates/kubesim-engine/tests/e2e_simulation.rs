@@ -56,6 +56,7 @@ impl EventHandler for SimGlueHandler {
                     labels: spec.labels.clone(),
                     do_not_disrupt: spec.do_not_disrupt,
                     duration_ns: spec.duration_ns,
+                    is_daemonset: false,
                 };
                 let pod_id = state.submit_pod(pod);
                 if let ScheduleResult::Bound(node_id) =

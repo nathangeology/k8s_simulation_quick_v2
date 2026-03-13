@@ -53,7 +53,7 @@ fn ffd_bin_packing_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None,
+                    duration_ns: None, is_daemonset: false,
                 });
             }
             for _ in 0..2 {
@@ -74,7 +74,7 @@ fn ffd_bin_packing_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None,
+                    duration_ns: None, is_daemonset: false,
                 });
             }
 
@@ -142,7 +142,7 @@ fn deletion_cost_victim_selection_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None,
+                    duration_ns: None, is_daemonset: false,
                 };
                 let pid = state.submit_pod(pod);
                 state.bind_pod(pid, nid);
@@ -232,7 +232,7 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None,
+                    duration_ns: None, is_daemonset: false,
                 };
                 let pid = state.submit_pod(pod);
                 state.bind_pod(pid, drain_nid);

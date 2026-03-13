@@ -40,7 +40,7 @@ pub enum ConsolidationAction {
     },
 }
 
-/// Identify empty nodes (ready, not cordoned, zero pods, not do-not-disrupt) belonging to the given pool.
+/// Identify empty nodes (ready, not cordoned, zero non-daemonset pods, not do-not-disrupt) belonging to the given pool.
 /// Nodes younger than `consolidate_after_ns` are exempt from consolidation.
 fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns: u64) -> Vec<NodeId> {
     state
@@ -48,8 +48,11 @@ fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns:
         .iter()
         .filter(|(_, n)| {
             n.conditions.ready && !n.cordoned && !n.do_not_disrupt
-                && n.pods.is_empty() && n.pool_name == pool_name
+                && n.pool_name == pool_name
                 && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+                && n.pods.iter().all(|&pid| {
+                    state.pods.get(pid).map_or(true, |p| p.is_daemonset)
+                })
         })
         .map(|(id, _)| id)
         .collect()
@@ -68,8 +71,11 @@ fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns:
 fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
     let mut max_priority: i32 = 0;
     let mut pdb_covered: i64 = 0;
+    let mut non_ds_count: usize = 0;
     for &pid in &node.pods {
         if let Some(pod) = state.pods.get(pid) {
+            if pod.is_daemonset { continue; }
+            non_ds_count += 1;
             if pod.priority > max_priority {
                 max_priority = pod.priority;
             }
@@ -79,7 +85,6 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
         }
     }
     let disruption_cost = max_priority as i64 + pdb_covered;
-    let pod_count = node.pods.len();
     // Invert age so ascending sort prefers older nodes (lower created_at).
     let negative_age = node.created_at.0;
     // Spot nodes get penalty=1 so on-demand nodes (penalty=0) are consolidated first.
@@ -87,7 +92,7 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
         NodeLifecycle::Spot { .. } => 1u8,
         NodeLifecycle::OnDemand => 0u8,
     };
-    (spot_penalty, disruption_cost, pod_count, negative_age)
+    (spot_penalty, disruption_cost, non_ds_count, negative_age)
 }
 
 /// Sort candidate nodes by multi-factor disruption score (ascending).
@@ -129,11 +134,12 @@ fn pods_can_reschedule(
     let f4 = PodTopologySpreadFilter;
     let filters: [&dyn FilterPlugin; 4] = [&f1, &f2, &f3, &f4];
 
-    // Collect pods to move
+    // Collect pods to move (exclude daemonset pods — they are non-evictable)
     let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
     let pods: Vec<(PodId, &Pod)> = pod_ids
         .iter()
         .filter_map(|&pid| state.pods.get(pid).map(|p| (pid, p)))
+        .filter(|(_, p)| !p.is_daemonset)
         .collect();
 
     // Build available capacity on other nodes, excluding candidate and nodes already being removed
@@ -168,13 +174,13 @@ fn pods_can_reschedule(
         }
     }
 
-    Some(pod_ids)
+    Some(pods.iter().map(|&(pid, _)| pid).collect())
 }
 
-/// Returns true if the node itself or any pod on the node has `do_not_disrupt` set.
+/// Returns true if the node itself or any non-daemonset pod on the node has `do_not_disrupt` set.
 fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
     node.do_not_disrupt || node.pods.iter().any(|&pid| {
-        state.pods.get(pid).map_or(false, |p| p.do_not_disrupt)
+        state.pods.get(pid).map_or(false, |p| p.do_not_disrupt && !p.is_daemonset)
     })
 }
 
@@ -203,8 +209,12 @@ fn find_underutilized_nodes(
         .nodes
         .iter()
         .filter(|(_, n)| {
-            n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool_name
+            n.conditions.ready && !n.cordoned && n.pool_name == pool_name
                 && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+                // Must have at least one non-daemonset pod (empty nodes handled by find_empty_nodes)
+                && n.pods.iter().any(|&pid| {
+                    state.pods.get(pid).map_or(false, |p| !p.is_daemonset)
+                })
         })
         .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
@@ -281,7 +291,10 @@ fn find_replace_candidates(
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool.name)
+        .filter(|(_, n)| {
+            n.conditions.ready && !n.cordoned && n.pool_name == pool.name
+                && n.pods.iter().any(|&pid| state.pods.get(pid).map_or(false, |p| !p.is_daemonset))
+        })
         .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
     sort_candidates(state, &mut candidates);
@@ -292,11 +305,13 @@ fn find_replace_candidates(
             continue;
         }
 
-        // Compute total resource demand of pods on this node
+        // Compute total resource demand of non-daemonset pods on this node
         let mut total_cpu: u64 = 0;
         let mut total_mem: u64 = 0;
         let mut total_gpu: u32 = 0;
-        let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
+        let pod_ids: Vec<PodId> = node.pods.iter().copied()
+            .filter(|&pid| !state.pods.get(pid).map_or(false, |p| p.is_daemonset))
+            .collect();
         for &pid in &pod_ids {
             if let Some(p) = state.pods.get(pid) {
                 total_cpu += p.requests.cpu_millis;
@@ -798,10 +813,11 @@ impl EventHandler for DrainHandler {
             None => return Vec::new(),
         };
 
-        // Collect unique owners before eviction
+        // Collect unique owners before eviction (skip daemonset pods)
         let mut owners = Vec::new();
         for &pid in &pod_ids {
             if let Some(pod) = state.pods.get(pid) {
+                if pod.is_daemonset { continue; }
                 if !owners.contains(&pod.owner) {
                     owners.push(pod.owner);
                 }
@@ -809,6 +825,7 @@ impl EventHandler for DrainHandler {
         }
 
         for pid in pod_ids {
+            if state.pods.get(pid).map_or(false, |p| p.is_daemonset) { continue; }
             state.evict_pod(pid);
         }
 
@@ -873,6 +890,7 @@ mod tests {
             labels: LabelSet::default(),
             do_not_disrupt: false,
             duration_ns: None,
+            is_daemonset: false,
         }
     }
 
