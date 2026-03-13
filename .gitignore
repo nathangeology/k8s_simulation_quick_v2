@@ -10,3 +10,12 @@ target/
 .hypothesis/
 validation/results/
 validation/*.parquet
+.repo.git/
+AGENTS.md
+crew/
+mayor/
+polecats/
+refinery/
+witness/
+plugins/
+settings/
