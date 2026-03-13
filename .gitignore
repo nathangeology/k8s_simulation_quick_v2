@@ -8,3 +8,11 @@ target/
 .venv/
 *.so
 .hypothesis/
+# Gas Town infrastructure (not part of repo)
+polecats/
+witness/
+refinery/
+crew/
+mayor/
+.repo.git/
+AGENTS.md
