@@ -2,6 +2,7 @@ study:
   name: benchmark-control
   runs: 1000
   time_mode: wall_clock
+  duration: "40m"
 
   cluster:
     node_pools:

@@ -536,7 +536,17 @@ fn run_single(
         }
     }
 
-    let events_processed = engine.run_to_completion(&mut state);
+    let events_processed = if let Some(stop_ns) = scenario.study.duration.as_deref()
+        .and_then(kubesim_workload::parse_duration_ns)
+    {
+        let stop_time = match time_mode {
+            TimeMode::WallClock => SimTime(stop_ns),
+            TimeMode::Logical => SimTime(stop_ns / 1_000_000_000),
+        };
+        engine.run_until(&mut state, stop_time)
+    } else {
+        engine.run_to_completion(&mut state)
+    };
 
     // Extract snapshots from SimHandler for cumulative metrics and timeseries
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0, 0.0, 0.0);

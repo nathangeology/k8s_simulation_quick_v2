@@ -25,6 +25,9 @@ pub struct Study {
     pub time_mode: TimeMode,
     #[serde(default)]
     pub catalog_provider: CatalogProvider,
+    /// Optional simulation duration (e.g. "40m", "2h"). Stops the sim at this wall-clock time.
+    #[serde(default)]
+    pub duration: Option<String>,
     pub cluster: ClusterConfig,
     pub workloads: Vec<WorkloadDef>,
     #[serde(default)]
