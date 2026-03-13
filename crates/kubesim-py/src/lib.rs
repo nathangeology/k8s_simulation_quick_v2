@@ -593,6 +593,8 @@ fn run_single(
 
             let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
                 .with_catalog(Catalog::for_provider(provider).expect("embedded catalog"));
+            consol.overhead = overhead;
+            consol.daemonset_pct = daemonset_pct;
             if let Some(ref vp) = version_profile {
                 let mut vp = vp.clone();
                 let effective_db = variant.and_then(|v| v.disruption_budget.as_ref()).or(pool_def.disruption_budget.as_ref());

@@ -11,8 +11,14 @@ study:
         max_nodes: 200
         karpenter:
           consolidation: {policy: WhenUnderutilized}
-    # No daemonsets — KWOK nodes don't run them
-    daemonsets: []
+    # System daemonsets — approximate kube-proxy + system agents per node
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+      - name: node-agent
+        cpu_request: "50m"
+        memory_request: "256Mi"
     delays:
       node_startup: "30s"      # KWOK node registration + ready
       node_shutdown: "5s"      # drain + terminate

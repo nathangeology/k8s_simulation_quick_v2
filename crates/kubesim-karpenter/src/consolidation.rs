@@ -277,6 +277,8 @@ fn find_replace_candidates(
     state: &ClusterState,
     catalog: &Catalog,
     pool: &NodePool,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Vec<ConsolidationAction> {
     let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
         catalog.all().iter().collect()
@@ -325,8 +327,20 @@ fn find_replace_candidates(
         let mut best: Option<(&kubesim_ec2::InstanceType, f64)> = None;
 
         for it in &allowed {
-            let it_cpu = (it.vcpu as u64) * 1000;
-            let it_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+            let raw_cpu = (it.vcpu as u64) * 1000;
+            let raw_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+            // Subtract overhead to get effective capacity
+            let (oh_cpu, oh_mem) = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+                kubesim_ec2::eks_overhead(it.vcpu)
+            } else {
+                (overhead.cpu_millis, overhead.memory_bytes)
+            };
+            let mut it_cpu = raw_cpu.saturating_sub(oh_cpu);
+            let mut it_mem = raw_mem.saturating_sub(oh_mem);
+            if daemonset_pct > 0 {
+                it_cpu = it_cpu.saturating_sub(raw_cpu * daemonset_pct as u64 / 100);
+                it_mem = it_mem.saturating_sub(raw_mem * daemonset_pct as u64 / 100);
+            }
             if it_cpu < total_cpu || it_mem < total_mem || it.gpu_count < total_gpu {
                 continue;
             }
@@ -360,7 +374,7 @@ pub fn evaluate(
     max_disrupted: u32,
     pool_name: &str,
 ) -> Vec<ConsolidationAction> {
-    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name, 0)
+    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name, 0, &Resources::default(), 0)
 }
 
 /// Version-aware consolidation evaluation.
@@ -376,6 +390,8 @@ pub fn evaluate_versioned(
     catalog: Option<(&Catalog, &NodePool)>,
     pool_name: &str,
     consolidate_after_ns: u64,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Vec<ConsolidationAction> {
     let strategy = profile
         .map(|p| p.consolidation_strategy)
@@ -457,7 +473,7 @@ pub fn evaluate_versioned(
         // Replace path (v1.x only)
         if total_used < max_disrupted && replace_enabled && strategy == ConsolidationStrategy::MultiNode {
             if let Some((cat, pool)) = catalog {
-                for action in find_replace_candidates(state, cat, pool) {
+                for action in find_replace_candidates(state, cat, pool, overhead, daemonset_pct) {
                     if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                         break;
                     }
@@ -653,6 +669,10 @@ pub struct ConsolidationHandler {
     /// Minimum node age (ns) before it becomes eligible for consolidation.
     /// Prevents thrashing: provision → immediately consolidate → provision again.
     pub consolidate_after_ns: u64,
+    /// System overhead for replace-path capacity checks.
+    pub overhead: Resources,
+    /// Daemonset overhead percentage for replace-path capacity checks.
+    pub daemonset_pct: u32,
 }
 
 impl ConsolidationHandler {
@@ -667,6 +687,8 @@ impl ConsolidationHandler {
             version_profile: None,
             catalog: None,
             consolidate_after_ns: 0,
+            overhead: Resources::default(),
+            daemonset_pct: 0,
         }
     }
 
@@ -697,7 +719,7 @@ impl EventHandler for ConsolidationHandler {
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after_ns);
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after_ns, &self.overhead, self.daemonset_pct);
 
         // PLAN phase: validate via scheduling simulation — shrink candidate set
         // until all displaced pods can be placed on remaining nodes.

@@ -76,9 +76,11 @@ impl EventHandler for ProvisioningHandler {
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent> {
         let Event::KarpenterProvisioningLoop = event else {
-            // On NodeReady, clear inflight count since pods are now being scheduled
+            // On NodeReady, cap inflight to current pending count.
+            // Pods just got scheduled onto the newly-ready node, so inflight
+            // must not exceed the remaining pending pods.
             if matches!(event, Event::NodeReady(_)) {
-                self.inflight_pods = 0;
+                self.inflight_pods = self.inflight_pods.min(state.pending_queue.len());
             }
             return Vec::new();
         };

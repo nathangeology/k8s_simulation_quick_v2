@@ -75,7 +75,7 @@ fn prefer_emptying_nodes_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
 
             let drain_ids: Vec<NodeId> = actions.iter().filter_map(|a| match a {
@@ -119,7 +119,7 @@ fn empty_before_underutilized_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
 
             if actions.is_empty() {
@@ -166,7 +166,7 @@ fn greedy_excludes_already_selected_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
 
             let drain_count = actions.iter().filter(|a| matches!(a, ConsolidationAction::DrainAndTerminate { .. })).count();
@@ -203,7 +203,7 @@ fn consolidate_after_exempts_young_nodes_spec() -> BehaviorSpec {
             let consolidate_after = 30_000_000_000u64;
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenEmpty, 10,
-                Some(profile), None, "default", consolidate_after,
+                Some(profile), None, "default", consolidate_after, &Resources::default(), 0,
             );
 
             if actions.len() != 1 {

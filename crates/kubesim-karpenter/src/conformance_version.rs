@@ -46,7 +46,7 @@ fn v035_single_node_consolidation_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
             let drain_count = actions.iter()
                 .filter(|a| matches!(a, ConsolidationAction::DrainAndTerminate { .. }))
@@ -98,7 +98,7 @@ fn v1_multi_node_consolidation_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
             let drain_count = actions.iter()
                 .filter(|a| matches!(a, ConsolidationAction::DrainAndTerminate { .. }))
@@ -132,7 +132,7 @@ fn v1_when_underutilized_policy_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
             let has_drain = actions.iter().any(|a| match a {
                 ConsolidationAction::DrainAndTerminate { node_id, .. } => *node_id == small,
@@ -175,7 +175,7 @@ fn v1_disruption_budgets_enforced_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenEmpty, 10,
-                Some(&profile), None, "default", 0,
+                Some(&profile), None, "default", 0, &Resources::default(), 0,
             );
             if actions.len() > 1 {
                 return Err(format!("budget should limit to 1 empty termination, got {}", actions.len()));
@@ -303,7 +303,7 @@ fn cross_version_empty_node_first_spec() -> BehaviorSpec {
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
-                Some(profile), None, "default", 0,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
             );
             if actions.is_empty() {
                 return Err("should have consolidation actions".into());
