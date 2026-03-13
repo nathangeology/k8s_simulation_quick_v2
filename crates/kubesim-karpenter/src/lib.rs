@@ -2,6 +2,7 @@
 
 pub mod conformance;
 pub mod conformance_consolidation;
+pub mod conformance_kwok;
 pub mod conformance_provisioning;
 pub mod conformance_replicaset;
 pub mod conformance_scheduler;
