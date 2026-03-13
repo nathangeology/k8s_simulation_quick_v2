@@ -636,8 +636,12 @@ fn validate_before_execute(
 pub struct ConsolidationHandler {
     pub pool: NodePool,
     pub policy: ConsolidationPolicy,
-    /// Interval (ns) between consolidation loops in WallClock mode.
+    /// Base interval (ns) between consolidation loops in WallClock mode.
     pub loop_interval_ns: u64,
+    /// Current backoff interval (ns). Grows when no actions are taken, resets on action.
+    current_interval_ns: u64,
+    /// Maximum backoff interval (ns) — caps exponential growth.
+    max_interval_ns: u64,
     /// Version profile controlling consolidation strategy.
     pub version_profile: Option<VersionProfile>,
     /// EC2 catalog for replace-path instance selection.
@@ -649,10 +653,13 @@ pub struct ConsolidationHandler {
 
 impl ConsolidationHandler {
     pub fn new(pool: NodePool, policy: ConsolidationPolicy) -> Self {
+        let base = 30_000_000_000u64; // 30s default
         Self {
             pool,
             policy,
-            loop_interval_ns: 30_000_000_000, // 30s default
+            loop_interval_ns: base,
+            current_interval_ns: base,
+            max_interval_ns: 300_000_000_000, // 5 min cap
             version_profile: None,
             catalog: None,
             consolidate_after_ns: 0,
@@ -702,6 +709,8 @@ impl EventHandler for ConsolidationHandler {
         // Pod eviction is deferred to NodeDrained events (handled by DrainHandler).
         const STABILIZATION_NS: u64 = 15_000_000_000;
         let mut action_offset: u64 = 0;
+
+        let has_actions = !actions.is_empty();
 
         for action in actions {
             match action {
@@ -770,9 +779,17 @@ impl EventHandler for ConsolidationHandler {
             }
         }
 
-        // Always re-schedule next consolidation loop
+        // Backoff: if no actions were taken, double the interval (up to max).
+        // If actions were taken, reset to base interval for responsive follow-up.
+        if has_actions {
+            self.current_interval_ns = self.loop_interval_ns;
+        } else {
+            self.current_interval_ns = (self.current_interval_ns * 2).min(self.max_interval_ns);
+        }
+
+        // Re-schedule next consolidation loop with current (possibly backed-off) interval
         follow_ups.push(ScheduledEvent {
-            time: SimTime(time.0 + self.loop_interval_ns),
+            time: SimTime(time.0 + self.current_interval_ns),
             event: Event::KarpenterConsolidationLoop,
         });
 
