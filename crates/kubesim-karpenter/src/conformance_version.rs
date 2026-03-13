@@ -67,11 +67,15 @@ fn v1_multi_node_consolidation_spec() -> BehaviorSpec {
     BehaviorSpec {
         name: "v1-multi-node-consolidation",
         description: "v1.0 consolidation can drain multiple underutilized nodes per pass",
-        applies_to: VersionRange { min: Some(KarpenterVersion::V1), max: Some(KarpenterVersion::V0_35) }, // TODO: fix test setup — implementation exists but test needs updating
+        applies_to: VersionRange::exact(KarpenterVersion::V1),
         test: Box::new(|profile| {
             let mut state = ClusterState::new();
-            // Target node with capacity to absorb all pods (has a pod so it's not "empty")
-            let target = state.add_node(mk_node_pool(8000, 16_000_000_000, "default"));
+            // Target node marked do-not-disrupt so it absorbs pods without being
+            // a consolidation candidate itself.
+            let target = state.add_node(Node {
+                do_not_disrupt: true,
+                ..mk_node_pool(8000, 16_000_000_000, "default")
+            });
             let anchor = state.submit_pod(mk_pod(100, 100_000_000));
             state.bind_pod(anchor, target);
 
@@ -83,6 +87,14 @@ fn v1_multi_node_consolidation_spec() -> BehaviorSpec {
             let n2 = state.add_node(mk_node_pool(4000, 8_000_000_000, "default"));
             let p2 = state.submit_pod(mk_pod(200, 200_000_000));
             state.bind_pod(p2, n2);
+
+            // Filler nodes in a separate pool to raise total_nodes so the 10%
+            // disruption budget allows ≥2 underutilized disruptions.
+            for _ in 0..17 {
+                let fid = state.add_node(mk_node_pool(1000, 1_000_000_000, "filler"));
+                let fp = state.submit_pod(mk_pod(100, 100_000_000));
+                state.bind_pod(fp, fid);
+            }
 
             let actions = evaluate_versioned(
                 &state, ConsolidationPolicy::WhenUnderutilized, 10,
