@@ -17,10 +17,31 @@ from scipy import stats
 from kubesim.analysis import results_to_df, bootstrap_ci
 
 METRICS = [
-    "cumulative_cost", "time_weighted_node_count", "time_to_stable",
+    "cumulative_cost", "cumulative_vcpu_hours", "cumulative_memory_gib_hours",
+    "time_weighted_node_count", "time_to_stable",
     "cumulative_pending_pod_seconds", "disruption_count", "disruption_seconds",
     "peak_node_count", "peak_cost_rate",
 ]
+
+# Human-readable labels with units
+METRIC_LABELS = {
+    "cumulative_cost": "Cumulative Cost ($)",
+    "cumulative_vcpu_hours": "Cumulative vCPU-Hours",
+    "cumulative_memory_gib_hours": "Cumulative GiB-Hours",
+    "time_weighted_node_count": "Time-Weighted Node Count",
+    "time_to_stable": "Time to Stable (s)",
+    "cumulative_pending_pod_seconds": "Pending Pod-Seconds",
+    "disruption_count": "Disruption Count",
+    "disruption_seconds": "Disruption-Seconds",
+    "peak_node_count": "Peak Node Count",
+    "peak_cost_rate": "Peak Cost Rate ($/hr)",
+    "total_cost_per_hour": "Cost Rate ($/hr)",
+    "node_count": "Node Count",
+    "running_pods": "Running Pods",
+    "pending_pods": "Pending Pods",
+    "events_processed": "Events Processed",
+    "final_time": "Final Time",
+}
 
 # End-state metrics kept for diagnostics
 DIAGNOSTIC_METRICS = [
@@ -119,7 +140,8 @@ def report_to_markdown(report: dict) -> str:
         lines.append("| Metric | Mean | Median | p90 | p99 |")
         lines.append("|--------|------|--------|-----|-----|")
         for m, s in report["per_variant"][v].items():
-            lines.append(f"| {m} | {s['mean']:.4f} | {s['median']:.4f} | {s['p90']:.4f} | {s['p99']:.4f} |")
+            label = METRIC_LABELS.get(m, m)
+            lines.append(f"| {label} | {s['mean']:.4f} | {s['median']:.4f} | {s['p90']:.4f} | {s['p99']:.4f} |")
         lines.append("")
 
         # Diagnostic end-state metrics
@@ -129,7 +151,8 @@ def report_to_markdown(report: dict) -> str:
             lines.append("| Metric | Mean | Median | p90 | p99 |")
             lines.append("|--------|------|--------|-----|-----|")
             for m, s in report["per_variant_diagnostic"][v].items():
-                lines.append(f"| {m} | {s['mean']:.4f} | {s['median']:.4f} | {s['p90']:.4f} | {s['p99']:.4f} |")
+                label = METRIC_LABELS.get(m, m)
+                lines.append(f"| {label} | {s['mean']:.4f} | {s['median']:.4f} | {s['p90']:.4f} | {s['p99']:.4f} |")
             lines.append("")
 
     # Comparison table (cumulative — primary)
@@ -140,8 +163,9 @@ def report_to_markdown(report: dict) -> str:
         lines.append("|--------|--------|-------------|----------|---------|--------|")
         for r in report["comparison"]:
             ci = f"[{r['ci_low']:.4f}, {r['ci_high']:.4f}]"
+            label = METRIC_LABELS.get(r['metric'], r['metric'])
             lines.append(
-                f"| {r['metric']} | {r['winner']} | {r['delta']:.4f} | "
+                f"| {label} | {r['winner']} | {r['delta']:.4f} | "
                 f"{r['effect_pct']:.2f}% | {r['p_value']:.4g} | {ci} |"
             )
         lines.append("")
@@ -154,8 +178,9 @@ def report_to_markdown(report: dict) -> str:
         lines.append("|--------|--------|-------------|----------|---------|--------|")
         for r in report["comparison_diagnostic"]:
             ci = f"[{r['ci_low']:.4f}, {r['ci_high']:.4f}]"
+            label = METRIC_LABELS.get(r['metric'], r['metric'])
             lines.append(
-                f"| {r['metric']} | {r['winner']} | {r['delta']:.4f} | "
+                f"| {label} | {r['winner']} | {r['delta']:.4f} | "
                 f"{r['effect_pct']:.2f}% | {r['p_value']:.4g} | {ci} |"
             )
         lines.append("")

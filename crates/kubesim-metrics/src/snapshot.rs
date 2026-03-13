@@ -66,6 +66,10 @@ pub struct MetricsSnapshot {
     pub cpu_weighted_entropy: f64,
     /// Normalized CPU-weighted entropy (H/ln(N)).
     pub cpu_weighted_entropy_normalized: f64,
+    /// Total vCPU allocated across all nodes (in whole vCPUs, e.g. 4.0 = 4 vCPU).
+    pub total_vcpu_allocated: f64,
+    /// Total memory allocated across all nodes (in GiB).
+    pub total_memory_allocated_gib: f64,
 }
 
 #[cfg(test)]
