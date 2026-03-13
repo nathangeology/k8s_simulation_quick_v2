@@ -1,0 +1,111 @@
+[
+  {
+    "time": 0,
+    "elapsed_s": 0,
+    "node_count": 0,
+    "pod_count": 25,
+    "pending_count": 6,
+    "total_cost_per_hour": 0,
+    "total_vcpu_allocated": 0,
+    "total_memory_allocated_gib": 0
+  }
+,
+  {
+    "time": 30000000000,
+    "elapsed_s": 30,
+    "node_count": 1,
+    "pod_count": 105,
+    "pending_count": 19,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 60000000000,
+    "elapsed_s": 60,
+    "node_count": 2,
+    "pod_count": 222,
+    "pending_count": 0,
+    "total_cost_per_hour": 6.1344,
+    "total_vcpu_allocated": 127.80000000000001,
+    "total_memory_allocated_gib": 255.98
+  }
+,
+  {
+    "time": 91000000000,
+    "elapsed_s": 91,
+    "node_count": 2,
+    "pod_count": 177,
+    "pending_count": 0,
+    "total_cost_per_hour": 4.7904,
+    "total_vcpu_allocated": 99.80000000000001,
+    "total_memory_allocated_gib": 199.98
+  }
+,
+  {
+    "time": 121000000000,
+    "elapsed_s": 121,
+    "node_count": 2,
+    "pod_count": 44,
+    "pending_count": 0,
+    "total_cost_per_hour": 4.7904,
+    "total_vcpu_allocated": 99.80000000000001,
+    "total_memory_allocated_gib": 199.98
+  }
+,
+  {
+    "time": 151000000000,
+    "elapsed_s": 151,
+    "node_count": 1,
+    "pod_count": 102,
+    "pending_count": 1,
+    "total_cost_per_hour": 4.6032,
+    "total_vcpu_allocated": 95.9,
+    "total_memory_allocated_gib": 191.99
+  }
+,
+  {
+    "time": 182000000000,
+    "elapsed_s": 182,
+    "node_count": 1,
+    "pod_count": 172,
+    "pending_count": 0,
+    "total_cost_per_hour": 4.6032,
+    "total_vcpu_allocated": 95.9,
+    "total_memory_allocated_gib": 191.99
+  }
+,
+  {
+    "time": 212000000000,
+    "elapsed_s": 212,
+    "node_count": 1,
+    "pod_count": 97,
+    "pending_count": 0,
+    "total_cost_per_hour": 4.6032,
+    "total_vcpu_allocated": 95.9,
+    "total_memory_allocated_gib": 191.99
+  }
+,
+  {
+    "time": 242000000000,
+    "elapsed_s": 242,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 4.6032,
+    "total_vcpu_allocated": 95.9,
+    "total_memory_allocated_gib": 191.99
+  }
+,
+  {
+    "time": 273000000000,
+    "elapsed_s": 273,
+    "node_count": 1,
+    "pod_count": 32,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+]
