@@ -61,6 +61,33 @@ pub struct ClusterConfig {
     /// Percentage of node capacity reserved for daemonsets (applied after fixed overhead).
     #[serde(default)]
     pub daemonset_overhead_percent: Option<u32>,
+    /// Daemonset pods created on every node at NodeReady.
+    /// If omitted: default [logging_daemonset: 150m CPU, 500Mi memory].
+    /// If empty list []: no daemonsets.
+    #[serde(default)]
+    pub daemonsets: Option<Vec<DaemonSetDef>>,
+}
+
+/// A daemonset definition in scenario YAML.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonSetDef {
+    pub name: String,
+    #[serde(default = "default_ds_cpu")]
+    pub cpu_request: String,
+    #[serde(default = "default_ds_memory")]
+    pub memory_request: String,
+}
+
+fn default_ds_cpu() -> String { "150m".into() }
+fn default_ds_memory() -> String { "500Mi".into() }
+
+impl DaemonSetDef {
+    pub fn cpu_millis(&self) -> u64 {
+        parse_cpu_millis(&self.cpu_request).unwrap_or(150)
+    }
+    pub fn memory_bytes(&self) -> u64 {
+        parse_memory_bytes(&self.memory_request).unwrap_or(500 * 1024 * 1024)
+    }
 }
 
 /// Fixed resource overhead subtracted from node allocatable capacity.

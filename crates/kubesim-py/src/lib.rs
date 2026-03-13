@@ -9,7 +9,7 @@ use kubesim_core::{
     PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime,
 };
 use kubesim_ec2::Catalog;
-use kubesim_engine::{DaemonSetHandler, DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
+use kubesim_engine::{DaemonSetHandler, DaemonSetSpec, DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
 use kubesim_karpenter::{
     ConsolidationHandler, ConsolidationPolicy, DrainHandler, NodePool, NodePoolLimits,
     ProvisioningHandler, SpotInterruptionHandler,
@@ -96,6 +96,21 @@ fn compute_overhead(cluster: &kubesim_workload::ClusterConfig) -> Resources {
         None => (0, 0),
     };
     Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 }
+}
+
+/// Build a DaemonSetHandler from scenario config.
+/// None → default (logging_daemonset), Some(empty) → no daemonsets, Some(list) → custom.
+fn daemonset_handler_from_scenario(defs: &Option<Vec<kubesim_workload::DaemonSetDef>>) -> DaemonSetHandler {
+    match defs {
+        None => DaemonSetHandler::with_defaults(),
+        Some(list) => DaemonSetHandler::new(
+            list.iter().map(|d| DaemonSetSpec {
+                name: d.name.clone(),
+                cpu_millis: d.cpu_millis(),
+                memory_bytes: d.memory_bytes(),
+            }).collect(),
+        ),
+    }
 }
 
 fn instance_to_node_with_pct(catalog: &Catalog, instance_type: &str, overhead: &Resources, daemonset_pct: u32) -> Node {
@@ -499,7 +514,7 @@ fn run_single(
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
-    engine.add_handler(Box::new(DaemonSetHandler::with_defaults()));
+    engine.add_handler(Box::new(daemonset_handler_from_scenario(&scenario.study.cluster.daemonsets)));
 
     // Register karpenter handlers for pools that have karpenter config
     let version_profile = variant
@@ -1186,7 +1201,7 @@ impl StepSimulation {
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));
-        engine.add_handler(Box::new(DaemonSetHandler::with_defaults()));
+        engine.add_handler(Box::new(daemonset_handler_from_scenario(&self.scenario.study.cluster.daemonsets)));
 
         // Register karpenter handlers for pools that have karpenter config
         // Sort pools by weight (higher weight = higher priority)
