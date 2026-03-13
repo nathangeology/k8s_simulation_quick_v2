@@ -9,7 +9,7 @@ use kubesim_core::{
     PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime,
 };
 use kubesim_ec2::Catalog;
-use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
+use kubesim_engine::{DaemonSetHandler, DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
 use kubesim_karpenter::{
     ConsolidationHandler, ConsolidationPolicy, DrainHandler, NodePool, NodePoolLimits,
     ProvisioningHandler, SpotInterruptionHandler,
@@ -181,6 +181,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                     labels: spec.labels.clone(),
                     do_not_disrupt: spec.do_not_disrupt,
                     duration_ns,
+                    is_daemonset: false,
                 };
                 let pod_id = state.submit_pod(pod);
 
@@ -420,7 +421,8 @@ fn run_single(
             WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
                 let mut node = instance_to_node_with_pct(&catalog, instance_type, &overhead, daemonset_pct);
                 node.pool_name = resolve_pool_name(&scenario.study.cluster.node_pools, *pool_index);
-                state.add_node(node);
+                let node_id = state.add_node(node);
+                engine.schedule(SimTime(0), EngineEvent::NodeReady(node_id));
             }
             WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
                 engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
@@ -497,6 +499,7 @@ fn run_single(
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
+    engine.add_handler(Box::new(DaemonSetHandler::with_defaults()));
 
     // Register karpenter handlers for pools that have karpenter config
     let version_profile = variant
@@ -1103,7 +1106,8 @@ impl StepSimulation {
                 WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
                     let mut node = instance_to_node_with_pct(&catalog, instance_type, &overhead, daemonset_pct);
                     node.pool_name = resolve_pool_name(&self.scenario.study.cluster.node_pools, *pool_index);
-                    state.add_node(node);
+                    let node_id = state.add_node(node);
+                    engine.schedule(SimTime(0), EngineEvent::NodeReady(node_id));
                 }
                 WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
                     engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
@@ -1182,6 +1186,7 @@ impl StepSimulation {
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));
+        engine.add_handler(Box::new(DaemonSetHandler::with_defaults()));
 
         // Register karpenter handlers for pools that have karpenter config
         // Sort pools by weight (higher weight = higher priority)

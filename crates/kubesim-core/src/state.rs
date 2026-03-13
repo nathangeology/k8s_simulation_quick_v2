@@ -170,6 +170,7 @@ mod tests {
             labels: LabelSet::default(),
             do_not_disrupt: false,
             duration_ns: None,
+            is_daemonset: false,
         }
     }
 

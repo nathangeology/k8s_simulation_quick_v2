@@ -6,8 +6,10 @@ use std::collections::BinaryHeap;
 
 pub mod replicaset;
 pub mod deletion_cost;
+pub mod daemonset;
 pub use replicaset::ReplicaSetController;
 pub use deletion_cost::DeletionCostController;
+pub use daemonset::{DaemonSetHandler, DaemonSetSpec};
 
 // ── Events ──────────────────────────────────────────────────────
 
