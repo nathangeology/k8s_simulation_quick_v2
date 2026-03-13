@@ -588,7 +588,12 @@ fn run_single(
         }
     }
 
-    let events_processed = engine.run_to_completion(&mut state);
+    // Compute sim end time: last workload event + 15 min stabilization
+    let max_event_time_ns = workload_events.iter().map(|e| e.time().0).max().unwrap_or(0);
+    let stabilization_ns = 15 * 60 * 1_000_000_000u64; // 15 minutes
+    let max_sim_time_ns = max_event_time_ns + stabilization_ns;
+
+    let events_processed = engine.run_until(&mut state, SimTime(max_sim_time_ns));
 
     // Extract snapshots from SimHandler for cumulative metrics and timeseries
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0, 0.0, 0.0);

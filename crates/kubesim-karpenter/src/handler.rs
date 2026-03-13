@@ -111,10 +111,11 @@ impl EventHandler for ProvisioningHandler {
             });
         }
 
-        // Only schedule the next periodic reconcile if there are still pending pods.
-        // When the pending queue is empty, the loop stops — it will be restarted
-        // on-demand when new pods become unschedulable (via SimHandler/DrainHandler).
-        if !state.pending_queue.is_empty() {
+        // Only schedule the next periodic reconcile if progress was made.
+        // When no decisions are produced (e.g. at max_nodes), stop looping
+        // to avoid burning event budget. The loop restarts on-demand when
+        // new pods are submitted or evicted.
+        if !decisions.is_empty() && !state.pending_queue.is_empty() {
             follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0 + self.reconcile_interval_ns),
                 event: Event::KarpenterProvisioningLoop,

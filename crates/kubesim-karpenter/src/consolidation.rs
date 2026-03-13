@@ -611,8 +611,12 @@ fn validate_before_execute(
         };
 
         if is_empty {
-            if !node.pods.is_empty() {
-                continue; // pods landed since planning
+            // Check that only daemonset pods remain (consistent with find_empty_nodes)
+            let has_non_daemonset = node.pods.iter().any(|&pid| {
+                state.pods.get(pid).map_or(false, |p| !p.is_daemonset)
+            });
+            if has_non_daemonset {
+                continue; // workload pods landed since planning
             }
         } else if pods_can_reschedule(state, nid, &nodes_being_removed).is_none() {
             continue; // pods no longer fit elsewhere
