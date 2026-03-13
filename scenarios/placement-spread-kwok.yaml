@@ -1,0 +1,38 @@
+study:
+  name: placement-spread-kwok
+  runs: 50
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types: [c-4x-amd64-linux, c-8x-amd64-linux, c-16x-amd64-linux, c-32x-amd64-linux]
+        min_nodes: 0
+        max_nodes: 50
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "5s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+      provisioner_batch_jitter: "3s"
+      pod_startup: "2s"
+
+  workloads:
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}
