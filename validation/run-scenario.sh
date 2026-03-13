@@ -83,27 +83,24 @@ EOF
 
         # Phase 1: Start with 1 pod per deployment (2 total)
         log "Phase 1: Creating 2 deployments with 1 replica each..."
-        for i in A B; do
-            cpu="950m"
-            mem="3.5Gi"
-            [ "$i" = "B" ] && mem="6.5Gi"
 
-            kubectl apply -f - <<EOF
+        # Deployment A: 950m CPU, 3.5Gi memory
+        kubectl apply -f - <<'EOFA'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: workload-${i,,}
+  name: workload-a
   labels:
     kubesim-scenario: benchmark-control
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: workload-${i,,}
+      app: workload-a
   template:
     metadata:
       labels:
-        app: workload-${i,,}
+        app: workload-a
     spec:
       terminationGracePeriodSeconds: 0
       containers:
@@ -111,14 +108,45 @@ spec:
         image: registry.k8s.io/pause:3.9
         resources:
           requests:
-            cpu: ${cpu}
-            memory: ${mem}
+            cpu: 950m
+            memory: 3.5Gi
       tolerations:
       - key: "kwok.x-k8s.io/node"
         operator: "Exists"
         effect: "NoSchedule"
-EOF
-        done
+EOFA
+
+        # Deployment B: 950m CPU, 6.5Gi memory
+        kubectl apply -f - <<'EOFB'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-b
+  labels:
+    kubesim-scenario: benchmark-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: workload-b
+  template:
+    metadata:
+      labels:
+        app: workload-b
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 950m
+            memory: 6.5Gi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOFB
 
         # Phase 2: Scale out at t=10s
         log "Waiting 10s then scaling to 500 replicas each..."
