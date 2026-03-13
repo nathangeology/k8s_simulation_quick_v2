@@ -308,6 +308,12 @@ pub fn provision_versioned(
 
             let mut claims: Vec<FlexNodeClaim> = Vec::new();
 
+            // Precompute allowed types and their effective capacities once
+            let types_for_fit = allowed_types(catalog, pool);
+            let type_capacities: Vec<(u64, u64, u32)> = types_for_fit.iter()
+                .map(|it| (effective_cpu(it, overhead, daemonset_pct), effective_mem(it, overhead, daemonset_pct), it.gpu_count))
+                .collect();
+
             for &(pid, ref req) in &pods {
                 let pod = match state.pods.get(pid) {
                     Some(p) => p,
@@ -331,10 +337,8 @@ pub fn provision_versioned(
                     let new_mem = claim.total_mem + req.memory_bytes;
                     let new_gpu = claim.total_gpu + req.gpu;
                     // Check if ANY allowed instance type can still fit
-                    let fits = allowed_types(catalog, pool).iter().any(|it| {
-                        let eff_cpu = effective_cpu(it, overhead, daemonset_pct);
-                        let eff_mem = effective_mem(it, overhead, daemonset_pct);
-                        it.gpu_count >= new_gpu && eff_cpu >= new_cpu && eff_mem >= new_mem
+                    let fits = type_capacities.iter().any(|&(cpu, mem, gpu)| {
+                        gpu >= new_gpu && cpu >= new_cpu && mem >= new_mem
                     });
                     if fits {
                         claim.pod_ids.push(pid);
