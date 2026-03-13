@@ -184,11 +184,17 @@ fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
 /// For `MultiNode` strategy: builds a candidate set greedily — each candidate is checked
 /// against remaining capacity excluding nodes already selected for removal.
 /// Nodes younger than `consolidate_after_ns` are exempt from consolidation.
+///
+/// `max_candidates` limits how many candidates are evaluated per pass (0 = unlimited).
+/// `timeout_candidates` limits multi-node evaluation iterations before falling back
+/// to single-node (0 = no timeout). Only applies when strategy is `MultiNode`.
 fn find_underutilized_nodes(
     state: &ClusterState,
     pool_name: &str,
     strategy: ConsolidationStrategy,
     consolidate_after_ns: u64,
+    max_candidates: usize,
+    timeout_candidates: usize,
 ) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
     let mut nodes_being_removed: HashSet<NodeId> = HashSet::new();
@@ -204,11 +210,26 @@ fn find_underutilized_nodes(
         .collect();
     sort_candidates(state, &mut candidates);
 
-    for (nid, _) in candidates {
-        if let Some(pod_ids) = pods_can_reschedule(state, nid, &nodes_being_removed) {
-            nodes_being_removed.insert(nid);
+    // Apply batch size limit
+    if max_candidates > 0 && candidates.len() > max_candidates {
+        candidates.truncate(max_candidates);
+    }
+
+    let mut evaluated: usize = 0;
+    let mut timed_out = false;
+
+    for (nid, _) in &candidates {
+        // Multi-node timeout: if we've evaluated enough candidates, fall back to single-node
+        if strategy == ConsolidationStrategy::MultiNode && timeout_candidates > 0 && evaluated >= timeout_candidates {
+            timed_out = true;
+            break;
+        }
+        evaluated += 1;
+
+        if let Some(pod_ids) = pods_can_reschedule(state, *nid, &nodes_being_removed) {
+            nodes_being_removed.insert(*nid);
             actions.push(ConsolidationAction::DrainAndTerminate {
-                node_id: nid,
+                node_id: *nid,
                 pod_ids,
             });
             if strategy == ConsolidationStrategy::SingleNode {
@@ -216,6 +237,24 @@ fn find_underutilized_nodes(
             }
         }
     }
+
+    // Timeout fallback: multi-node timed out, try single-node on remaining candidates
+    if timed_out {
+        for (nid, _) in candidates.iter().skip(evaluated) {
+            if nodes_being_removed.contains(nid) {
+                continue;
+            }
+            if let Some(pod_ids) = pods_can_reschedule(state, *nid, &nodes_being_removed) {
+                nodes_being_removed.insert(*nid);
+                actions.push(ConsolidationAction::DrainAndTerminate {
+                    node_id: *nid,
+                    pod_ids,
+                });
+                break; // single-node: at most 1 additional
+            }
+        }
+    }
+
     actions
 }
 
@@ -329,6 +368,8 @@ pub fn evaluate_versioned(
     let replace_enabled = profile
         .map(|p| p.replace_consolidation)
         .unwrap_or(true);
+    let max_candidates = profile.map(|p| p.max_candidates).unwrap_or(10);
+    let timeout_candidates = profile.map(|p| p.multi_node_timeout_candidates).unwrap_or(10);
 
     // v1.x per-reason budgets: compute per-reason caps from profile budgets.
     // If a budget entry has reasons, it applies only to those reasons.
@@ -389,7 +430,7 @@ pub fn evaluate_versioned(
 
     if policy == ConsolidationPolicy::WhenUnderutilized && total_used < max_disrupted {
         let mut underutil_used: u32 = 0;
-        for action in find_underutilized_nodes(state, pool_name, strategy, consolidate_after_ns) {
+        for action in find_underutilized_nodes(state, pool_name, strategy, consolidate_after_ns, max_candidates, timeout_candidates) {
             if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                 break;
             }

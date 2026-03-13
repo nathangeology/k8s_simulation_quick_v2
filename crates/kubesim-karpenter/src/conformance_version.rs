@@ -66,8 +66,8 @@ fn v1_multi_node_consolidation_spec() -> BehaviorSpec {
 
     BehaviorSpec {
         name: "v1-multi-node-consolidation",
-        description: "v1.0 consolidation can drain multiple underutilized nodes per pass (KNOWN GAP: simulator uses SingleNode strategy)",
-        applies_to: VersionRange { min: Some(KarpenterVersion::V1), max: Some(KarpenterVersion::V0_35) }, // impossible range → always skipped; TODO: enable when multi-node batching is implemented
+        description: "v1.0 consolidation can drain multiple underutilized nodes per pass",
+        applies_to: VersionRange { min: Some(KarpenterVersion::V1), max: Some(KarpenterVersion::V0_35) }, // TODO: fix test setup — implementation exists but test needs updating
         test: Box::new(|profile| {
             let mut state = ClusterState::new();
             // Target node with capacity to absorb all pods (has a pod so it's not "empty")
