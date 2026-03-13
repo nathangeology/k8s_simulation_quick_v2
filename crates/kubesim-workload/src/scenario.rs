@@ -163,6 +163,17 @@ pub struct WorkloadDef {
     /// Defaults to "5m" if not specified.
     #[serde(default)]
     pub scale_down_stagger: Option<String>,
+    /// When this workload begins (e.g. "0s", "5m", "1h"). Default: "0s".
+    #[serde(default)]
+    pub start_at: Option<String>,
+    /// Time between individual pod submissions within a deployment (e.g. "1s", "2s").
+    /// Simulates rolling deployment. Default: no stagger (all at once).
+    #[serde(default)]
+    pub pod_submit_interval: Option<String>,
+    /// Time between individual pod removals during scale-down (e.g. "2s").
+    /// Simulates RS controller removing pods one at a time. Default: all at once.
+    #[serde(default)]
+    pub scale_down_interval: Option<String>,
 }
 
 /// A scale-down event that reduces replicas at a given time.

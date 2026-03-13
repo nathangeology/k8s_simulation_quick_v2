@@ -120,17 +120,26 @@ pub fn generate_random_scenario(config: &RandomScenarioConfig) -> Vec<Event> {
     let total_aw = aw.web_app + aw.ml_training + aw.batch_job + aw.saas_microservice;
 
     let mut owner_counter: u32 = 0;
+    // Spread workload submissions over the first 10 minutes
+    let spread_ns: u64 = 600_000_000_000; // 10 minutes in ns
 
-    for _ in 0..wl_count {
+    for wl_idx in 0..wl_count {
         let archetype = pick_archetype(aw, total_aw, &mut rng);
         let owner_id = owner_counter;
         owner_counter += 1;
 
+        // Stagger workload start times across the spread window
+        let start_ns = if wl_count > 1 {
+            (wl_idx as u64) * spread_ns / (wl_count as u64 - 1).max(1)
+        } else {
+            0
+        };
+
         match archetype {
-            Archetype::WebApp => emit_web_app(&mut rng, &mut events, owner_id),
-            Archetype::MlTraining => emit_ml_training(&mut rng, &mut events, owner_id),
-            Archetype::BatchJob => emit_batch_job(&mut rng, &mut events, owner_id),
-            Archetype::SaasMicroservice => emit_saas_microservice(&mut rng, &mut events, owner_id),
+            Archetype::WebApp => emit_web_app(&mut rng, &mut events, owner_id, start_ns),
+            Archetype::MlTraining => emit_ml_training(&mut rng, &mut events, owner_id, start_ns),
+            Archetype::BatchJob => emit_batch_job(&mut rng, &mut events, owner_id, start_ns),
+            Archetype::SaasMicroservice => emit_saas_microservice(&mut rng, &mut events, owner_id, start_ns),
         }
     }
 
@@ -180,14 +189,15 @@ fn normal_clamped(rng: &mut StdRng, mean: f64, std: f64, lo: f64, hi: f64) -> f6
 
 // ── Archetype emitters ──────────────────────────────────────────
 
-fn emit_web_app(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
+fn emit_web_app(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, start_ns: u64) {
     let replicas = rng.gen_range(2..=20);
     let cpu = normal_clamped(rng, 250.0, 100.0, 50.0, 1000.0) as u64;
     let mem = normal_clamped(rng, 256.0, 128.0, 64.0, 1024.0) as u64 * 1024 * 1024;
+    let pod_interval: u64 = 1_000_000_000; // 1s between pods (rolling deploy)
 
-    for _ in 0..replicas {
+    for r in 0..replicas {
         events.push(Event::PodSubmitted {
-            time: SimTime(0),
+            time: SimTime(start_ns + (r as u64) * pod_interval),
             workload_name: "web_app".into(),
             owner_id,
             requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
@@ -197,55 +207,60 @@ fn emit_web_app(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
             duration_ns: None,
         });
     }
-    // HPA
-    events.push(Event::HpaEvaluation { time: SimTime(15_000_000_000), owner_id });
+    // HPA 15s after last pod
+    events.push(Event::HpaEvaluation {
+        time: SimTime(start_ns + (replicas as u64) * pod_interval + 15_000_000_000),
+        owner_id,
+    });
 }
 
-fn emit_ml_training(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
+fn emit_ml_training(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, start_ns: u64) {
     let cpu = rng.gen_range(4000..=32000);
     let mem = rng.gen_range(16..=128) as u64 * 1024 * 1024 * 1024;
     let gpu_choices = [1, 2, 4, 8];
     let gpu = gpu_choices[rng.gen_range(0..gpu_choices.len())];
 
     events.push(Event::PodSubmitted {
-        time: SimTime(0),
+        time: SimTime(start_ns),
         workload_name: "ml_training".into(),
         owner_id,
         requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu, ephemeral_bytes: 0 },
         limits: Resources { cpu_millis: cpu, memory_bytes: mem, gpu, ephemeral_bytes: 0 },
-        priority: 100, // high
+        priority: 100,
         deletion_cost: None,
         duration_ns: None,
     });
 }
 
-fn emit_batch_job(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
+fn emit_batch_job(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, start_ns: u64) {
     let parallelism = rng.gen_range(1..=20);
     let cpu = rng.gen_range(500..=4000);
     let mem = rng.gen_range(512..=8192) as u64 * 1024 * 1024;
+    let pod_interval: u64 = 500_000_000; // 0.5s between parallel pods
 
-    for _ in 0..parallelism {
+    for p in 0..parallelism {
         events.push(Event::PodSubmitted {
-            time: SimTime(0),
+            time: SimTime(start_ns + (p as u64) * pod_interval),
             workload_name: "batch_job".into(),
             owner_id,
             requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
             limits: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
-            priority: -100, // low
+            priority: -100,
             deletion_cost: None,
             duration_ns: None,
         });
     }
 }
 
-fn emit_saas_microservice(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32) {
+fn emit_saas_microservice(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, start_ns: u64) {
     let replicas = rng.gen_range(3..=30);
     let cpu = normal_clamped(rng, 500.0, 200.0, 100.0, 2000.0) as u64;
     let mem = normal_clamped(rng, 512.0, 256.0, 128.0, 2048.0) as u64 * 1024 * 1024;
+    let pod_interval: u64 = 1_000_000_000; // 1s between pods
 
-    for _ in 0..replicas {
+    for r in 0..replicas {
         events.push(Event::PodSubmitted {
-            time: SimTime(0),
+            time: SimTime(start_ns + (r as u64) * pod_interval),
             workload_name: "saas_microservice".into(),
             owner_id,
             requests: Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 },
@@ -255,6 +270,9 @@ fn emit_saas_microservice(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u
             duration_ns: None,
         });
     }
-    // HPA
-    events.push(Event::HpaEvaluation { time: SimTime(15_000_000_000), owner_id });
+    // HPA 15s after last pod
+    events.push(Event::HpaEvaluation {
+        time: SimTime(start_ns + (replicas as u64) * pod_interval + 15_000_000_000),
+        owner_id,
+    });
 }

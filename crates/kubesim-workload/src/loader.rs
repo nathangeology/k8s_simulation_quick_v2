@@ -125,18 +125,42 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
             .and_then(parse_duration_ns)
             .unwrap_or(300_000_000_000); // 5m default
 
+        // Pacing: workload start offset
+        let start_ns = workload
+            .start_at
+            .as_deref()
+            .and_then(parse_duration_ns)
+            .unwrap_or(0);
+
+        // Pacing: interval between individual pod/RS submissions within a deployment
+        let submit_interval_ns = workload
+            .pod_submit_interval
+            .as_deref()
+            .and_then(parse_duration_ns)
+            .unwrap_or(0);
+
+        // Pacing: interval between individual pod removals during scale-down
+        let sd_interval_ns = workload
+            .scale_down_interval
+            .as_deref()
+            .and_then(parse_duration_ns)
+            .unwrap_or(0);
+
         for i in 0..count {
             let owner_id = owner_counter;
             owner_counter += 1;
+
+            // Stagger deployment instances by submit_interval * replicas * i
+            let instance_offset = start_ns + (i as u64) * submit_interval_ns * (replicas as u64);
 
             let requests = sample_resources(workload, rng);
 
             let duration_ns = workload.duration.as_ref().and_then(|d| sample_duration(d, rng));
 
             if replicas > 1 || workload.replicas.is_some() {
-                // Workload with replicas → emit ReplicaSet
+                // Workload with replicas → emit ReplicaSet at staggered time
                 events.push(Event::ReplicaSetSubmitted {
-                    time: SimTime(0),
+                    time: SimTime(instance_offset),
                     owner_id,
                     desired_replicas: replicas,
                     requests,
@@ -147,7 +171,7 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
             } else {
                 // Bare pod
                 events.push(Event::PodSubmitted {
-                    time: SimTime(0),
+                    time: SimTime(instance_offset),
                     workload_name: workload.workload_type.clone(),
                     owner_id,
                     requests,
@@ -158,26 +182,39 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                 });
             }
 
-            // Schedule HPA if configured
+            // Schedule HPA if configured (15s after this workload's start)
             if let Some(ref scaling) = workload.scaling {
                 if scaling.scaling_type == ScalingType::Hpa {
                     events.push(Event::HpaEvaluation {
-                        time: SimTime(15_000_000_000), // 15s initial delay
+                        time: SimTime(instance_offset + 15_000_000_000),
                         owner_id,
                     });
                 }
             }
 
             // Emit scale-down events with per-instance stagger when count > 1
+            // and per-pod interval within each scale-down batch
             if let Some(ref scale_downs) = workload.scale_down {
-                let offset = if count > 1 { (i as u64) * stagger_ns } else { 0 };
+                let cross_instance_offset = if count > 1 { (i as u64) * stagger_ns } else { 0 };
                 for sd in scale_downs {
                     if let Some(time_ns) = parse_duration_ns(&sd.at) {
-                        events.push(Event::ReplicaSetScaleDown {
-                            time: SimTime(time_ns + offset),
-                            owner_id,
-                            reduce_by: sd.reduce_by,
-                        });
+                        let base_time = time_ns + cross_instance_offset;
+                        if sd_interval_ns > 0 && sd.reduce_by > 1 {
+                            // Emit individual scale-down events with spacing
+                            for pod_idx in 0..sd.reduce_by {
+                                events.push(Event::ReplicaSetScaleDown {
+                                    time: SimTime(base_time + (pod_idx as u64) * sd_interval_ns),
+                                    owner_id,
+                                    reduce_by: 1,
+                                });
+                            }
+                        } else {
+                            events.push(Event::ReplicaSetScaleDown {
+                                time: SimTime(base_time),
+                                owner_id,
+                                reduce_by: sd.reduce_by,
+                            });
+                        }
                     }
                 }
             }
