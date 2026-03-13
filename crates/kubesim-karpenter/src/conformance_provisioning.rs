@@ -9,6 +9,10 @@ pub fn specs() -> Vec<BehaviorSpec> {
         ffd_bin_packing_spec(),
         deletion_cost_victim_selection_spec(),
         drain_triggers_rs_reconcile_spec(),
+        spread_creates_multiple_nodes_spec(),
+        antiaffinity_spreads_replicas_spec(),
+        cross_antiaffinity_separates_spec(),
+        nodeselector_routes_to_pool_spec(),
     ]
 }
 
@@ -293,6 +297,274 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
                 if pod.node == Some(drain_nid) {
                     return Err("pod still on drained node after reconcile".into());
                 }
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 4: 20 pods with maxSkew=1 on hostname → multiple NodeClaims (not 1).
+fn spread_creates_multiple_nodes_spec() -> BehaviorSpec {
+    use crate::nodepool::{NodePool, NodePoolLimits, NodePoolUsage};
+    use crate::provisioner::provision_versioned;
+    use kubesim_core::*;
+    use kubesim_ec2::Catalog;
+
+    BehaviorSpec {
+        name: "spread-creates-multiple-nodes",
+        description: "20 pods with topologySpreadConstraints maxSkew=1 on hostname \
+                       should produce ≥15 NodeClaims (not pack onto 1 node)",
+        applies_to: VersionRange::exact(KarpenterVersion::V1),
+        test: Box::new(|profile| {
+            let catalog = Catalog::embedded().map_err(|e| e.to_string())?;
+            let pool = NodePool {
+                name: "default".into(),
+                instance_types: vec!["m5.2xlarge".into()],
+                limits: NodePoolLimits { max_nodes: Some(30), ..Default::default() },
+                labels: vec![], taints: vec![],
+                max_disrupted_pct: 10, max_disrupted_count: None, weight: 0,
+                do_not_disrupt: false,
+            };
+            let usage = NodePoolUsage::default();
+            let mut state = ClusterState::new();
+            let owner = OwnerId(1);
+            let labels = LabelSet(vec![("app".into(), "web".into())]);
+            for _ in 0..20 {
+                let mut sc = SchedulingConstraints::default();
+                sc.topology_spread.push(TopologySpreadConstraint {
+                    max_skew: 1,
+                    topology_key: "kubernetes.io/hostname".into(),
+                    when_unsatisfiable: WhenUnsatisfiable::DoNotSchedule,
+                    label_selector: LabelSelector { match_labels: labels.clone() },
+                });
+                state.submit_pod(Pod {
+                    requests: Resources { cpu_millis: 500, memory_bytes: 512 * 1024 * 1024, gpu: 0, ephemeral_bytes: 0 },
+                    limits: Resources::default(), phase: PodPhase::Pending, node: None,
+                    scheduling_constraints: sc, deletion_cost: None, owner,
+                    qos_class: QoSClass::Burstable, priority: 0, labels: labels.clone(),
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                });
+            }
+            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
+            if decisions.len() < 15 {
+                return Err(format!(
+                    "expected ≥15 NodeClaims for 20 pods with maxSkew=1, got {}",
+                    decisions.len()
+                ));
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 5: 10 pods with self anti-affinity → multiple NodeClaims.
+fn antiaffinity_spreads_replicas_spec() -> BehaviorSpec {
+    use crate::nodepool::{NodePool, NodePoolLimits, NodePoolUsage};
+    use crate::provisioner::provision_versioned;
+    use kubesim_core::*;
+    use kubesim_ec2::Catalog;
+
+    BehaviorSpec {
+        name: "antiaffinity-spreads-replicas",
+        description: "10 pods with required self anti-affinity on hostname \
+                       should produce ≥3 NodeClaims",
+        applies_to: VersionRange::exact(KarpenterVersion::V1),
+        test: Box::new(|profile| {
+            let catalog = Catalog::embedded().map_err(|e| e.to_string())?;
+            let pool = NodePool {
+                name: "default".into(),
+                instance_types: vec!["m5.2xlarge".into()],
+                limits: NodePoolLimits { max_nodes: Some(20), ..Default::default() },
+                labels: vec![], taints: vec![],
+                max_disrupted_pct: 10, max_disrupted_count: None, weight: 0,
+                do_not_disrupt: false,
+            };
+            let usage = NodePoolUsage::default();
+            let mut state = ClusterState::new();
+            let owner = OwnerId(1);
+            let labels = LabelSet(vec![("app".into(), "cache".into())]);
+            for _ in 0..10 {
+                let mut sc = SchedulingConstraints::default();
+                sc.pod_affinity.push(PodAffinityTerm {
+                    affinity_type: AffinityType::Required,
+                    label_selector: LabelSelector { match_labels: labels.clone() },
+                    topology_key: "kubernetes.io/hostname".into(),
+                    anti: true,
+                });
+                state.submit_pod(Pod {
+                    requests: Resources { cpu_millis: 500, memory_bytes: 512 * 1024 * 1024, gpu: 0, ephemeral_bytes: 0 },
+                    limits: Resources::default(), phase: PodPhase::Pending, node: None,
+                    scheduling_constraints: sc, deletion_cost: None, owner,
+                    qos_class: QoSClass::Burstable, priority: 0, labels: labels.clone(),
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                });
+            }
+            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
+            if decisions.len() < 3 {
+                return Err(format!(
+                    "expected ≥3 NodeClaims for 10 pods with self anti-affinity, got {}",
+                    decisions.len()
+                ));
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 6: 2 deployments with mutual anti-affinity → ≥2 NodeClaims.
+fn cross_antiaffinity_separates_spec() -> BehaviorSpec {
+    use crate::nodepool::{NodePool, NodePoolLimits, NodePoolUsage};
+    use crate::provisioner::provision_versioned;
+    use kubesim_core::*;
+    use kubesim_ec2::Catalog;
+
+    BehaviorSpec {
+        name: "cross-antiaffinity-separates",
+        description: "2 deployments with mutual required anti-affinity on hostname \
+                       should produce ≥2 NodeClaims",
+        applies_to: VersionRange::exact(KarpenterVersion::V1),
+        test: Box::new(|profile| {
+            let catalog = Catalog::embedded().map_err(|e| e.to_string())?;
+            let pool = NodePool {
+                name: "default".into(),
+                instance_types: vec!["m5.2xlarge".into()],
+                limits: NodePoolLimits { max_nodes: Some(10), ..Default::default() },
+                labels: vec![], taints: vec![],
+                max_disrupted_pct: 10, max_disrupted_count: None, weight: 0,
+                do_not_disrupt: false,
+            };
+            let usage = NodePoolUsage::default();
+            let mut state = ClusterState::new();
+
+            let labels_a = LabelSet(vec![("app".into(), "frontend".into())]);
+            let labels_b = LabelSet(vec![("app".into(), "backend".into())]);
+
+            // Deploy A: anti-affinity against B
+            for _ in 0..3 {
+                let mut sc = SchedulingConstraints::default();
+                sc.pod_affinity.push(PodAffinityTerm {
+                    affinity_type: AffinityType::Required,
+                    label_selector: LabelSelector { match_labels: labels_b.clone() },
+                    topology_key: "kubernetes.io/hostname".into(),
+                    anti: true,
+                });
+                state.submit_pod(Pod {
+                    requests: Resources { cpu_millis: 500, memory_bytes: 512 * 1024 * 1024, gpu: 0, ephemeral_bytes: 0 },
+                    limits: Resources::default(), phase: PodPhase::Pending, node: None,
+                    scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(1),
+                    qos_class: QoSClass::Burstable, priority: 0, labels: labels_a.clone(),
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                });
+            }
+            // Deploy B: anti-affinity against A
+            for _ in 0..3 {
+                let mut sc = SchedulingConstraints::default();
+                sc.pod_affinity.push(PodAffinityTerm {
+                    affinity_type: AffinityType::Required,
+                    label_selector: LabelSelector { match_labels: labels_a.clone() },
+                    topology_key: "kubernetes.io/hostname".into(),
+                    anti: true,
+                });
+                state.submit_pod(Pod {
+                    requests: Resources { cpu_millis: 500, memory_bytes: 512 * 1024 * 1024, gpu: 0, ephemeral_bytes: 0 },
+                    limits: Resources::default(), phase: PodPhase::Pending, node: None,
+                    scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(2),
+                    qos_class: QoSClass::Burstable, priority: 0, labels: labels_b.clone(),
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                });
+            }
+
+            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
+            if decisions.len() < 2 {
+                return Err(format!(
+                    "expected ≥2 NodeClaims for cross anti-affinity, got {}",
+                    decisions.len()
+                ));
+            }
+            // Verify no NodeClaim has both frontend and backend pods
+            for d in &decisions {
+                let has_a = d.pod_ids.iter().any(|&pid| {
+                    state.pods.get(pid).map_or(false, |p| p.owner == OwnerId(1))
+                });
+                let has_b = d.pod_ids.iter().any(|&pid| {
+                    state.pods.get(pid).map_or(false, |p| p.owner == OwnerId(2))
+                });
+                if has_a && has_b {
+                    return Err("NodeClaim contains both frontend and backend pods despite anti-affinity".into());
+                }
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 7: pods with nodeSelector go to matching pool only.
+fn nodeselector_routes_to_pool_spec() -> BehaviorSpec {
+    use crate::nodepool::{NodePool, NodePoolLimits};
+    use crate::provisioner::batch_pending_pods;
+    use kubesim_core::*;
+
+    BehaviorSpec {
+        name: "nodeselector-routes-to-pool",
+        description: "Pods with nodeSelector are only batched into matching pools",
+        applies_to: VersionRange::all(),
+        test: Box::new(|_profile| {
+            let mut state = ClusterState::new();
+            // Pod requiring spot pool
+            let mut sc = SchedulingConstraints::default();
+            sc.node_affinity.push(NodeAffinityTerm {
+                affinity_type: AffinityType::Required,
+                match_labels: LabelSet(vec![("karpenter.sh/capacity-type".into(), "spot".into())]),
+            });
+            state.submit_pod(Pod {
+                requests: Resources { cpu_millis: 500, memory_bytes: 512 * 1024 * 1024, gpu: 0, ephemeral_bytes: 0 },
+                limits: Resources::default(), phase: PodPhase::Pending, node: None,
+                scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(1),
+                qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
+                do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+            });
+            // Pod requiring on-demand pool
+            let mut sc2 = SchedulingConstraints::default();
+            sc2.node_affinity.push(NodeAffinityTerm {
+                affinity_type: AffinityType::Required,
+                match_labels: LabelSet(vec![("karpenter.sh/capacity-type".into(), "on-demand".into())]),
+            });
+            state.submit_pod(Pod {
+                requests: Resources { cpu_millis: 500, memory_bytes: 512 * 1024 * 1024, gpu: 0, ephemeral_bytes: 0 },
+                limits: Resources::default(), phase: PodPhase::Pending, node: None,
+                scheduling_constraints: sc2, deletion_cost: None, owner: OwnerId(2),
+                qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
+                do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+            });
+
+            let spot_pool = NodePool {
+                name: "spot".into(),
+                instance_types: vec!["m5.xlarge".into()],
+                limits: NodePoolLimits::default(),
+                labels: vec![("karpenter.sh/capacity-type".into(), "spot".into())],
+                taints: vec![], max_disrupted_pct: 10, max_disrupted_count: None,
+                weight: 0, do_not_disrupt: false,
+            };
+            let od_pool = NodePool {
+                name: "on-demand".into(),
+                instance_types: vec!["m5.xlarge".into()],
+                limits: NodePoolLimits::default(),
+                labels: vec![("karpenter.sh/capacity-type".into(), "on-demand".into())],
+                taints: vec![], max_disrupted_pct: 10, max_disrupted_count: None,
+                weight: 0, do_not_disrupt: false,
+            };
+
+            let spot_batches = batch_pending_pods(&state, Some(&spot_pool));
+            let od_batches = batch_pending_pods(&state, Some(&od_pool));
+
+            let spot_pods: usize = spot_batches.iter().map(|b| b.pod_ids.len()).sum();
+            let od_pods: usize = od_batches.iter().map(|b| b.pod_ids.len()).sum();
+
+            if spot_pods != 1 {
+                return Err(format!("expected 1 pod in spot pool, got {}", spot_pods));
+            }
+            if od_pods != 1 {
+                return Err(format!("expected 1 pod in on-demand pool, got {}", od_pods));
             }
             Ok(())
         }),

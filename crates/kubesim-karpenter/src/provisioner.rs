@@ -2,6 +2,7 @@
 
 use kubesim_core::*;
 use kubesim_ec2::Catalog;
+use std::collections::{HashMap, HashSet};
 
 use crate::nodepool::{NodePool, NodePoolUsage};
 use crate::version::{KarpenterVersion, VersionProfile};
@@ -178,6 +179,57 @@ pub fn provision(
     provision_versioned(state, catalog, pool, usage, None, &Resources::default(), 0)
 }
 
+/// Check if a pod has required anti-affinity (hostname topology) that conflicts
+/// with any pod already on the claim. Returns true if the pod CANNOT be placed.
+fn has_hostname_anti_affinity_conflict(
+    pod: &Pod,
+    _claim_owners: &HashSet<OwnerId>,
+    claim_pod_ids: &[PodId],
+    state: &ClusterState,
+) -> bool {
+    // Check the new pod's anti-affinity against existing pods on the claim
+    for term in &pod.scheduling_constraints.pod_affinity {
+        if !term.anti || !matches!(term.affinity_type, AffinityType::Required) { continue; }
+        if term.topology_key != "kubernetes.io/hostname" { continue; }
+        for &existing_pid in claim_pod_ids {
+            if let Some(existing) = state.pods.get(existing_pid) {
+                if existing.labels.matches(&term.label_selector) {
+                    return true;
+                }
+            }
+        }
+    }
+    // Check existing pods' anti-affinity against the new pod
+    for &existing_pid in claim_pod_ids {
+        if let Some(existing) = state.pods.get(existing_pid) {
+            for term in &existing.scheduling_constraints.pod_affinity {
+                if !term.anti || !matches!(term.affinity_type, AffinityType::Required) { continue; }
+                if term.topology_key != "kubernetes.io/hostname" { continue; }
+                if pod.labels.matches(&term.label_selector) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Check if placing a pod on a claim would violate topology spread maxSkew
+/// on hostname. Returns true if the pod CANNOT be placed.
+fn violates_hostname_spread(
+    pod: &Pod,
+    pods_per_owner: &HashMap<OwnerId, u32>,
+) -> bool {
+    for constraint in &pod.scheduling_constraints.topology_spread {
+        if constraint.topology_key != "kubernetes.io/hostname" { continue; }
+        if constraint.when_unsatisfiable != WhenUnsatisfiable::DoNotSchedule { continue; }
+        // Count how many pods from this owner are already on this claim
+        let current = pods_per_owner.get(&pod.owner).copied().unwrap_or(0);
+        if current + 1 > constraint.max_skew { return true; }
+    }
+    false
+}
+
 /// Check whether a pending pod is compatible with a pool's labels and taints.
 /// A pod matches a pool if:
 /// - The pod's required nodeAffinity labels are a subset of the pool's labels
@@ -242,20 +294,39 @@ pub fn provision_versioned(
                 sb.cmp(&sa)
             });
 
-            // Flexible NodeClaim: tracks assigned pods and total resource demand
+            // Flexible NodeClaim: tracks assigned pods, resources, and scheduling constraints
             struct FlexNodeClaim {
                 pod_ids: Vec<PodId>,
                 total_cpu: u64,
                 total_mem: u64,
                 total_gpu: u32,
+                /// Owners present on this claim (for anti-affinity checks)
+                owner_ids: HashSet<OwnerId>,
+                /// Pod count per owner (for topology spread maxSkew on hostname)
+                pods_per_owner: HashMap<OwnerId, u32>,
             }
 
             let mut claims: Vec<FlexNodeClaim> = Vec::new();
 
             for &(pid, ref req) in &pods {
+                let pod = match state.pods.get(pid) {
+                    Some(p) => p,
+                    None => continue,
+                };
                 // Try to fit on an existing in-flight NodeClaim
                 let mut placed = false;
                 for claim in &mut claims {
+                    // Check anti-affinity: required anti-affinity with hostname topology
+                    // means pods matching the selector cannot share a node
+                    if has_hostname_anti_affinity_conflict(pod, &claim.owner_ids, &claim.pod_ids, state) {
+                        continue;
+                    }
+
+                    // Check topology spread: maxSkew on hostname
+                    if violates_hostname_spread(pod, &claim.pods_per_owner) {
+                        continue;
+                    }
+
                     let new_cpu = claim.total_cpu + req.cpu_millis;
                     let new_mem = claim.total_mem + req.memory_bytes;
                     let new_gpu = claim.total_gpu + req.gpu;
@@ -270,18 +341,26 @@ pub fn provision_versioned(
                         claim.total_cpu = new_cpu;
                         claim.total_mem = new_mem;
                         claim.total_gpu = new_gpu;
+                        claim.owner_ids.insert(pod.owner);
+                        *claim.pods_per_owner.entry(pod.owner).or_insert(0) += 1;
                         placed = true;
                         break;
                     }
                 }
                 if !placed {
                     if !pool.can_launch(&running_usage, 0, 0) { break; }
+                    let mut owner_ids = HashSet::new();
+                    owner_ids.insert(pod.owner);
+                    let mut pods_per_owner = HashMap::new();
+                    pods_per_owner.insert(pod.owner, 1);
                     // Create new NodeClaim
                     claims.push(FlexNodeClaim {
                         pod_ids: vec![pid],
                         total_cpu: req.cpu_millis,
                         total_mem: req.memory_bytes,
                         total_gpu: req.gpu,
+                        owner_ids,
+                        pods_per_owner,
                     });
                     // Tentatively count toward usage (use smallest type as estimate)
                     running_usage.node_count += 1;
