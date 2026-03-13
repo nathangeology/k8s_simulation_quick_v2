@@ -22,13 +22,13 @@ fn cost_optimizing_provisioner_picks_large_nodes() -> BehaviorSpec {
         name: "kwok-cost-optimizing-picks-large-nodes",
         description: "Cost-per-pod provisioner selects fewer, larger instance types \
                        rather than many small ones. With 30 KWOK types and 1000 pods, \
-                       should use <40 nodes (real Karpenter uses ~11).",
+                       should use <15 nodes (real Karpenter uses ~11).",
         applies_to: VersionRange::from(KarpenterVersion::V1),
         test: Box::new(|_profile| {
             let (peak_nodes, _, _) = run_kwok_benchmark(42)?;
-            if peak_nodes > 40 {
+            if peak_nodes > 15 {
                 return Err(format!(
-                    "peak nodes = {} (expected <40, real Karpenter uses ~11). \
+                    "peak nodes = {} (expected <15, real Karpenter uses ~11). \
                      Provisioner is picking too many small instance types.",
                     peak_nodes
                 ));
@@ -107,7 +107,7 @@ fn consolidation_reaches_minimal_fleet() -> BehaviorSpec {
 fn peak_cost_within_range() -> BehaviorSpec {
     BehaviorSpec {
         name: "kwok-peak-cost-within-range",
-        description: "Peak hourly cost with KWOK types should be <$120/hr for 1000 pods. \
+        description: "Peak hourly cost with KWOK types should be <$60/hr for 1000 pods. \
                        Real Karpenter achieved $42/hr with large instance types.",
         applies_to: VersionRange::from(KarpenterVersion::V1),
         test: Box::new(|_profile| {
@@ -117,7 +117,7 @@ fn peak_cost_within_range() -> BehaviorSpec {
                 .map(|s| s.cost_per_hour)
                 .fold(0.0f64, f64::max);
 
-            if peak_cost > 120.0 {
+            if peak_cost > 60.0 {
                 return Err(format!(
                     "peak cost = ${:.2}/hr (expected <$120). Provisioner may be \
                      selecting too many expensive small nodes.",
