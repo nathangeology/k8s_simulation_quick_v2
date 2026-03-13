@@ -1,0 +1,18 @@
+[
+  {
+    "InstanceType": "m5.xlarge",
+    "VCpuInfo": {"DefaultVCpus": 4},
+    "MemoryInfo": {"SizeInMiB": 16384},
+    "ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
+    "NetworkInfo": {"MaximumNetworkInterfaces": 4, "Ipv4AddressesPerInterface": 15},
+    "SupportedUsageClasses": ["on-demand"]
+  },
+  {
+    "InstanceType": "m5.2xlarge",
+    "VCpuInfo": {"DefaultVCpus": 8},
+    "MemoryInfo": {"SizeInMiB": 32768},
+    "ProcessorInfo": {"SupportedArchitectures": ["x86_64"]},
+    "NetworkInfo": {"MaximumNetworkInterfaces": 4, "Ipv4AddressesPerInterface": 15},
+    "SupportedUsageClasses": ["on-demand"]
+  }
+]
