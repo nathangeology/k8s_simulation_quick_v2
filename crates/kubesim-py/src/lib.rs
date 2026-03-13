@@ -89,7 +89,16 @@ fn parse_karpenter_version(s: &str) -> Option<KarpenterVersion> {
     }
 }
 
-fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
+/// Compute the system overhead Resources from scenario cluster config.
+fn compute_overhead(cluster: &kubesim_workload::ClusterConfig) -> Resources {
+    let (cpu, mem) = match &cluster.system_overhead {
+        Some(oh) => (oh.cpu_millis(), oh.memory_bytes()),
+        None => (0, 0),
+    };
+    Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 }
+}
+
+fn instance_to_node_with_pct(catalog: &Catalog, instance_type: &str, overhead: &Resources, daemonset_pct: u32) -> Node {
     let (cpu, mem, gpu, cost) = catalog
         .get(instance_type)
         .map(|it| (
@@ -100,9 +109,22 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
         ))
         .unwrap_or((4000, 16 * 1024 * 1024 * 1024, 0, 0.192));
 
+    // Apply fixed overhead then percentage-based daemonset reserve
+    let mut alloc_cpu = cpu.saturating_sub(overhead.cpu_millis);
+    let mut alloc_mem = mem.saturating_sub(overhead.memory_bytes);
+    if daemonset_pct > 0 {
+        alloc_cpu = alloc_cpu.saturating_sub(cpu * daemonset_pct as u64 / 100);
+        alloc_mem = alloc_mem.saturating_sub(mem * daemonset_pct as u64 / 100);
+    }
+
     Node {
         instance_type: instance_type.to_string(),
-        allocatable: Resources { cpu_millis: cpu, memory_bytes: mem, gpu, ephemeral_bytes: 0 },
+        allocatable: Resources {
+            cpu_millis: alloc_cpu,
+            memory_bytes: alloc_mem,
+            gpu,
+            ephemeral_bytes: 0,
+        },
         allocated: Resources::default(),
         pods: Default::default(),
         conditions: NodeConditions { ready: true, ..Default::default() },
@@ -123,6 +145,8 @@ struct SimHandler {
     scheduler: Scheduler,
     metrics: MetricsCollector,
     catalog: Catalog,
+    overhead: Resources,
+    daemonset_pct: u32,
 }
 
 impl kubesim_engine::EventHandler for SimHandler {
@@ -175,7 +199,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 Vec::new()
             }
             EngineEvent::NodeLaunching(spec) => {
-                let mut node = instance_to_node(&self.catalog, &spec.instance_type);
+                let mut node = instance_to_node_with_pct(&self.catalog, &spec.instance_type, &self.overhead, self.daemonset_pct);
                 node.labels = spec.labels.clone();
                 node.taints = spec.taints.iter().cloned().collect();
                 node.pool_name = spec.pool_name.clone();
@@ -373,6 +397,8 @@ fn run_single(
 ) -> SimRunResult {
     let provider = scenario.study.catalog_provider;
     let catalog = Catalog::for_provider(provider).expect("embedded catalog");
+    let overhead = compute_overhead(&scenario.study.cluster);
+    let daemonset_pct = scenario.study.cluster.daemonset_overhead_percent.unwrap_or(0);
 
     let mut state = ClusterState::new();
     let mut engine = Engine::new(time_mode);
@@ -386,7 +412,7 @@ fn run_single(
     for we in workload_events {
         match we {
             WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
-                let mut node = instance_to_node(&catalog, instance_type);
+                let mut node = instance_to_node_with_pct(&catalog, instance_type, &overhead, daemonset_pct);
                 node.pool_name = resolve_pool_name(&scenario.study.cluster.node_pools, *pool_index);
                 state.add_node(node);
             }
@@ -460,6 +486,8 @@ fn run_single(
         scheduler: Scheduler::new(SchedulerProfile::with_scoring("default", scoring)),
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
         catalog: Catalog::for_provider(provider).expect("embedded catalog"),
+        overhead,
+        daemonset_pct,
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -488,7 +516,7 @@ fn run_single(
             let mut prov = ProvisioningHandler::new(
                 Catalog::for_provider(provider).expect("embedded catalog"),
                 pool.clone(),
-            );
+            ).with_overhead(overhead).with_daemonset_pct(daemonset_pct);
             if let Some(ref vp) = version_profile {
                 prov = prov.with_version(vp.clone());
             }
@@ -1061,11 +1089,13 @@ impl StepSimulation {
 
         let mut state = ClusterState::new();
         let mut engine = Engine::new(self.time_mode);
+        let overhead = compute_overhead(&self.scenario.study.cluster);
+        let daemonset_pct = self.scenario.study.cluster.daemonset_overhead_percent.unwrap_or(0);
 
         for we in &self.workload_events {
             match we {
                 WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
-                    let mut node = instance_to_node(&catalog, instance_type);
+                    let mut node = instance_to_node_with_pct(&catalog, instance_type, &overhead, daemonset_pct);
                     node.pool_name = resolve_pool_name(&self.scenario.study.cluster.node_pools, *pool_index);
                     state.add_node(node);
                 }
@@ -1141,6 +1171,8 @@ impl StepSimulation {
             metrics: MetricsCollector::new(RustMetricsConfig::default()),
             catalog: Catalog::for_provider(provider)
                 .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
+            overhead,
+            daemonset_pct,
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));
@@ -1165,7 +1197,7 @@ impl StepSimulation {
                     ProvisioningHandler::new(
                         Catalog::for_provider(provider).map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
                         pool.clone(),
-                    ),
+                    ).with_overhead(overhead).with_daemonset_pct(daemonset_pct),
                 ));
 
                 let consolidation_policy = karpenter

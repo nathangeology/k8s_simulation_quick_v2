@@ -78,7 +78,7 @@ fn ffd_bin_packing_spec() -> BehaviorSpec {
                 });
             }
 
-            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile));
+            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
 
             if decisions.is_empty() {
                 return Err("no provisioning decisions made".into());

@@ -54,6 +54,43 @@ pub enum TimeMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterConfig {
     pub node_pools: Vec<NodePoolDef>,
+    /// Fixed system overhead subtracted from every node's allocatable resources.
+    /// Accounts for kubelet, kube-proxy, OS overhead, and eviction thresholds.
+    #[serde(default)]
+    pub system_overhead: Option<SystemOverhead>,
+    /// Percentage of node capacity reserved for daemonsets (applied after fixed overhead).
+    #[serde(default)]
+    pub daemonset_overhead_percent: Option<u32>,
+}
+
+/// Fixed resource overhead subtracted from node allocatable capacity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemOverhead {
+    #[serde(default = "default_overhead_cpu")]
+    pub cpu: String,
+    #[serde(default = "default_overhead_memory")]
+    pub memory: String,
+}
+
+impl Default for SystemOverhead {
+    fn default() -> Self {
+        Self {
+            cpu: "250m".into(),
+            memory: "500Mi".into(),
+        }
+    }
+}
+
+fn default_overhead_cpu() -> String { "250m".into() }
+fn default_overhead_memory() -> String { "500Mi".into() }
+
+impl SystemOverhead {
+    pub fn cpu_millis(&self) -> u64 {
+        parse_cpu_millis(&self.cpu).unwrap_or(250)
+    }
+    pub fn memory_bytes(&self) -> u64 {
+        parse_memory_bytes(&self.memory).unwrap_or(500 * 1024 * 1024)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
