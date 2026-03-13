@@ -1,0 +1,515 @@
+{
+  "study": "deletion-cost-large-heterogeneous",
+  "variants": [
+    "baseline",
+    "largest_first",
+    "prefer_emptying",
+    "random",
+    "unallocated_vcpu"
+  ],
+  "runs_per_variant": 10,
+  "per_variant": {
+    "baseline": {
+      "cumulative_cost": {
+        "mean": 647.6224858333762,
+        "median": 648.695916666895,
+        "p90": 682.1411833335827,
+        "p99": 761.3516166669659
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 11820.633744166855,
+        "median": 11512.696539583896,
+        "p90": 12883.535808332555,
+        "p99": 13111.037358330204
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 43958.8996311047,
+        "median": 43339.695382196165,
+        "p90": 47658.7087861969,
+        "p99": 48776.342584063146
+      },
+      "time_weighted_node_count": {
+        "mean": 3207132.0,
+        "median": 3199132.5,
+        "p90": 3569700.0,
+        "p99": 3571275.0
+      },
+      "time_to_stable": {
+        "mean": 3495.0,
+        "median": 3510.0,
+        "p90": 3780.0,
+        "p99": 3780.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 21.5,
+        "median": 21.5,
+        "p90": 23.0,
+        "p99": 23.0
+      },
+      "peak_cost_rate": {
+        "mean": 15.436800000000002,
+        "median": 15.360000000000005,
+        "p90": 16.128000000000004,
+        "p99": 16.128000000000004
+      }
+    },
+    "largest_first": {
+      "cumulative_cost": {
+        "mean": 619.3918083333962,
+        "median": 641.6561750001345,
+        "p90": 648.4968333335615,
+        "p99": 719.2800000002727
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 11342.453572500704,
+        "median": 11224.304110416746,
+        "p90": 12271.966541671618,
+        "p99": 12737.088524997498
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 42175.21252918019,
+        "median": 42016.790991098605,
+        "p90": 45131.94717286256,
+        "p99": 48571.104738026945
+      },
+      "time_weighted_node_count": {
+        "mean": 3023125.5,
+        "median": 3042375.0,
+        "p90": 3372345.0,
+        "p99": 3372840.0
+      },
+      "time_to_stable": {
+        "mean": 3456.0,
+        "median": 3420.0,
+        "p90": 3750.0,
+        "p99": 3840.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 21.4,
+        "median": 21.5,
+        "p90": 22.0,
+        "p99": 25.0
+      },
+      "peak_cost_rate": {
+        "mean": 15.436800000000002,
+        "median": 15.360000000000005,
+        "p90": 16.128000000000004,
+        "p99": 16.128000000000004
+      }
+    },
+    "prefer_emptying": {
+      "cumulative_cost": {
+        "mean": 609.7519975000283,
+        "median": 597.6123208332408,
+        "p90": 681.8109666669158,
+        "p99": 682.2290833335827
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 11377.716201667126,
+        "median": 11464.99699791798,
+        "p90": 11746.02815833163,
+        "p99": 12074.687358331417
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 42319.388031455994,
+        "median": 41987.976133788216,
+        "p90": 43694.518366457974,
+        "p99": 45902.846874343784
+      },
+      "time_weighted_node_count": {
+        "mean": 2982108.0,
+        "median": 3044205.0,
+        "p90": 3200370.0,
+        "p99": 3201990.0
+      },
+      "time_to_stable": {
+        "mean": 3555.0,
+        "median": 3495.0,
+        "p90": 3780.0,
+        "p99": 3780.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 21.3,
+        "median": 21.0,
+        "p90": 22.0,
+        "p99": 24.0
+      },
+      "peak_cost_rate": {
+        "mean": 15.436800000000002,
+        "median": 15.360000000000005,
+        "p90": 16.128000000000004,
+        "p99": 16.128000000000004
+      }
+    },
+    "random": {
+      "cumulative_cost": {
+        "mean": 622.7479683333984,
+        "median": 641.6998666668011,
+        "p90": 681.8595500002492,
+        "p99": 719.2800000002727
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 11399.916159167442,
+        "median": 11478.131608335607,
+        "p90": 12271.966541671618,
+        "p99": 12737.088524997498
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 42386.32361787829,
+        "median": 42676.99641866557,
+        "p90": 45131.94717286256,
+        "p99": 48571.104738026945
+      },
+      "time_weighted_node_count": {
+        "mean": 3038857.5,
+        "median": 3043320.0,
+        "p90": 3372345.0,
+        "p99": 3372840.0
+      },
+      "time_to_stable": {
+        "mean": 3456.0,
+        "median": 3420.0,
+        "p90": 3750.0,
+        "p99": 3840.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 21.4,
+        "median": 21.5,
+        "p90": 22.0,
+        "p99": 25.0
+      },
+      "peak_cost_rate": {
+        "mean": 15.436800000000002,
+        "median": 15.360000000000005,
+        "p90": 16.128000000000004,
+        "p99": 16.128000000000004
+      }
+    },
+    "unallocated_vcpu": {
+      "cumulative_cost": {
+        "mean": 632.8802933334221,
+        "median": 624.5479833334468,
+        "p90": 719.3740000002728,
+        "p99": 760.9536000002989
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 11610.282217500517,
+        "median": 11835.781200001054,
+        "p90": 12386.86823333096,
+        "p99": 13049.856024996903
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 43197.68214082892,
+        "median": 43907.549764524694,
+        "p90": 46080.316654665054,
+        "p99": 48606.80502893226
+      },
+      "time_weighted_node_count": {
+        "mean": 3044487.0,
+        "median": 3040912.5,
+        "p90": 3375990.0,
+        "p99": 3566970.0
+      },
+      "time_to_stable": {
+        "mean": 3408.0,
+        "median": 3360.0,
+        "p90": 3780.0,
+        "p99": 3780.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 21.1,
+        "median": 21.5,
+        "p90": 22.0,
+        "p99": 23.0
+      },
+      "peak_cost_rate": {
+        "mean": 15.436800000000002,
+        "median": 15.360000000000005,
+        "p90": 16.128000000000004,
+        "p99": 16.128000000000004
+      }
+    }
+  },
+  "per_variant_diagnostic": {
+    "baseline": {
+      "total_cost_per_hour": {
+        "mean": 4.2942,
+        "median": 4.32,
+        "p90": 4.608,
+        "p99": 4.608
+      },
+      "node_count": {
+        "mean": 5.9,
+        "median": 6.0,
+        "p90": 6.0,
+        "p99": 6.0
+      },
+      "running_pods": {
+        "mean": 134.0,
+        "median": 134.0,
+        "p90": 134.0,
+        "p99": 134.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 538045000000004.0,
+        "median": 527975000000004.0,
+        "p90": 589960000000004.0,
+        "p99": 590010000000004.0
+      }
+    },
+    "largest_first": {
+      "total_cost_per_hour": {
+        "mean": 4.2772,
+        "median": 4.32,
+        "p90": 4.608,
+        "p99": 4.608
+      },
+      "node_count": {
+        "mean": 5.8,
+        "median": 6.0,
+        "p90": 6.0,
+        "p99": 6.0
+      },
+      "running_pods": {
+        "mean": 134.0,
+        "median": 134.0,
+        "p90": 134.0,
+        "p99": 134.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 516376000000003.5,
+        "median": 501675000000004.0,
+        "p90": 557170000000004.0,
+        "p99": 589770000000004.0
+      }
+    },
+    "prefer_emptying": {
+      "total_cost_per_hour": {
+        "mean": 4.198200000000001,
+        "median": 4.01,
+        "p90": 4.608,
+        "p99": 4.608
+      },
+      "node_count": {
+        "mean": 5.7,
+        "median": 6.0,
+        "p90": 6.0,
+        "p99": 6.0
+      },
+      "running_pods": {
+        "mean": 134.0,
+        "median": 134.0,
+        "p90": 134.0,
+        "p99": 134.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 517945000000003.5,
+        "median": 527915000000003.0,
+        "p90": 528030000000001.0,
+        "p99": 557140000000004.0
+      }
+    },
+    "random": {
+      "total_cost_per_hour": {
+        "mean": 4.2772,
+        "median": 4.32,
+        "p90": 4.608,
+        "p99": 4.608
+      },
+      "node_count": {
+        "mean": 5.8,
+        "median": 6.0,
+        "p90": 6.0,
+        "p99": 6.0
+      },
+      "running_pods": {
+        "mean": 134.0,
+        "median": 134.0,
+        "p90": 134.0,
+        "p99": 134.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 518998000000003.5,
+        "median": 514765000000004.0,
+        "p90": 557170000000004.0,
+        "p99": 589770000000004.0
+      }
+    },
+    "unallocated_vcpu": {
+      "total_cost_per_hour": {
+        "mean": 4.258000000000001,
+        "median": 4.308999999999999,
+        "p90": 4.608,
+        "p99": 4.608
+      },
+      "node_count": {
+        "mean": 5.7,
+        "median": 6.0,
+        "p90": 6.0,
+        "p99": 6.0
+      },
+      "running_pods": {
+        "mean": 134.0,
+        "median": 134.0,
+        "p90": 134.0,
+        "p99": 134.0
+      },
+      "pending_pods": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 528323000000004.0,
+        "median": 542480000000004.0,
+        "p90": 557250000000004.0,
+        "p99": 589800000000004.0
+      }
+    }
+  }
+}
