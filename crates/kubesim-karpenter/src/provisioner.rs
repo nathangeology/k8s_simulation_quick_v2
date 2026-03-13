@@ -107,6 +107,18 @@ pub fn select_instance(
     pool: &NodePool,
     usage: &NodePoolUsage,
 ) -> Option<ProvisionDecision> {
+    select_instance_with_overhead(batch, catalog, pool, usage, &Resources::default(), 0)
+}
+
+/// Select the cheapest instance type, accounting for system overhead.
+pub fn select_instance_with_overhead(
+    batch: &PodBatch,
+    catalog: &Catalog,
+    pool: &NodePool,
+    usage: &NodePoolUsage,
+    overhead: &Resources,
+    daemonset_pct: u32,
+) -> Option<ProvisionDecision> {
     let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
         catalog.all().iter().collect()
     } else {
@@ -122,13 +134,19 @@ pub fn select_instance(
     let mut best: Option<(&kubesim_ec2::InstanceType, f64)> = None;
 
     for it in &allowed {
-        let it_cpu = (it.vcpu as u64) * 1000;
-        let it_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+        let raw_cpu = (it.vcpu as u64) * 1000;
+        let raw_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+        let mut it_cpu = raw_cpu.saturating_sub(overhead.cpu_millis);
+        let mut it_mem = raw_mem.saturating_sub(overhead.memory_bytes);
+        if daemonset_pct > 0 {
+            it_cpu = it_cpu.saturating_sub(raw_cpu * daemonset_pct as u64 / 100);
+            it_mem = it_mem.saturating_sub(raw_mem * daemonset_pct as u64 / 100);
+        }
 
         if it_cpu < cpu_needed || it_mem < mem_needed || it.gpu_count < gpu_needed {
             continue;
         }
-        if !pool.can_launch(usage, it_cpu, it_mem) {
+        if !pool.can_launch(usage, raw_cpu, raw_mem) {
             continue;
         }
 
@@ -152,7 +170,7 @@ pub fn provision(
     pool: &NodePool,
     usage: &NodePoolUsage,
 ) -> Vec<ProvisionDecision> {
-    provision_versioned(state, catalog, pool, usage, None)
+    provision_versioned(state, catalog, pool, usage, None, &Resources::default(), 0)
 }
 
 /// Check whether a pending pod is compatible with a pool's labels and taints.
@@ -193,6 +211,8 @@ pub fn provision_versioned(
     pool: &NodePool,
     usage: &NodePoolUsage,
     profile: Option<&VersionProfile>,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Vec<ProvisionDecision> {
     let batches = batch_pending_pods(state, Some(pool));
     let use_ffd = profile.map_or(false, |p| p.version == KarpenterVersion::V1);
@@ -219,9 +239,9 @@ pub fn provision_versioned(
             for (pid, req) in pods {
                 let combined = node_total.saturating_add(&req);
                 // Check if any instance can fit the combined load
-                if !node_pods.is_empty() && cheapest_fit(catalog, pool, &running_usage, &combined, batch.gpu_required).is_none() {
+                if !node_pods.is_empty() && cheapest_fit(catalog, pool, &running_usage, &combined, batch.gpu_required, overhead, daemonset_pct).is_none() {
                     // Right-size and flush current node
-                    if let Some((it, price)) = cheapest_fit(catalog, pool, &running_usage, &node_total, batch.gpu_required) {
+                    if let Some((it, price)) = cheapest_fit(catalog, pool, &running_usage, &node_total, batch.gpu_required, overhead, daemonset_pct) {
                         if let Some(spec) = catalog.get(&it) {
                             running_usage.node_count += 1;
                             running_usage.cpu_millis += (spec.vcpu as u64) * 1000;
@@ -241,7 +261,7 @@ pub fn provision_versioned(
             }
             // Flush last node
             if !node_pods.is_empty() {
-                if let Some((it, price)) = cheapest_fit(catalog, pool, &running_usage, &node_total, batch.gpu_required) {
+                if let Some((it, price)) = cheapest_fit(catalog, pool, &running_usage, &node_total, batch.gpu_required, overhead, daemonset_pct) {
                     if let Some(spec) = catalog.get(&it) {
                         running_usage.node_count += 1;
                         running_usage.cpu_millis += (spec.vcpu as u64) * 1000;
@@ -256,7 +276,7 @@ pub fn provision_versioned(
             }
         } else {
             // Legacy v0.35: try to fit entire batch on one cheapest instance
-            if let Some(decision) = select_instance(batch, catalog, pool, &running_usage) {
+            if let Some(decision) = select_instance_with_overhead(batch, catalog, pool, &running_usage, overhead, daemonset_pct) {
                 if let Some(it) = catalog.get(&decision.instance_type) {
                     running_usage.node_count += 1;
                     running_usage.cpu_millis += (it.vcpu as u64) * 1000;
@@ -265,10 +285,10 @@ pub fn provision_versioned(
                 decisions.push(decision);
             } else if batch.pod_ids.len() > 1 {
                 // Batch too large for any single instance — greedy fill with largest.
-                let largest = find_largest_instance(catalog, pool, &running_usage);
+                let largest = find_largest_instance(catalog, pool, &running_usage, overhead, daemonset_pct);
                 let Some(largest_it) = largest else { continue };
-                let mut remaining_cpu = (largest_it.vcpu as u64) * 1000;
-                let mut remaining_mem = (largest_it.memory_gib as u64) * 1024 * 1024 * 1024;
+                let mut remaining_cpu = effective_cpu(largest_it, overhead, daemonset_pct);
+                let mut remaining_mem = effective_mem(largest_it, overhead, daemonset_pct);
                 let mut current_pods: Vec<PodId> = Vec::new();
 
                 for &pid in &batch.pod_ids {
@@ -290,9 +310,9 @@ pub fn provision_versioned(
                             });
                             if !pool.can_launch(&running_usage, 0, 0) { break; }
                         }
-                        let Some(next_it) = find_largest_instance(catalog, pool, &running_usage) else { break };
-                        remaining_cpu = (next_it.vcpu as u64) * 1000;
-                        remaining_mem = (next_it.memory_gib as u64) * 1024 * 1024 * 1024;
+                        let Some(next_it) = find_largest_instance(catalog, pool, &running_usage, overhead, daemonset_pct) else { break };
+                        remaining_cpu = effective_cpu(next_it, overhead, daemonset_pct);
+                        remaining_mem = effective_mem(next_it, overhead, daemonset_pct);
                     }
                     remaining_cpu = remaining_cpu.saturating_sub(pcpu);
                     remaining_mem = remaining_mem.saturating_sub(pmem);
@@ -330,6 +350,8 @@ fn cheapest_fit(
     usage: &NodePoolUsage,
     needed: &Resources,
     gpu_needed: u32,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Option<(String, f64)> {
     let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
         catalog.all().iter().collect()
@@ -338,12 +360,12 @@ fn cheapest_fit(
     };
     let mut best: Option<(&kubesim_ec2::InstanceType, f64)> = None;
     for it in &allowed {
-        let it_cpu = (it.vcpu as u64) * 1000;
-        let it_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+        let it_cpu = effective_cpu(it, overhead, daemonset_pct);
+        let it_mem = effective_mem(it, overhead, daemonset_pct);
         if it_cpu < needed.cpu_millis || it_mem < needed.memory_bytes || it.gpu_count < gpu_needed {
             continue;
         }
-        if !pool.can_launch(usage, it_cpu, it_mem) {
+        if !pool.can_launch(usage, (it.vcpu as u64) * 1000, (it.memory_gib as u64) * 1024 * 1024 * 1024) {
             continue;
         }
         let price = it.on_demand_price_per_hour;
@@ -359,6 +381,8 @@ fn find_largest_instance<'a>(
     catalog: &'a Catalog,
     pool: &NodePool,
     usage: &NodePoolUsage,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Option<&'a kubesim_ec2::InstanceType> {
     let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
         catalog.all().iter().collect()
@@ -367,7 +391,27 @@ fn find_largest_instance<'a>(
     };
     allowed.into_iter()
         .filter(|it| pool.can_launch(usage, (it.vcpu as u64) * 1000, (it.memory_gib as u64) * 1024 * 1024 * 1024))
-        .max_by_key(|it| (it.vcpu as u64) * 1000 + it.memory_gib as u64)
+        .max_by_key(|it| {
+            let eff_cpu = effective_cpu(it, overhead, daemonset_pct);
+            let eff_mem = effective_mem(it, overhead, daemonset_pct);
+            eff_cpu + eff_mem / 1_000_000
+        })
+}
+
+/// Effective allocatable CPU for an instance type after overhead.
+fn effective_cpu(it: &kubesim_ec2::InstanceType, overhead: &Resources, daemonset_pct: u32) -> u64 {
+    let raw = (it.vcpu as u64) * 1000;
+    let mut eff = raw.saturating_sub(overhead.cpu_millis);
+    if daemonset_pct > 0 { eff = eff.saturating_sub(raw * daemonset_pct as u64 / 100); }
+    eff
+}
+
+/// Effective allocatable memory for an instance type after overhead.
+fn effective_mem(it: &kubesim_ec2::InstanceType, overhead: &Resources, daemonset_pct: u32) -> u64 {
+    let raw = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+    let mut eff = raw.saturating_sub(overhead.memory_bytes);
+    if daemonset_pct > 0 { eff = eff.saturating_sub(raw * daemonset_pct as u64 / 100); }
+    eff
 }
 
 #[cfg(test)]

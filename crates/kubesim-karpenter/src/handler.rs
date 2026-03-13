@@ -26,6 +26,10 @@ pub struct ProvisioningHandler {
     pub reconcile_interval_ns: u64,
     /// Version profile (reserved for future version-specific provisioning behavior).
     pub version_profile: Option<VersionProfile>,
+    /// System overhead subtracted from node allocatable when checking pod fit.
+    pub overhead: Resources,
+    /// Percentage of raw capacity reserved for daemonsets.
+    pub daemonset_pct: u32,
 }
 
 impl ProvisioningHandler {
@@ -37,12 +41,26 @@ impl ProvisioningHandler {
             loop_interval_ns: 5_000_000_000, // 5s default
             reconcile_interval_ns: 10_000_000_000, // 10s default
             version_profile: None,
+            overhead: Resources::default(),
+            daemonset_pct: 0,
         }
     }
 
     /// Create a handler with a specific Karpenter version profile.
     pub fn with_version(mut self, profile: VersionProfile) -> Self {
         self.version_profile = Some(profile);
+        self
+    }
+
+    /// Set system overhead for provisioning decisions.
+    pub fn with_overhead(mut self, overhead: Resources) -> Self {
+        self.overhead = overhead;
+        self
+    }
+
+    /// Set daemonset overhead percentage.
+    pub fn with_daemonset_pct(mut self, pct: u32) -> Self {
+        self.daemonset_pct = pct;
         self
     }
 }
@@ -59,7 +77,7 @@ impl EventHandler for ProvisioningHandler {
         };
 
         let decisions = provisioner::provision_versioned(
-            state, &self.catalog, &self.pool, &self.usage, self.version_profile.as_ref(),
+            state, &self.catalog, &self.pool, &self.usage, self.version_profile.as_ref(), &self.overhead, self.daemonset_pct,
         );
         let mut follow_ups = Vec::new();
 

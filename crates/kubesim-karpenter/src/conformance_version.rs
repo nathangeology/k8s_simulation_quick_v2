@@ -340,7 +340,7 @@ fn cross_version_provisioning_cheapest_fit_spec() -> BehaviorSpec {
             };
             let usage = NodePoolUsage::default();
 
-            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile));
+            let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
             if decisions.is_empty() {
                 return Err("should provision at least one node".into());
             }
