@@ -537,11 +537,12 @@ fn simulate_and_validate(
             ConsolidationAction::Replace { node_id, .. } => *node_id,
         }).collect();
 
-        // Collect all displaced pods
+        // Collect displaced pods that need placement on existing nodes.
+        // Replace pods are excluded — they go on the replacement node.
         let displaced_pods: Vec<PodId> = validated.iter().flat_map(|a| match a {
             ConsolidationAction::TerminateEmpty(_) => vec![],
             ConsolidationAction::DrainAndTerminate { pod_ids, .. } => pod_ids.clone(),
-            ConsolidationAction::Replace { pod_ids, .. } => pod_ids.clone(),
+            ConsolidationAction::Replace { .. } => vec![],
         }).collect();
 
         if displaced_pods.is_empty() {
@@ -615,10 +616,10 @@ fn validate_before_execute(
     let mut nodes_being_removed: HashSet<NodeId> = HashSet::new();
 
     for action in actions {
-        let (nid, is_empty) = match &action {
-            ConsolidationAction::TerminateEmpty(nid) => (*nid, true),
-            ConsolidationAction::DrainAndTerminate { node_id, .. } => (*node_id, false),
-            ConsolidationAction::Replace { node_id, .. } => (*node_id, false),
+        let (nid, is_empty, is_replace) = match &action {
+            ConsolidationAction::TerminateEmpty(nid) => (*nid, true, false),
+            ConsolidationAction::DrainAndTerminate { node_id, .. } => (*node_id, false, false),
+            ConsolidationAction::Replace { node_id, .. } => (*node_id, false, true),
         };
 
         let node = match state.nodes.get(nid) {
@@ -634,7 +635,7 @@ fn validate_before_execute(
             if has_non_daemonset {
                 continue; // workload pods landed since planning
             }
-        } else if pods_can_reschedule(state, nid, &nodes_being_removed).is_none() {
+        } else if !is_replace && pods_can_reschedule(state, nid, &nodes_being_removed).is_none() {
             continue; // pods no longer fit elsewhere
         }
 

@@ -249,6 +249,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 node.taints = spec.taints.iter().cloned().collect();
                 node.pool_name = spec.pool_name.clone();
                 node.do_not_disrupt = spec.do_not_disrupt;
+                node.created_at = time;
                 if self.node_startup_ns > 0 {
                     node.conditions.ready = false; // not ready until NodeReady fires
                 }
