@@ -281,6 +281,8 @@ struct SimRunResult {
     disruption_seconds: f64,
     peak_node_count: u32,
     peak_cost_rate: f64,
+    cumulative_vcpu_hours: f64,
+    cumulative_memory_gib_hours: f64,
     // Raw timeseries snapshots
     timeseries: Vec<kubesim_metrics::MetricsSnapshot>,
 }
@@ -289,9 +291,9 @@ struct SimRunResult {
 ///
 /// In `WallClock` mode, `SimTime` values are nanoseconds.
 /// In `Logical` mode, each tick is treated as 1 second.
-fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot], time_mode: TimeMode) -> (f64, f64, f64, f64, u64, f64, u32, f64) {
+fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot], time_mode: TimeMode) -> (f64, f64, f64, f64, u64, f64, u32, f64, f64, f64) {
     if snapshots.is_empty() {
-        return (0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0.0);
+        return (0.0, 0.0, 0.0, 0.0, 0, 0.0, 0, 0.0, 0.0, 0.0);
     }
 
     // Convert raw SimTime delta to seconds based on time mode
@@ -308,6 +310,8 @@ fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot], time_mode:
     let mut disruption_seconds = 0.0f64;
     let mut peak_node_count = 0u32;
     let mut peak_cost_rate = 0.0f64;
+    let mut cumulative_vcpu_hours = 0.0f64;
+    let mut cumulative_memory_gib_hours = 0.0f64;
 
     // Time-to-stable: last time node_count changed
     let mut time_to_stable = 0.0f64;
@@ -336,6 +340,10 @@ fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot], time_mode:
 
             // Cost integral: cost_rate ($/hr) * dt (hr) = $
             cumulative_cost += (prev.total_cost_per_hour + s.total_cost_per_hour) / 2.0 * dt_hours;
+            // vCPU-hours: vCPU * hours
+            cumulative_vcpu_hours += (prev.total_vcpu_allocated + s.total_vcpu_allocated) / 2.0 * dt_hours;
+            // GiB-hours: GiB * hours
+            cumulative_memory_gib_hours += (prev.total_memory_allocated_gib + s.total_memory_allocated_gib) / 2.0 * dt_hours;
             // Node-count integral: nodes * seconds
             time_weighted_nodes += (prev.node_count as f64 + s.node_count as f64) / 2.0 * dt_secs;
             // Pending-pod-seconds
@@ -352,7 +360,8 @@ fn compute_cumulative(snapshots: &[kubesim_metrics::MetricsSnapshot], time_mode:
     let final_disruptions = snapshots.last().map_or(0, |s| s.disruption_count);
 
     (cumulative_cost, time_weighted_nodes, time_to_stable, cumulative_pending_seconds,
-     final_disruptions, disruption_seconds, peak_node_count, peak_cost_rate)
+     final_disruptions, disruption_seconds, peak_node_count, peak_cost_rate,
+     cumulative_vcpu_hours, cumulative_memory_gib_hours)
 }
 
 fn run_single(
@@ -522,7 +531,7 @@ fn run_single(
     let events_processed = engine.run_to_completion(&mut state);
 
     // Extract snapshots from SimHandler for cumulative metrics and timeseries
-    let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0);
+    let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0, 0.0, 0.0);
     let mut timeseries = Vec::new();
     for h in engine.handlers_mut() {
         if let Some(sh) = h.as_any_mut().downcast_mut::<SimHandler>() {
@@ -533,7 +542,7 @@ fn run_single(
     }
     let (cumulative_cost, time_weighted_node_count, time_to_stable,
      cumulative_pending_pod_seconds, disruption_count, disruption_seconds,
-     peak_node_count, peak_cost_rate) = cumulative;
+     peak_node_count, peak_cost_rate, cumulative_vcpu_hours, cumulative_memory_gib_hours) = cumulative;
 
     // Collect final state summary
     let mut total_cost = 0.0f64;
@@ -581,6 +590,8 @@ fn run_single(
         disruption_seconds,
         peak_node_count,
         peak_cost_rate,
+        cumulative_vcpu_hours,
+        cumulative_memory_gib_hours,
         timeseries,
     }
 }
@@ -632,6 +643,10 @@ struct SimResult {
     peak_node_count: u32,
     #[pyo3(get)]
     peak_cost_rate: f64,
+    #[pyo3(get)]
+    cumulative_vcpu_hours: f64,
+    #[pyo3(get)]
+    cumulative_memory_gib_hours: f64,
     // Raw timeseries (not exposed via #[pyo3(get)] — use .timeseries property)
     timeseries_data: Vec<kubesim_metrics::MetricsSnapshot>,
 }
@@ -652,6 +667,8 @@ fn snapshot_to_dict<'py>(py: Python<'py>, s: &kubesim_metrics::MetricsSnapshot) 
     d.set_item("memory_utilization_p50", s.memory_utilization.p50)?;
     d.set_item("memory_utilization_p90", s.memory_utilization.p90)?;
     d.set_item("memory_utilization_p99", s.memory_utilization.p99)?;
+    d.set_item("total_vcpu_allocated", s.total_vcpu_allocated)?;
+    d.set_item("total_memory_allocated_gib", s.total_memory_allocated_gib)?;
     Ok(d)
 }
 
@@ -689,6 +706,8 @@ impl SimResult {
         dict.set_item("disruption_seconds", self.disruption_seconds)?;
         dict.set_item("peak_node_count", self.peak_node_count)?;
         dict.set_item("peak_cost_rate", self.peak_cost_rate)?;
+        dict.set_item("cumulative_vcpu_hours", self.cumulative_vcpu_hours)?;
+        dict.set_item("cumulative_memory_gib_hours", self.cumulative_memory_gib_hours)?;
         // Include timeseries as list of dicts
         let ts_list = pyo3::types::PyList::empty_bound(py);
         for s in &self.timeseries_data {
@@ -781,6 +800,8 @@ impl Simulation {
             disruption_seconds: r.disruption_seconds,
             peak_node_count: r.peak_node_count,
             peak_cost_rate: r.peak_cost_rate,
+            cumulative_vcpu_hours: r.cumulative_vcpu_hours,
+            cumulative_memory_gib_hours: r.cumulative_memory_gib_hours,
             timeseries_data: r.timeseries,
         })
     }
@@ -815,6 +836,8 @@ impl Simulation {
                 disruption_seconds: r.disruption_seconds,
                 peak_node_count: r.peak_node_count,
                 peak_cost_rate: r.peak_cost_rate,
+                cumulative_vcpu_hours: r.cumulative_vcpu_hours,
+                cumulative_memory_gib_hours: r.cumulative_memory_gib_hours,
                 timeseries_data: r.timeseries,
             }
         }).collect())
@@ -899,6 +922,8 @@ fn batch_run<'py>(
         dict.set_item("disruption_seconds", r.disruption_seconds)?;
         dict.set_item("peak_node_count", r.peak_node_count)?;
         dict.set_item("peak_cost_rate", r.peak_cost_rate)?;
+        dict.set_item("cumulative_vcpu_hours", r.cumulative_vcpu_hours)?;
+        dict.set_item("cumulative_memory_gib_hours", r.cumulative_memory_gib_hours)?;
         // Include timeseries as list of dicts
         let ts_list = pyo3::types::PyList::empty_bound(py);
         for s in &r.timeseries {

@@ -67,11 +67,12 @@ impl MetricsCollector {
     pub fn export_csv(&self) -> String {
         let mut out = String::from(
             "time,total_cost_per_hour,disruption_count,sched_lat_p50,sched_lat_p90,sched_lat_p99,\
-             cpu_p50,cpu_p90,cpu_p99,mem_p50,mem_p90,mem_p99,availability,node_count,pod_count,pending_count,detail_level\n",
+             cpu_p50,cpu_p90,cpu_p99,mem_p50,mem_p90,mem_p99,availability,node_count,pod_count,pending_count,\
+             total_vcpu_allocated,total_memory_allocated_gib,detail_level\n",
         );
         for s in &self.snapshots {
             out.push_str(&format!(
-                "{},{:.4},{},{:.1},{:.1},{:.1},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{},{},{},{}\n",
+                "{},{:.4},{},{:.1},{:.1},{:.1},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{},{},{},{:.4},{:.4},{}\n",
                 s.time.0,
                 s.total_cost_per_hour,
                 s.disruption_count,
@@ -88,6 +89,8 @@ impl MetricsCollector {
                 s.node_count,
                 s.pod_count,
                 s.pending_count,
+                s.total_vcpu_allocated,
+                s.total_memory_allocated_gib,
                 s.detail_level,
             ));
         }
@@ -112,10 +115,14 @@ impl MetricsCollector {
         let mut mem_utils = Vec::new();
         let mut total_cost = 0.0f64;
         let mut node_count = 0u32;
+        let mut total_vcpu_allocated = 0.0f64;
+        let mut total_memory_allocated_gib = 0.0f64;
 
         for (_id, node) in state.nodes.iter() {
             node_count += 1;
             total_cost += node.cost_per_hour;
+            total_vcpu_allocated += node.allocated.cpu_millis as f64 / 1000.0;
+            total_memory_allocated_gib += node.allocated.memory_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
             let cpu_util = if node.allocatable.cpu_millis > 0 {
                 node.allocated.cpu_millis as f64 / node.allocatable.cpu_millis as f64
             } else {
@@ -201,6 +208,8 @@ impl MetricsCollector {
             pod_placement_entropy_normalized,
             cpu_weighted_entropy,
             cpu_weighted_entropy_normalized,
+            total_vcpu_allocated,
+            total_memory_allocated_gib,
         });
 
         self.recent_latencies.clear();

@@ -24,6 +24,16 @@ _TIMESERIES_METRICS = [
     ("total_cost_per_hour", "Cost Rate ($/hr)"),
     ("cpu_utilization_p50", "CPU Utilization (p50)"),
     ("memory_utilization_p50", "Memory Utilization (p50)"),
+    ("total_vcpu_allocated", "vCPU Allocated"),
+    ("total_memory_allocated_gib", "Memory Allocated (GiB)"),
+]
+
+
+# Cumulative metrics computed from timeseries via running integration
+_CUMULATIVE_TS_METRICS = [
+    ("total_cost_per_hour", "Cumulative Cost ($)", "cumulative_cost"),
+    ("total_vcpu_allocated", "Cumulative vCPU-Hours", "cumulative_vcpu_hours"),
+    ("total_memory_allocated_gib", "Cumulative GiB-Hours", "cumulative_gib_hours"),
 ]
 
 
@@ -59,7 +69,6 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
         fig, ax = plt.subplots(figsize=(8, 4))
 
         for variant, ts_runs in sorted(by_variant.items()):
-            # Collect all unique times, then interpolate each run onto a common grid
             all_times = sorted({s["time"] for run in ts_runs for s in run})
             if not all_times:
                 continue
@@ -90,6 +99,45 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
         plt.close(fig)
         paths.append(path)
 
+    # Cumulative timeseries (running integral of rate metrics)
+    for rate_key, cum_label, cum_fname in _CUMULATIVE_TS_METRICS:
+        fig, ax = plt.subplots(figsize=(8, 4))
+
+        for variant, ts_runs in sorted(by_variant.items()):
+            all_times = sorted({s["time"] for run in ts_runs for s in run})
+            if not all_times:
+                continue
+            grid = np.array(all_times, dtype=float)
+            cum_values = np.zeros((len(ts_runs), len(grid)))
+
+            for i, run in enumerate(ts_runs):
+                t = np.array([s["time"] for s in run], dtype=float)
+                v = np.array([s.get(rate_key, 0.0) for s in run], dtype=float)
+                interp_v = np.interp(grid, t, v)
+                # Trapezoidal cumulative integral; dt in hours for $/hr and rate metrics
+                dt = np.diff(grid)
+                avg_rate = (interp_v[:-1] + interp_v[1:]) / 2.0
+                increments = avg_rate * dt / 3600.0
+                cum_values[i, 1:] = np.cumsum(increments)
+
+            mean = cum_values.mean(axis=0)
+            ax.plot(grid, mean, label=variant, linewidth=1.5)
+            if len(ts_runs) > 1:
+                lo, hi = np.percentile(cum_values, [10, 90], axis=0)
+                ax.fill_between(grid, lo, hi, alpha=0.15)
+
+        ax.set_xlabel("Simulation Time")
+        ax.set_ylabel(cum_label)
+        ax.set_title(cum_label)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+
+        path = output_dir / f"ts_{cum_fname}.png"
+        fig.savefig(path, dpi=120)
+        plt.close(fig)
+        paths.append(path)
+
     return paths
 
 
@@ -97,6 +145,8 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
 
 _DISTRIBUTION_METRICS = [
     ("cumulative_cost", "Cumulative Cost ($)"),
+    ("cumulative_vcpu_hours", "Cumulative vCPU-Hours"),
+    ("cumulative_memory_gib_hours", "Cumulative GiB-Hours"),
     ("node_count", "Final Node Count"),
     ("peak_node_count", "Peak Node Count"),
     ("time_weighted_node_count", "Time-Weighted Node Count"),
