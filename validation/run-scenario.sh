@@ -405,9 +405,218 @@ EOF
         log "t=15m: Stabilization complete"
         ;;
 
+    placement-multipool)
+        log "=== Multi-Pool Spot vs On-Demand (5 min) ==="
+
+        # Create spot NodePool (weight=50, preferred)
+        kubectl apply -f - <<'EOF'
+apiVersion: karpenter.kwok.sh/v1alpha1
+kind: KWOKNodeClass
+metadata:
+  name: spot
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: spot
+spec:
+  weight: 50
+  template:
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+      nodeClassRef:
+        name: spot
+        kind: KWOKNodeClass
+        group: karpenter.kwok.sh
+      expireAfter: 720h
+  limits:
+    cpu: "400"
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
+EOF
+
+        # Update default pool to on-demand with weight=10
+        kubectl apply -f - <<'EOF'
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  weight: 10
+  template:
+    spec:
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+      nodeClassRef:
+        name: default
+        kind: KWOKNodeClass
+        group: karpenter.kwok.sh
+      expireAfter: 720h
+  limits:
+    cpu: "400"
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
+EOF
+
+        log "Waiting 5s for NodePool reconcile..."
+        sleep 5
+
+        # Deployment A: 20 pods, no nodeSelector (should prefer spot)
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unconstrained
+  labels:
+    kubesim-scenario: placement-multipool
+spec:
+  replicas: 20
+  selector:
+    matchLabels:
+      app: unconstrained
+  template:
+    metadata:
+      labels:
+        app: unconstrained
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+
+        # Deployment B: 10 pods, nodeSelector: on-demand
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: on-demand-only
+  labels:
+    kubesim-scenario: placement-multipool
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: on-demand-only
+  template:
+    metadata:
+      labels:
+        app: on-demand-only
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+      nodeSelector:
+        karpenter.sh/capacity-type: on-demand
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+
+        # Deployment C: 10 pods, nodeSelector: spot
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spot-only
+  labels:
+    kubesim-scenario: placement-multipool
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: spot-only
+  template:
+    metadata:
+      labels:
+        app: spot-only
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+      nodeSelector:
+        karpenter.sh/capacity-type: spot
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+
+        log "Created 40 pods (20 unconstrained + 10 on-demand + 10 spot)"
+
+        log "Waiting 120s for provisioning..."
+        sleep 120
+
+        # Collect pod distribution
+        log "=== Pod Distribution ==="
+        log "Nodes by pool:"
+        kubectl get nodes -l karpenter.sh/nodepool --no-headers -o custom-columns='NAME:.metadata.name,POOL:.metadata.labels.karpenter\.sh/nodepool,TYPE:.metadata.labels.karpenter\.sh/capacity-type' 2>/dev/null || true
+
+        log "on-demand-only pods (should be on on-demand nodes):"
+        kubectl get pods -l app=on-demand-only -o wide --no-headers 2>/dev/null | head -5 || true
+
+        log "spot-only pods (should be on spot nodes):"
+        kubectl get pods -l app=spot-only -o wide --no-headers 2>/dev/null | head -5 || true
+
+        log "unconstrained pods (should prefer spot):"
+        kubectl get pods -l app=unconstrained -o wide --no-headers 2>/dev/null | head -5 || true
+
+        # Save distribution to results
+        kubectl get pods -l kubesim-scenario=placement-multipool -o json > "$RESULTS_DIR/pods.json" 2>/dev/null || true
+        kubectl get nodes -l karpenter.sh/nodepool -o json > "$RESULTS_DIR/nodes.json" 2>/dev/null || true
+
+        log "Waiting 60s for stabilization..."
+        sleep 60
+
+        # Cleanup extra NodePool
+        log "Cleaning up spot NodePool..."
+        kubectl delete nodepool spot --ignore-not-found 2>/dev/null || true
+        kubectl delete kwoknodeclass spot --ignore-not-found 2>/dev/null || true
+
+        log "Multi-pool test complete"
+        ;;
+
     *)
         echo "Unknown scenario: $SCENARIO"
-        echo "Usage: $0 {smoke-test|benchmark-control|adversarial-churn|adversarial-heterogeneous|adversarial-deletion-cost}"
+        echo "Usage: $0 {smoke-test|benchmark-control|adversarial-churn|adversarial-heterogeneous|adversarial-deletion-cost|placement-multipool}"
         exit 1
         ;;
 esac
