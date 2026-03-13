@@ -168,6 +168,8 @@ struct SimHandler {
     catalog: Catalog,
     overhead: Resources,
     daemonset_pct: u32,
+    node_startup_ns: u64,
+    pod_startup_ns: u64,
 }
 
 impl kubesim_engine::EventHandler for SimHandler {
@@ -226,8 +228,31 @@ impl kubesim_engine::EventHandler for SimHandler {
                 node.taints = spec.taints.iter().cloned().collect();
                 node.pool_name = spec.pool_name.clone();
                 node.do_not_disrupt = spec.do_not_disrupt;
+                if self.node_startup_ns > 0 {
+                    node.conditions.ready = false; // not ready until NodeReady fires
+                }
                 let node_id = state.add_node(node);
-                // Try to schedule pending pods onto the new node
+                // Try to schedule pending pods onto the new node (only if instant startup)
+                if self.node_startup_ns == 0 {
+                    let pending: Vec<_> = state.pending_queue.clone();
+                    for pod_id in pending {
+                        if let kubesim_scheduler::ScheduleResult::Bound(nid) =
+                            self.scheduler.schedule_one(state, pod_id)
+                        {
+                            state.bind_pod(pod_id, nid);
+                        }
+                    }
+                }
+                vec![kubesim_engine::ScheduledEvent {
+                    time: SimTime(time.0 + self.node_startup_ns.max(1)),
+                    event: EngineEvent::NodeReady(node_id),
+                }]
+            }
+            EngineEvent::NodeReady(node_id) => {
+                // Mark node ready and schedule pending pods onto it
+                if let Some(n) = state.nodes.get_mut(*node_id) {
+                    n.conditions.ready = true;
+                }
                 let pending: Vec<_> = state.pending_queue.clone();
                 for pod_id in pending {
                     if let kubesim_scheduler::ScheduleResult::Bound(nid) =
@@ -236,10 +261,14 @@ impl kubesim_engine::EventHandler for SimHandler {
                         state.bind_pod(pod_id, nid);
                     }
                 }
-                vec![kubesim_engine::ScheduledEvent {
-                    time: SimTime(time.0 + 1),
-                    event: EngineEvent::NodeReady(node_id),
-                }]
+                // Trigger provisioning if pods are still pending
+                if !state.pending_queue.is_empty() {
+                    return vec![kubesim_engine::ScheduledEvent {
+                        time: SimTime(time.0 + 1),
+                        event: EngineEvent::KarpenterProvisioningLoop,
+                    }];
+                }
+                Vec::new()
             }
             EngineEvent::KarpenterProvisioningLoop => {
                 // Try to schedule pending pods onto existing nodes before the
@@ -505,12 +534,15 @@ fn run_single(
         }
     }
 
+    let delays = &scenario.study.cluster.delays;
     let handler = SimHandler {
         scheduler: Scheduler::new(SchedulerProfile::with_scoring("default", scoring)),
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
         catalog: Catalog::for_provider(provider).expect("embedded catalog"),
         overhead,
         daemonset_pct,
+        node_startup_ns: delays.node_startup_ns(),
+        pod_startup_ns: delays.pod_startup_ns(),
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -541,6 +573,10 @@ fn run_single(
                 Catalog::for_provider(provider).expect("embedded catalog"),
                 pool.clone(),
             ).with_overhead(overhead).with_daemonset_pct(daemonset_pct);
+            let batch_ns = delays.provisioner_batch_ns();
+            if batch_ns > 0 {
+                prov.loop_interval_ns = batch_ns;
+            }
             if let Some(ref vp) = version_profile {
                 prov = prov.with_version(vp.clone());
             }
@@ -1194,6 +1230,7 @@ impl StepSimulation {
         }
 
         // Add the combined handler (scheduler + metrics) to the engine
+        let delays = &self.scenario.study.cluster.delays;
         let handler = SimHandler {
             scheduler: Scheduler::new(
                 SchedulerProfile::with_scoring("default", scoring),
@@ -1203,6 +1240,8 @@ impl StepSimulation {
                 .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
             overhead,
             daemonset_pct,
+            node_startup_ns: delays.node_startup_ns(),
+            pod_startup_ns: delays.pod_startup_ns(),
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));

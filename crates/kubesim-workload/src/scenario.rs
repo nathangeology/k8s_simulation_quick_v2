@@ -55,17 +55,54 @@ pub enum TimeMode {
 pub struct ClusterConfig {
     pub node_pools: Vec<NodePoolDef>,
     /// Fixed system overhead subtracted from every node's allocatable resources.
-    /// Accounts for kubelet, kube-proxy, OS overhead, and eviction thresholds.
     #[serde(default)]
     pub system_overhead: Option<SystemOverhead>,
     /// Percentage of node capacity reserved for daemonsets (applied after fixed overhead).
     #[serde(default)]
     pub daemonset_overhead_percent: Option<u32>,
     /// Daemonset pods created on every node at NodeReady.
-    /// If omitted: default [logging_daemonset: 150m CPU, 500Mi memory].
-    /// If empty list []: no daemonsets.
     #[serde(default)]
     pub daemonsets: Option<Vec<DaemonSetDef>>,
+    /// Action delays to model real-world latency.
+    #[serde(default)]
+    pub delays: ActionDelays,
+}
+
+/// Configurable delays for realistic timing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionDelays {
+    /// Time from NodeLaunching to NodeReady (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub node_startup: String,
+    /// Time from NodeDrained to NodeTerminated (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub node_shutdown: String,
+    /// Provisioner batch window — delay before first provisioning pass (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub provisioner_batch: String,
+    /// Time for a pod to transition from Pending to Running once bound (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub pod_startup: String,
+}
+
+fn default_zero_duration() -> String { "0s".to_string() }
+
+impl Default for ActionDelays {
+    fn default() -> Self {
+        Self {
+            node_startup: "0s".to_string(),
+            node_shutdown: "0s".to_string(),
+            provisioner_batch: "0s".to_string(),
+            pod_startup: "0s".to_string(),
+        }
+    }
+}
+
+impl ActionDelays {
+    pub fn node_startup_ns(&self) -> u64 { parse_duration_ns(&self.node_startup).unwrap_or(0) }
+    pub fn node_shutdown_ns(&self) -> u64 { parse_duration_ns(&self.node_shutdown).unwrap_or(0) }
+    pub fn provisioner_batch_ns(&self) -> u64 { parse_duration_ns(&self.provisioner_batch).unwrap_or(0) }
+    pub fn pod_startup_ns(&self) -> u64 { parse_duration_ns(&self.pod_startup).unwrap_or(0) }
 }
 
 /// A daemonset definition in scenario YAML.
