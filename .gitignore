@@ -8,3 +8,5 @@ target/
 .venv/
 *.so
 .hypothesis/
+validation/results/
+validation/*.parquet

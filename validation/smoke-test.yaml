@@ -1,0 +1,31 @@
+# Smoke test: 2-minute scenario for validation pipeline end-to-end check
+# 5 pods scale up, wait, scale down to 1
+# Verifies: Karpenter provisions KWOK nodes, consolidation works, metrics collection works
+study:
+  name: smoke-test
+  runs: 1
+  time_mode: wall_clock
+  duration: 2m
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge]
+        min_nodes: 0
+        max_nodes: 10
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+  workloads:
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "950m", max: "950m"}
+      memory_request: {dist: uniform, min: "3.5Gi", max: "3.5Gi"}
+      scale_up:
+        - {at: "5s", increase_to: 5}
+      scale_down:
+        - {at: "60s", reduce_by: 4}
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}
