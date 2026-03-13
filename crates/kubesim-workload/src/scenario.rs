@@ -525,6 +525,10 @@ pub struct PodAntiAffinityDef {
     /// Weight for preferred anti-affinity (default: 100)
     #[serde(default = "default_affinity_weight")]
     pub weight: u32,
+    /// Override selector value for cross anti-affinity.
+    /// If set, the anti-affinity selector uses this value instead of the pod's own label.
+    #[serde(default)]
+    pub target_label_value: Option<String>,
 }
 
 fn default_affinity_type() -> String { "preferred".into() }
