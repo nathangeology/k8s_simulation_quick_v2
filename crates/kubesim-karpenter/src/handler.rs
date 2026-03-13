@@ -101,10 +101,7 @@ impl EventHandler for ProvisioningHandler {
             });
         }
 
-        // Re-schedule the periodic reconcile loop unconditionally.
-        // This ensures evicted pods (from consolidation, spot interruptions, etc.)
-        // are always picked up even if no provisioning progress was made this round.
-        // If progress was made and more pending pods remain, also schedule an
+        // If progress was made and more pending pods remain, schedule an
         // immediate follow-up for faster convergence.
         let addressed_pods: usize = decisions.iter().map(|d| d.pod_ids.len()).sum();
         if !decisions.is_empty() && state.pending_queue.len() > addressed_pods {
@@ -114,11 +111,15 @@ impl EventHandler for ProvisioningHandler {
             });
         }
 
-        // Always schedule the next periodic reconcile
-        follow_ups.push(ScheduledEvent {
-            time: SimTime(time.0 + self.reconcile_interval_ns),
-            event: Event::KarpenterProvisioningLoop,
-        });
+        // Only schedule the next periodic reconcile if there are still pending pods.
+        // When the pending queue is empty, the loop stops — it will be restarted
+        // on-demand when new pods become unschedulable (via SimHandler/DrainHandler).
+        if !state.pending_queue.is_empty() {
+            follow_ups.push(ScheduledEvent {
+                time: SimTime(time.0 + self.reconcile_interval_ns),
+                event: Event::KarpenterProvisioningLoop,
+            });
+        }
 
         follow_ups
     }
