@@ -623,13 +623,23 @@ type SpreadCacheKey = (String, String);
 
 /// Pre-computed caches for batch scheduling. Avoids re-scanning all pods/nodes
 /// on every `schedule_one` call in a loop.
-pub(crate) struct SchedulingCaches {
+pub struct SchedulingCaches {
     /// domain_counts cache: (topology_key, selector_key) → { domain_value → count }
     spread_counts: HashMap<SpreadCacheKey, HashMap<String, i32>>,
     /// Pod affinity: (topology_key, topology_value, selector_key, anti) → has_match
     affinity_match: HashMap<(String, String, String, bool), bool>,
     /// Pod affinity count: (topology_key, topology_value, selector_key) → count
     affinity_count: HashMap<(String, String, String), i64>,
+}
+
+impl Default for SchedulingCaches {
+    fn default() -> Self {
+        Self {
+            spread_counts: HashMap::new(),
+            affinity_match: HashMap::new(),
+            affinity_count: HashMap::new(),
+        }
+    }
 }
 
 fn selector_key(sel: &kubesim_core::LabelSelector) -> String {
@@ -643,13 +653,10 @@ fn affinity_term_selector_key(term: &PodAffinityTerm) -> String {
 }
 
 impl SchedulingCaches {
-    fn build(_state: &ClusterState) -> Self {
-        Self {
-            spread_counts: HashMap::new(),
-            affinity_match: HashMap::new(),
-            affinity_count: HashMap::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
+
 
     fn get_domain_counts(&mut self, state: &ClusterState, topology_key: &str, selector: &kubesim_core::LabelSelector) -> &HashMap<String, i32> {
         let key = (topology_key.to_string(), selector_key(selector));
@@ -673,7 +680,7 @@ impl SchedulingCaches {
     }
 
     /// Invalidate caches after a pod is bound (state changed).
-    fn invalidate(&mut self) {
+    pub fn invalidate(&mut self) {
         self.spread_counts.clear();
         self.affinity_match.clear();
         self.affinity_count.clear();
@@ -809,11 +816,13 @@ pub struct Scheduler {
     pub profile: SchedulerProfile,
     /// Optional seeded RNG for breaking scoring ties (like real kube-scheduler).
     rng: Option<rand::rngs::StdRng>,
+    /// Persistent caches for topology/affinity lookups across schedule_pending_from calls.
+    caches: SchedulingCaches,
 }
 
 impl Scheduler {
     pub fn new(profile: SchedulerProfile) -> Self {
-        Self { profile, rng: None }
+        Self { profile, rng: None, caches: SchedulingCaches::new() }
     }
 
     /// Create a scheduler with a seeded RNG for tie-breaking randomness.
@@ -822,7 +831,13 @@ impl Scheduler {
         Self {
             profile,
             rng: Some(rand::rngs::StdRng::seed_from_u64(seed)),
+            caches: SchedulingCaches::new(),
         }
+    }
+
+    /// Invalidate persistent caches (call when nodes are added/removed).
+    pub fn invalidate_caches(&mut self) {
+        self.caches.invalidate();
     }
 
     /// Attempt to schedule a single pod. Returns the chosen node or failure reasons.
@@ -1041,7 +1056,8 @@ impl Scheduler {
     pub fn schedule_pending_from(&mut self, state: &mut ClusterState, pod_ids: &[PodId]) -> (u32, u32) {
         let mut bound = 0u32;
         let mut unschedulable = 0u32;
-        let mut caches = SchedulingCaches::build(state);
+        // Take persistent caches out to avoid double-mutable-borrow on self
+        let mut caches = std::mem::take(&mut self.caches);
 
         for &pod_id in pod_ids {
             match self.schedule_one_cached(state, pod_id, &mut caches) {
@@ -1064,6 +1080,8 @@ impl Scheduler {
             }
         }
 
+        // Put caches back for reuse across calls
+        self.caches = caches;
         (bound, unschedulable)
     }
 }

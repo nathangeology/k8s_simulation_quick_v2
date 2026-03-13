@@ -313,29 +313,88 @@ pub fn provision_versioned(
             let type_capacities: Vec<(u64, u64, u32)> = types_for_fit.iter()
                 .map(|it| (effective_cpu(it, overhead, daemonset_pct), effective_mem(it, overhead, daemonset_pct), it.gpu_count))
                 .collect();
+            // Capacity ceiling: max across all types for early rejection
+            let max_cpu = type_capacities.iter().map(|t| t.0).max().unwrap_or(0);
+            let max_mem = type_capacities.iter().map(|t| t.1).max().unwrap_or(0);
+            let max_gpu = type_capacities.iter().map(|t| t.2).max().unwrap_or(0);
+
+            // Index: owner → claim indices with room for that owner (spread)
+            let mut owner_available: HashMap<OwnerId, Vec<usize>> = HashMap::new();
+            // Index: (label_key, label_value) → claim indices containing pods with those labels
+            let mut label_to_claims: HashMap<(String, String), HashSet<usize>> = HashMap::new();
 
             for &(pid, ref req) in &pods {
                 let pod = match state.pods.get(pid) {
                     Some(p) => p,
                     None => continue,
                 };
-                // Try to fit on an existing in-flight NodeClaim
+
+                // Capacity ceiling check: skip if no type can ever fit this claim
+                // (already placed pods + this pod)
+                // This is a quick check before iterating candidates.
+
+                // Determine candidate claim indices using indexes
+                let has_spread = pod.scheduling_constraints.topology_spread.iter()
+                    .any(|c| c.topology_key == "kubernetes.io/hostname" && c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule);
+                let has_anti_affinity = pod.scheduling_constraints.pod_affinity.iter()
+                    .any(|t| t.anti && matches!(t.affinity_type, AffinityType::Required) && t.topology_key == "kubernetes.io/hostname");
+
+                // Build candidate set: start with all claims, then narrow
+                let num_claims = claims.len();
+                let candidates: Vec<usize> = if has_spread {
+                    // For spread: only try claims that have room for this owner
+                    owner_available.get(&pod.owner)
+                        .map(|v| v.clone())
+                        .unwrap_or_default()
+                } else if has_anti_affinity {
+                    // For anti-affinity: exclude claims with conflicting labels
+                    let mut excluded: HashSet<usize> = HashSet::new();
+                    for term in &pod.scheduling_constraints.pod_affinity {
+                        if !term.anti || !matches!(term.affinity_type, AffinityType::Required) { continue; }
+                        if term.topology_key != "kubernetes.io/hostname" { continue; }
+                        for (k, v) in &term.label_selector.match_labels.0 {
+                            if let Some(conflict_set) = label_to_claims.get(&(k.clone(), v.clone())) {
+                                excluded.extend(conflict_set);
+                            }
+                        }
+                    }
+                    // Also check reverse: existing pods' anti-affinity against new pod
+                    for (lk, lv) in &pod.labels.0 {
+                        if let Some(conflict_set) = label_to_claims.get(&(lk.clone(), lv.clone())) {
+                            // These claims have pods with labels matching ours — check if those pods have anti-affinity against us
+                            // For simplicity, include them in excluded (conservative but fast)
+                            // The full check happens below anyway
+                            excluded.extend(conflict_set);
+                        }
+                    }
+                    (0..num_claims).filter(|i| !excluded.contains(i)).collect()
+                } else {
+                    (0..num_claims).collect()
+                };
+
                 let mut placed = false;
-                for claim in &mut claims {
-                    // Check anti-affinity: required anti-affinity with hostname topology
-                    // means pods matching the selector cannot share a node
+                let mut placed_idx = 0usize;
+                for &ci in &candidates {
+                    let claim = &mut claims[ci];
+
+                    // Capacity ceiling: skip if already over max
+                    let new_cpu = claim.total_cpu + req.cpu_millis;
+                    let new_mem = claim.total_mem + req.memory_bytes;
+                    let new_gpu = claim.total_gpu + req.gpu;
+                    if new_cpu > max_cpu || new_mem > max_mem || new_gpu > max_gpu {
+                        continue;
+                    }
+
+                    // Anti-affinity check (index narrows candidates, full check validates)
                     if has_hostname_anti_affinity_conflict(pod, &claim.owner_ids, &claim.pod_ids, state) {
                         continue;
                     }
 
-                    // Check topology spread: maxSkew on hostname
+                    // Spread check (index narrows candidates, full check validates)
                     if violates_hostname_spread(pod, &claim.pods_per_owner) {
                         continue;
                     }
 
-                    let new_cpu = claim.total_cpu + req.cpu_millis;
-                    let new_mem = claim.total_mem + req.memory_bytes;
-                    let new_gpu = claim.total_gpu + req.gpu;
                     // Check if ANY allowed instance type can still fit
                     let fits = type_capacities.iter().any(|&(cpu, mem, gpu)| {
                         gpu >= new_gpu && cpu >= new_cpu && mem >= new_mem
@@ -348,15 +407,60 @@ pub fn provision_versioned(
                         claim.owner_ids.insert(pod.owner);
                         *claim.pods_per_owner.entry(pod.owner).or_insert(0) += 1;
                         placed = true;
+                        placed_idx = ci;
                         break;
                     }
                 }
-                if !placed {
+
+                if placed {
+                    // Update indexes for the claim we placed on
+                    // Update owner_available: check if this claim still has room for this owner
+                    let claim = &claims[placed_idx];
+                    let owner_count = claim.pods_per_owner.get(&pod.owner).copied().unwrap_or(0);
+                    // Check spread constraints to see if more pods from this owner can fit
+                    let max_skew = pod.scheduling_constraints.topology_spread.iter()
+                        .filter(|c| c.topology_key == "kubernetes.io/hostname" && c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule)
+                        .map(|c| c.max_skew)
+                        .min()
+                        .unwrap_or(u32::MAX);
+                    if owner_count >= max_skew {
+                        // Remove this claim from owner_available for this owner
+                        if let Some(v) = owner_available.get_mut(&pod.owner) {
+                            v.retain(|&x| x != placed_idx);
+                        }
+                    }
+                    // Update label_to_claims index with new pod's labels
+                    for (lk, lv) in &pod.labels.0 {
+                        label_to_claims.entry((lk.clone(), lv.clone()))
+                            .or_default()
+                            .insert(placed_idx);
+                    }
+                    // Move-to-front: swap placed claim toward front for subsequent pods
+                    if placed_idx > 0 {
+                        claims.swap(0, placed_idx);
+                        // Fix up indexes after swap
+                        // Swap references in owner_available
+                        for (_owner, indices) in owner_available.iter_mut() {
+                            for idx in indices.iter_mut() {
+                                if *idx == 0 { *idx = placed_idx; }
+                                else if *idx == placed_idx { *idx = 0; }
+                            }
+                        }
+                        // Swap references in label_to_claims
+                        for (_key, indices) in label_to_claims.iter_mut() {
+                            let had_0 = indices.remove(&0);
+                            let had_p = indices.remove(&placed_idx);
+                            if had_0 { indices.insert(placed_idx); }
+                            if had_p { indices.insert(0); }
+                        }
+                    }
+                } else {
                     if !pool.can_launch(&running_usage, 0, 0) { break; }
                     let mut owner_ids = HashSet::new();
                     owner_ids.insert(pod.owner);
                     let mut pods_per_owner = HashMap::new();
                     pods_per_owner.insert(pod.owner, 1);
+                    let new_idx = claims.len();
                     // Create new NodeClaim
                     claims.push(FlexNodeClaim {
                         pod_ids: vec![pid],
@@ -366,6 +470,27 @@ pub fn provision_versioned(
                         owner_ids,
                         pods_per_owner,
                     });
+                    // Update indexes for new claim
+                    // All owners can potentially use this new claim (spread)
+                    // For now, add it for all known owners + this pod's owner
+                    owner_available.entry(pod.owner).or_default().push(new_idx);
+                    // Update label index
+                    for (lk, lv) in &pod.labels.0 {
+                        label_to_claims.entry((lk.clone(), lv.clone()))
+                            .or_default()
+                            .insert(new_idx);
+                    }
+                    // Check if this claim still has room for this owner
+                    let max_skew = pod.scheduling_constraints.topology_spread.iter()
+                        .filter(|c| c.topology_key == "kubernetes.io/hostname" && c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule)
+                        .map(|c| c.max_skew)
+                        .min()
+                        .unwrap_or(u32::MAX);
+                    if 1 >= max_skew {
+                        if let Some(v) = owner_available.get_mut(&pod.owner) {
+                            v.retain(|&x| x != new_idx);
+                        }
+                    }
                     // Tentatively count toward usage (use smallest type as estimate)
                     running_usage.node_count += 1;
                 }
