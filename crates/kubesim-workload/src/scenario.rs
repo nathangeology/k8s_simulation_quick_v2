@@ -272,6 +272,12 @@ pub struct WorkloadDef {
     #[serde(default)]
     pub topology_spread: Option<TopologySpreadDef>,
     #[serde(default)]
+    pub pod_anti_affinity: Option<PodAntiAffinityDef>,
+    #[serde(default)]
+    pub node_selector: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    pub labels: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
     pub pdb: Option<PdbDef>,
     #[serde(default)]
     pub churn: Option<ChurnLevel>,
@@ -506,6 +512,23 @@ pub struct TopologySpreadDef {
     pub max_skew: u32,
     pub topology_key: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodAntiAffinityDef {
+    /// Label key to match against (e.g. "app")
+    pub label_key: String,
+    /// Topology key (e.g. "kubernetes.io/hostname")
+    pub topology_key: String,
+    /// "required" or "preferred" (default: "preferred")
+    #[serde(default = "default_affinity_type")]
+    pub affinity_type: String,
+    /// Weight for preferred anti-affinity (default: 100)
+    #[serde(default = "default_affinity_weight")]
+    pub weight: u32,
+}
+
+fn default_affinity_type() -> String { "preferred".into() }
+fn default_affinity_weight() -> u32 { 100 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdbDef {

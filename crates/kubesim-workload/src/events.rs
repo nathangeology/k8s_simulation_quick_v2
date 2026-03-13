@@ -2,7 +2,7 @@
 //!
 //! These events are consumed by the kubesim-engine event loop.
 
-use kubesim_core::{Resources, SimTime};
+use kubesim_core::{Resources, SimTime, SchedulingConstraints, LabelSet};
 use serde::{Deserialize, Serialize};
 
 use crate::scenario::{DeletionCostStrategy, ScoringStrategy};
@@ -20,6 +20,10 @@ pub enum Event {
         priority: i32,
         deletion_cost: Option<i32>,
         duration_ns: Option<u64>,
+        #[serde(default)]
+        scheduling_constraints: SchedulingConstraints,
+        #[serde(default)]
+        labels: LabelSet,
     },
     /// Launch a node from a node pool.
     NodeLaunching {
@@ -71,6 +75,10 @@ pub enum Event {
         limits: Resources,
         priority: i32,
         deletion_cost_strategy: DeletionCostStrategy,
+        #[serde(default)]
+        scheduling_constraints: SchedulingConstraints,
+        #[serde(default)]
+        labels: LabelSet,
     },
     /// Scale down a ReplicaSet by reducing desired replicas.
     ReplicaSetScaleDown {

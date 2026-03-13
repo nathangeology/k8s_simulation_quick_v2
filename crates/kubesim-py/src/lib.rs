@@ -175,6 +175,8 @@ struct SimHandler {
     pod_startup_jitter_ns: u64,
     /// Seeded RNG for delay jitter. None = no jitter.
     rng: Option<rand::rngs::StdRng>,
+    /// Counter for generating unique node hostnames.
+    node_counter: u32,
 }
 
 impl SimHandler {
@@ -250,6 +252,12 @@ impl kubesim_engine::EventHandler for SimHandler {
                 node.pool_name = spec.pool_name.clone();
                 node.do_not_disrupt = spec.do_not_disrupt;
                 node.created_at = time;
+                // Auto-assign kubernetes.io/hostname (unique per node) and zone labels
+                let node_num = self.node_counter;
+                self.node_counter += 1;
+                node.labels.insert("kubernetes.io/hostname".into(), format!("node-{}", node_num));
+                let zones = ["us-east-1a", "us-east-1b", "us-east-1c"];
+                node.labels.insert("topology.kubernetes.io/zone".into(), zones[(node_num as usize) % zones.len()].into());
                 if self.node_startup_ns > 0 {
                     node.conditions.ready = false; // not ready until NodeReady fires
                 }
@@ -491,14 +499,14 @@ fn run_single(
                 let node_id = state.add_node(node);
                 engine.schedule(SimTime(0), EngineEvent::NodeReady(node_id));
             }
-            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
+            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, scheduling_constraints, labels, .. } => {
                 engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
                     requests: *requests,
                     limits: *limits,
                     owner: OwnerId(*owner_id),
                     priority: *priority,
-                    labels: LabelSet::default(),
-                    scheduling_constraints: SchedulingConstraints::default(),
+                    labels: labels.clone(),
+                    scheduling_constraints: scheduling_constraints.clone(),
                     do_not_disrupt: workload_name == "batch_job",
                     duration_ns: *duration_ns,
                 }));
@@ -522,7 +530,7 @@ fn run_single(
                 engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
             }
             WorkloadEvent::ReplicaSetSubmitted {
-                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy,
+                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, scheduling_constraints, labels,
             } => {
                 let owner = OwnerId(*owner_id);
                 state.add_replica_set(ReplicaSet {
@@ -532,8 +540,8 @@ fn run_single(
                         requests: *requests,
                         limits: *limits,
                         priority: *priority,
-                        labels: LabelSet::default(),
-                        scheduling_constraints: SchedulingConstraints::default(),
+                        labels: labels.clone(),
+                        scheduling_constraints: scheduling_constraints.clone(),
                     },
                     deletion_cost_strategy: *deletion_cost_strategy,
                 });
@@ -581,6 +589,7 @@ fn run_single(
         } else {
             None
         },
+        node_counter: 0,
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -1240,7 +1249,7 @@ impl StepSimulation {
                     engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
                 }
                 WorkloadEvent::ReplicaSetSubmitted {
-                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy,
+                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, scheduling_constraints, labels,
                 } => {
                     let owner = OwnerId(*owner_id);
                     state.add_replica_set(ReplicaSet {
@@ -1250,8 +1259,8 @@ impl StepSimulation {
                             requests: *requests,
                             limits: *limits,
                             priority: *priority,
-                            labels: LabelSet::default(),
-                            scheduling_constraints: SchedulingConstraints::default(),
+                            labels: labels.clone(),
+                            scheduling_constraints: scheduling_constraints.clone(),
                         },
                         deletion_cost_strategy: *deletion_cost_strategy,
                     });
@@ -1294,6 +1303,7 @@ impl StepSimulation {
             } else {
                 None
             },
+            node_counter: 0,
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));

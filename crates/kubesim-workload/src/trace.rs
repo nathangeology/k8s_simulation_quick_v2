@@ -160,6 +160,8 @@ fn prometheus_to_events(csv: &str) -> Result<Vec<Event>, LoadError> {
             priority: 0,
             deletion_cost: None,
             duration_ns: None,
+            scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+            labels: kubesim_core::LabelSet::default(),
         });
 
         // Interpolate between consecutive samples for continuous workload
@@ -229,6 +231,8 @@ fn k8s_events_to_events(jsonl: &str) -> Result<Vec<Event>, LoadError> {
                     priority: 0,
                     deletion_cost: None,
                     duration_ns: None,
+                    scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+                    labels: kubesim_core::LabelSet::default(),
                 });
             }
             "scale" => {
