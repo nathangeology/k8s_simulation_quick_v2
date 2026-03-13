@@ -136,8 +136,13 @@ pub fn select_instance_with_overhead(
     for it in &allowed {
         let raw_cpu = (it.vcpu as u64) * 1000;
         let raw_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
-        let mut it_cpu = raw_cpu.saturating_sub(overhead.cpu_millis);
-        let mut it_mem = raw_mem.saturating_sub(overhead.memory_bytes);
+        let (oh_cpu, oh_mem) = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+            kubesim_ec2::eks_overhead(it.vcpu)
+        } else {
+            (overhead.cpu_millis, overhead.memory_bytes)
+        };
+        let mut it_cpu = raw_cpu.saturating_sub(oh_cpu);
+        let mut it_mem = raw_mem.saturating_sub(oh_mem);
         if daemonset_pct > 0 {
             it_cpu = it_cpu.saturating_sub(raw_cpu * daemonset_pct as u64 / 100);
             it_mem = it_mem.saturating_sub(raw_mem * daemonset_pct as u64 / 100);
@@ -401,7 +406,12 @@ fn find_largest_instance<'a>(
 /// Effective allocatable CPU for an instance type after overhead.
 fn effective_cpu(it: &kubesim_ec2::InstanceType, overhead: &Resources, daemonset_pct: u32) -> u64 {
     let raw = (it.vcpu as u64) * 1000;
-    let mut eff = raw.saturating_sub(overhead.cpu_millis);
+    let oh_cpu = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+        kubesim_ec2::eks_overhead(it.vcpu).0
+    } else {
+        overhead.cpu_millis
+    };
+    let mut eff = raw.saturating_sub(oh_cpu);
     if daemonset_pct > 0 { eff = eff.saturating_sub(raw * daemonset_pct as u64 / 100); }
     eff
 }
@@ -409,7 +419,12 @@ fn effective_cpu(it: &kubesim_ec2::InstanceType, overhead: &Resources, daemonset
 /// Effective allocatable memory for an instance type after overhead.
 fn effective_mem(it: &kubesim_ec2::InstanceType, overhead: &Resources, daemonset_pct: u32) -> u64 {
     let raw = (it.memory_gib as u64) * 1024 * 1024 * 1024;
-    let mut eff = raw.saturating_sub(overhead.memory_bytes);
+    let oh_mem = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+        kubesim_ec2::eks_overhead(it.vcpu).1
+    } else {
+        overhead.memory_bytes
+    };
+    let mut eff = raw.saturating_sub(oh_mem);
     if daemonset_pct > 0 { eff = eff.saturating_sub(raw * daemonset_pct as u64 / 100); }
     eff
 }

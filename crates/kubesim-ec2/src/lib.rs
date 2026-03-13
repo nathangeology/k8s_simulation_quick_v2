@@ -283,6 +283,50 @@ impl Catalog {
     }
 }
 
+// ── EKS system overhead lookup table ─────────────────────────────
+
+/// EKS overhead data points: (vcpu, cpu_overhead_millis, memory_overhead_gib).
+const EKS_OVERHEAD: &[(u32, u64, f64)] = &[
+    (1,   60,  0.43),
+    (2,   70,  0.98),
+    (4,   80,  1.18),
+    (8,   90,  2.04),
+    (16,  110, 3.72),
+    (32,  150, 4.56),
+    (64,  230, 11.2),
+    (96,  310, 11.2),
+    (128, 390, 16.61),
+    (192, 550, 16.61),
+];
+
+/// Look up EKS system overhead (cpu_millis, memory_bytes) for a given vCPU count.
+/// Interpolates linearly for vCPU counts between table entries.
+/// Clamps to the nearest endpoint for values outside the table range.
+pub fn eks_overhead(vcpu: u32) -> (u64, u64) {
+    if vcpu <= EKS_OVERHEAD[0].0 {
+        let (_, cpu, mem) = EKS_OVERHEAD[0];
+        return (cpu, (mem * 1024.0 * 1024.0 * 1024.0) as u64);
+    }
+    let last = EKS_OVERHEAD.len() - 1;
+    if vcpu >= EKS_OVERHEAD[last].0 {
+        let (_, cpu, mem) = EKS_OVERHEAD[last];
+        return (cpu, (mem * 1024.0 * 1024.0 * 1024.0) as u64);
+    }
+    for i in 0..last {
+        let (v0, c0, m0) = EKS_OVERHEAD[i];
+        let (v1, c1, m1) = EKS_OVERHEAD[i + 1];
+        if vcpu >= v0 && vcpu <= v1 {
+            let t = (vcpu - v0) as f64 / (v1 - v0) as f64;
+            let cpu = c0 as f64 + t * (c1 as f64 - c0 as f64);
+            let mem = m0 + t * (m1 - m0);
+            return (cpu as u64, (mem * 1024.0 * 1024.0 * 1024.0) as u64);
+        }
+    }
+    // Fallback (shouldn't reach here)
+    let (_, cpu, mem) = EKS_OVERHEAD[last];
+    (cpu, (mem * 1024.0 * 1024.0 * 1024.0) as u64)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
