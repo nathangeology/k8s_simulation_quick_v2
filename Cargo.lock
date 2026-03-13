@@ -138,6 +138,7 @@ dependencies = [
  "kubesim-ec2",
  "kubesim-engine",
  "kubesim-scheduler",
+ "rand",
  "serde",
  "smallvec",
  "thiserror",
@@ -166,6 +167,7 @@ dependencies = [
  "kubesim-scheduler",
  "kubesim-workload",
  "pyo3",
+ "rand",
  "rayon",
  "serde_json",
 ]
@@ -175,6 +177,7 @@ name = "kubesim-scheduler"
 version = "0.1.0"
 dependencies = [
  "kubesim-core",
+ "rand",
  "smallvec",
  "thiserror",
 ]

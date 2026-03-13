@@ -16,6 +16,9 @@ use kubesim_core::{
 };
 use std::collections::HashMap;
 
+// Re-export rand types used by consumers constructing Scheduler with RNG
+pub use rand;
+
 // ── Plugin traits ───────────────────────────────────────────────
 
 /// Result of a filter plugin evaluation.
@@ -632,15 +635,26 @@ pub enum ScheduleResult {
 /// kube-scheduler model: runs filter → score → select for pending pods.
 pub struct Scheduler {
     pub profile: SchedulerProfile,
+    /// Optional seeded RNG for breaking scoring ties (like real kube-scheduler).
+    rng: Option<rand::rngs::StdRng>,
 }
 
 impl Scheduler {
     pub fn new(profile: SchedulerProfile) -> Self {
-        Self { profile }
+        Self { profile, rng: None }
+    }
+
+    /// Create a scheduler with a seeded RNG for tie-breaking randomness.
+    pub fn with_seed(profile: SchedulerProfile, seed: u64) -> Self {
+        use rand::SeedableRng;
+        Self {
+            profile,
+            rng: Some(rand::rngs::StdRng::seed_from_u64(seed)),
+        }
     }
 
     /// Attempt to schedule a single pod. Returns the chosen node or failure reasons.
-    pub fn schedule_one(&self, state: &ClusterState, pod_id: PodId) -> ScheduleResult {
+    pub fn schedule_one(&mut self, state: &ClusterState, pod_id: PodId) -> ScheduleResult {
         let pod = match state.pods.get(pod_id) {
             Some(p) => p,
             None => return ScheduleResult::Unschedulable(vec!["pod not found".into()]),
@@ -702,13 +716,28 @@ impl Scheduler {
             }
         }
 
-        let best = node_totals.iter().max_by_key(|&&(_, score)| score).map(|&(nid, _)| nid).unwrap();
+        // Break ties randomly when RNG is available (matches real kube-scheduler behavior)
+        let best = if let Some(ref mut rng) = self.rng {
+            use rand::seq::SliceRandom;
+            let max_score = node_totals.iter().map(|&(_, s)| s).max().unwrap();
+            let tied: Vec<NodeId> = node_totals.iter()
+                .filter(|&&(_, s)| s == max_score)
+                .map(|&(nid, _)| nid)
+                .collect();
+            if tied.len() > 1 {
+                *tied.choose(rng).unwrap()
+            } else {
+                tied[0]
+            }
+        } else {
+            node_totals.iter().max_by_key(|&&(_, score)| score).map(|&(nid, _)| nid).unwrap()
+        };
 
         ScheduleResult::Bound(best)
     }
 
     /// Schedule all pending pods in priority order. Returns (bound, unschedulable) counts.
-    pub fn schedule_pending(&self, state: &mut ClusterState) -> (u32, u32) {
+    pub fn schedule_pending(&mut self, state: &mut ClusterState) -> (u32, u32) {
         let mut queue: Vec<PodId> = state.pending_queue.clone();
         // Sort by priority descending
         queue.sort_by(|a, b| {
@@ -789,7 +818,7 @@ mod tests {
         state.add_node(ready_node(4000, 8_000_000_000));
         let pod_id = state.submit_pod(simple_pod(1000, 1_000_000_000));
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, unsched) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 1);
         assert_eq!(unsched, 0);
@@ -802,7 +831,7 @@ mod tests {
         state.add_node(ready_node(1000, 1_000_000_000));
         let pod_id = state.submit_pod(simple_pod(2000, 1_000_000_000));
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, unsched) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 0);
         assert_eq!(unsched, 1);
@@ -824,7 +853,7 @@ mod tests {
         });
         let pod_id = state.submit_pod(simple_pod(500, 500_000_000));
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::MostAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::MostAllocated));
         let (bound, _) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 1);
         assert_eq!(state.pods.get(pod_id).unwrap().node, Some(na));
@@ -845,7 +874,7 @@ mod tests {
         });
         let pod_id = state.submit_pod(simple_pod(500, 500_000_000));
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, _) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 1);
         assert_eq!(state.pods.get(pod_id).unwrap().node, Some(nb));
@@ -863,7 +892,7 @@ mod tests {
         state.add_node(node);
         state.submit_pod(simple_pod(1000, 1_000_000_000));
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, unsched) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 0);
         assert_eq!(unsched, 1);
@@ -889,7 +918,7 @@ mod tests {
         });
         state.submit_pod(pod);
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, _) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 1);
     }
@@ -908,7 +937,7 @@ mod tests {
         high.priority = 100;
         let high_id = state.submit_pod(high);
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, unsched) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 1);
         assert_eq!(unsched, 1);
@@ -925,7 +954,7 @@ mod tests {
         state.add_node(node);
         state.submit_pod(simple_pod(1000, 1_000_000_000));
 
-        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
         let (bound, unsched) = sched.schedule_pending(&mut state);
         assert_eq!(bound, 0);
         assert_eq!(unsched, 1);

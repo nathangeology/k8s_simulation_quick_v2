@@ -25,6 +25,7 @@ use kubesim_workload::{
 };
 
 use std::path::Path;
+use rand::SeedableRng;
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -169,7 +170,27 @@ struct SimHandler {
     overhead: Resources,
     daemonset_pct: u32,
     node_startup_ns: u64,
+    node_startup_jitter_ns: u64,
     pod_startup_ns: u64,
+    pod_startup_jitter_ns: u64,
+    /// Seeded RNG for delay jitter. None = no jitter.
+    rng: Option<rand::rngs::StdRng>,
+}
+
+impl SimHandler {
+    /// Compute a delay with optional uniform jitter.
+    fn jittered_delay(&mut self, base_ns: u64, jitter_ns: u64) -> u64 {
+        if jitter_ns == 0 {
+            return base_ns;
+        }
+        if let Some(ref mut rng) = self.rng {
+            use rand::Rng;
+            let j = rng.gen_range(0..=jitter_ns * 2) as i64 - jitter_ns as i64;
+            (base_ns as i64 + j).max(1) as u64
+        } else {
+            base_ns
+        }
+    }
 }
 
 impl kubesim_engine::EventHandler for SimHandler {
@@ -243,8 +264,9 @@ impl kubesim_engine::EventHandler for SimHandler {
                         }
                     }
                 }
+                let startup_delay = self.jittered_delay(self.node_startup_ns, self.node_startup_jitter_ns);
                 vec![kubesim_engine::ScheduledEvent {
-                    time: SimTime(time.0 + self.node_startup_ns.max(1)),
+                    time: SimTime(time.0 + startup_delay.max(1)),
                     event: EngineEvent::NodeReady(node_id),
                 }]
             }
@@ -535,14 +557,29 @@ fn run_single(
     }
 
     let delays = &scenario.study.cluster.delays;
+    let has_jitter = delays.node_startup_jitter_ns() > 0
+        || delays.pod_startup_jitter_ns() > 0
+        || delays.provisioner_batch_jitter_ns() > 0;
     let handler = SimHandler {
-        scheduler: Scheduler::new(SchedulerProfile::with_scoring("default", scoring)),
+        scheduler: if has_jitter || true {
+            // Always use seeded scheduler for reproducible tie-breaking when seed varies
+            Scheduler::with_seed(SchedulerProfile::with_scoring("default", scoring), seed)
+        } else {
+            Scheduler::new(SchedulerProfile::with_scoring("default", scoring))
+        },
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
         catalog: Catalog::for_provider(provider).expect("embedded catalog"),
         overhead,
         daemonset_pct,
         node_startup_ns: delays.node_startup_ns(),
+        node_startup_jitter_ns: delays.node_startup_jitter_ns(),
         pod_startup_ns: delays.pod_startup_ns(),
+        pod_startup_jitter_ns: delays.pod_startup_jitter_ns(),
+        rng: if has_jitter {
+            Some(rand::rngs::StdRng::seed_from_u64(seed.wrapping_add(0xDE1A0)))
+        } else {
+            None
+        },
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -576,6 +613,10 @@ fn run_single(
             let batch_ns = delays.provisioner_batch_ns();
             if batch_ns > 0 {
                 prov.loop_interval_ns = batch_ns;
+            }
+            let batch_jitter_ns = delays.provisioner_batch_jitter_ns();
+            if batch_jitter_ns > 0 {
+                prov = prov.with_batch_jitter(batch_jitter_ns, seed);
             }
             if let Some(ref vp) = version_profile {
                 prov = prov.with_version(vp.clone());
@@ -1234,8 +1275,9 @@ impl StepSimulation {
         // Add the combined handler (scheduler + metrics) to the engine
         let delays = &self.scenario.study.cluster.delays;
         let handler = SimHandler {
-            scheduler: Scheduler::new(
+            scheduler: Scheduler::with_seed(
                 SchedulerProfile::with_scoring("default", scoring),
+                42, // StepSimulation uses fixed seed
             ),
             metrics: MetricsCollector::new(RustMetricsConfig::default()),
             catalog: Catalog::for_provider(provider)
@@ -1243,7 +1285,14 @@ impl StepSimulation {
             overhead,
             daemonset_pct,
             node_startup_ns: delays.node_startup_ns(),
+            node_startup_jitter_ns: delays.node_startup_jitter_ns(),
             pod_startup_ns: delays.pod_startup_ns(),
+            pod_startup_jitter_ns: delays.pod_startup_jitter_ns(),
+            rng: if delays.node_startup_jitter_ns() > 0 || delays.pod_startup_jitter_ns() > 0 {
+                Some(rand::rngs::StdRng::seed_from_u64(42u64.wrapping_add(0xDE1A0)))
+            } else {
+                None
+            },
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));

@@ -255,7 +255,7 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
             impl EventHandler for SchedulingGlue {
                 fn handle(&mut self, event: &Event, _time: SimTime, state: &mut ClusterState) -> Vec<ScheduledEvent> {
                     if matches!(event, Event::ReplicaSetReconcile(_) | Event::NodeDrained(_)) {
-                        let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+                        let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
                         let pending: Vec<PodId> = state.pending_queue.clone();
                         for pid in pending {
                             if let ScheduleResult::Bound(nid) = sched.schedule_one(state, pid) {

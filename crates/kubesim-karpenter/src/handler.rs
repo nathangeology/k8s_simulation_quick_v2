@@ -3,6 +3,8 @@
 use kubesim_core::*;
 use kubesim_ec2::Catalog;
 use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 use crate::nodepool::{NodePool, NodePoolUsage};
 use crate::provisioner;
@@ -32,6 +34,10 @@ pub struct ProvisioningHandler {
     pub daemonset_pct: u32,
     /// Pods addressed by in-flight nodes (launched but not yet ready).
     inflight_pods: usize,
+    /// Jitter range (ns) for batch window delay. Uniform ±jitter added to loop_interval_ns.
+    pub batch_jitter_ns: u64,
+    /// Seeded RNG for jitter. None = no jitter.
+    rng: Option<StdRng>,
 }
 
 impl ProvisioningHandler {
@@ -46,6 +52,8 @@ impl ProvisioningHandler {
             overhead: Resources::default(),
             daemonset_pct: 0,
             inflight_pods: 0,
+            batch_jitter_ns: 0,
+            rng: None,
         }
     }
 
@@ -65,6 +73,28 @@ impl ProvisioningHandler {
     pub fn with_daemonset_pct(mut self, pct: u32) -> Self {
         self.daemonset_pct = pct;
         self
+    }
+
+    /// Set batch window jitter and seed the RNG.
+    pub fn with_batch_jitter(mut self, jitter_ns: u64, seed: u64) -> Self {
+        self.batch_jitter_ns = jitter_ns;
+        if jitter_ns > 0 {
+            self.rng = Some(StdRng::seed_from_u64(seed.wrapping_add(0xBA7C4)));
+        }
+        self
+    }
+
+    /// Compute the effective loop interval with optional jitter.
+    fn jittered_loop_interval(&mut self) -> u64 {
+        if self.batch_jitter_ns == 0 {
+            return self.loop_interval_ns;
+        }
+        if let Some(ref mut rng) = self.rng {
+            let jitter = rng.gen_range(0..=self.batch_jitter_ns * 2) as i64 - self.batch_jitter_ns as i64;
+            (self.loop_interval_ns as i64 + jitter).max(1) as u64
+        } else {
+            self.loop_interval_ns
+        }
     }
 }
 
@@ -127,8 +157,9 @@ impl EventHandler for ProvisioningHandler {
         let addressed_pods: usize = decisions.iter().map(|d| d.pod_ids.len()).sum();
         self.inflight_pods += addressed_pods;
         if !decisions.is_empty() && state.pending_queue.len() > addressed_pods {
+            let interval = self.jittered_loop_interval();
             follow_ups.push(ScheduledEvent {
-                time: SimTime(time.0 + self.loop_interval_ns),
+                time: SimTime(time.0 + interval),
                 event: Event::KarpenterProvisioningLoop,
             });
         }
