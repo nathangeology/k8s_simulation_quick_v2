@@ -444,6 +444,14 @@ fn run_single(
                     EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
                 );
             }
+            WorkloadEvent::ReplicaSetScaleUp { time, owner_id, increase_to } => {
+                // increase_to is absolute target; ScaleUp engine event adds to current.
+                // We pass increase_to and let the RS handler set desired_replicas directly.
+                engine.schedule(
+                    *time,
+                    EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *increase_to),
+                );
+            }
             _ => {}
         }
     }
@@ -1113,6 +1121,12 @@ impl StepSimulation {
                     engine.schedule(
                         *time,
                         EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
+                    );
+                }
+                WorkloadEvent::ReplicaSetScaleUp { time, owner_id, increase_to } => {
+                    engine.schedule(
+                        *time,
+                        EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *increase_to),
                     );
                 }
                 _ => {}

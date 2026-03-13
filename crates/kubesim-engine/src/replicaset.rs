@@ -41,7 +41,7 @@ impl EventHandler for ReplicaSetController {
                 let owner = OwnerId(dep_id.0);
                 if let Some(rs_id) = find_rs(state, owner) {
                     let rs = state.replica_sets.get_mut(rs_id).unwrap();
-                    rs.desired_replicas = rs.desired_replicas.saturating_add(*count);
+                    rs.desired_replicas = *count; // Set to absolute target
                     return vec![ScheduledEvent {
                         time: SimTime(time.0 + 1),
                         event: Event::ReplicaSetReconcile(owner),

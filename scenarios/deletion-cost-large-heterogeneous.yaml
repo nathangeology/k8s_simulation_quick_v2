@@ -1,0 +1,80 @@
+study:
+  name: deletion-cost-large-heterogeneous
+  runs: 10000
+  time_mode: wall_clock
+
+  cluster:
+    node_pools:
+      - instance_types: [m5.xlarge, m5.2xlarge, m5.4xlarge, r5.xlarge, r5.2xlarge, c5.xlarge, c5.2xlarge, c5.4xlarge]
+        min_nodes: 0
+        max_nodes: 80
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+  workloads:
+    # Tiny microservices — many instances, staggered scale-down (~120 pods)
+    - type: saas_microservice
+      count: 10
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "100m", max: "250m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "256Mi"}
+      scale_down:
+        - {at: "15m", reduce_by: 8}
+      scale_down_stagger: "2m"
+
+    # Medium web apps — moderate resource usage (~96 pods)
+    - type: web_app
+      count: 8
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "500m", max: "750m"}
+      memory_request: {dist: uniform, min: "1Gi", max: "2Gi"}
+      scale_down:
+        - {at: "20m", reduce_by: 8}
+      scale_down_stagger: "3m"
+
+    # Memory-heavy pods — land on bigger nodes (~72 pods)
+    - type: web_app
+      count: 6
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "6Gi", max: "8Gi"}
+      scale_down:
+        - {at: "25m", reduce_by: 8}
+      scale_down_stagger: "4m"
+
+    # CPU-heavy batch pods (~60 pods)
+    - type: web_app
+      count: 6
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "1500m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2Gi", max: "4Gi"}
+      scale_down:
+        - {at: "30m", reduce_by: 7}
+      scale_down_stagger: "5m"
+
+    # Large singleton services (~76 pods)
+    - type: web_app
+      count: 4
+      replicas: {fixed: 19}
+      cpu_request: {dist: uniform, min: "250m", max: "500m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "1Gi"}
+      scale_down:
+        - {at: "35m", reduce_by: 14}
+      scale_down_stagger: "3m"
+
+  variants:
+    - name: baseline
+      deletion_cost_strategy: none
+    - name: prefer_emptying
+      deletion_cost_strategy: prefer_emptying_nodes
+    - name: largest_first
+      deletion_cost_strategy: largest_first
+    - name: unallocated_vcpu
+      deletion_cost_strategy: unallocated_vcpu
+    - name: random
+      deletion_cost_strategy: random
+
+  metrics:
+    compare:
+      - total_cost
+      - node_count_over_time

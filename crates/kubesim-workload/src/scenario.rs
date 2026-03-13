@@ -174,6 +174,9 @@ pub struct WorkloadDef {
     /// Simulates RS controller removing pods one at a time. Default: all at once.
     #[serde(default)]
     pub scale_down_interval: Option<String>,
+    /// Scale-up events: increase replicas at specified times.
+    #[serde(default)]
+    pub scale_up: Option<Vec<ScaleUpEvent>>,
 }
 
 /// A scale-down event that reduces replicas at a given time.
@@ -183,6 +186,15 @@ pub struct ScaleDownEvent {
     pub at: String,
     /// Number of replicas to reduce by.
     pub reduce_by: u32,
+}
+
+/// A scale-up event that increases replicas at a given time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScaleUpEvent {
+    /// Time offset (e.g. "10s", "5m") from simulation start.
+    pub at: String,
+    /// Target replica count to scale up to.
+    pub increase_to: u32,
 }
 
 /// Either a fixed integer or a distribution.

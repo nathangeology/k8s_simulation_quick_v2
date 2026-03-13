@@ -1,0 +1,360 @@
+{
+  "study": "alccepyoe",
+  "variants": [
+    "least_allocated",
+    "most_allocated"
+  ],
+  "runs_per_variant": 5,
+  "per_variant": {
+    "least_allocated": {
+      "cumulative_cost": {
+        "mean": 1958.9655150027252,
+        "median": 1546.5808750011602,
+        "p90": 2577.5424750050724,
+        "p99": 2577.5424750050724
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 15478.8699999843,
+        "median": 12220.083333316914,
+        "p90": 20367.04999998538,
+        "p99": 20367.04999998538
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 30957.7399999686,
+        "median": 24440.166666633828,
+        "p90": 40734.09999997076,
+        "p99": 40734.09999997076
+      },
+      "time_weighted_node_count": {
+        "mean": 27865881.0,
+        "median": 22000065.0,
+        "p90": 36664605.0,
+        "p99": 36664605.0
+      },
+      "time_to_stable": {
+        "mean": 480.0,
+        "median": 480.0,
+        "p90": 480.0,
+        "p99": 480.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 32927778.0,
+        "median": 25995450.0,
+        "p90": 43326270.0,
+        "p99": 43326270.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 36.0,
+        "median": 36.0,
+        "p90": 36.0,
+        "p99": 36.0
+      },
+      "peak_cost_rate": {
+        "mean": 7.033999999999999,
+        "median": 7.033999999999999,
+        "p90": 7.033999999999999,
+        "p99": 7.033999999999999
+      }
+    },
+    "most_allocated": {
+      "cumulative_cost": {
+        "mean": 1907.4151150025295,
+        "median": 1546.5808750011602,
+        "p90": 2577.5424750050724,
+        "p99": 2577.5424750050724
+      },
+      "cumulative_vcpu_hours": {
+        "mean": 18655.299229992816,
+        "median": 15253.996749991924,
+        "p90": 25259.770874964837,
+        "p99": 25259.770874964837
+      },
+      "cumulative_memory_gib_hours": {
+        "mean": 95909.56666673937,
+        "median": 77764.16666666302,
+        "p90": 129608.5000002119,
+        "p99": 129608.5000002119
+      },
+      "time_weighted_node_count": {
+        "mean": 27132621.0,
+        "median": 22000065.0,
+        "p90": 36664605.0,
+        "p99": 36664605.0
+      },
+      "time_to_stable": {
+        "mean": 480.0,
+        "median": 480.0,
+        "p90": 480.0,
+        "p99": 480.0
+      },
+      "cumulative_pending_pod_seconds": {
+        "mean": 24662460.0,
+        "median": 19996500.0,
+        "p90": 33327900.0,
+        "p99": 33327900.0
+      },
+      "disruption_count": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "disruption_seconds": {
+        "mean": 0.0,
+        "median": 0.0,
+        "p90": 0.0,
+        "p99": 0.0
+      },
+      "peak_node_count": {
+        "mean": 36.0,
+        "median": 36.0,
+        "p90": 36.0,
+        "p99": 36.0
+      },
+      "peak_cost_rate": {
+        "mean": 7.033999999999999,
+        "median": 7.033999999999999,
+        "p90": 7.033999999999999,
+        "p99": 7.033999999999999
+      }
+    }
+  },
+  "per_variant_diagnostic": {
+    "least_allocated": {
+      "total_cost_per_hour": {
+        "mean": 2.7840000000000007,
+        "median": 2.7840000000000007,
+        "p90": 2.7840000000000007,
+        "p99": 2.7840000000000007
+      },
+      "node_count": {
+        "mean": 11.0,
+        "median": 11.0,
+        "p90": 11.0,
+        "p99": 11.0
+      },
+      "running_pods": {
+        "mean": 22.0,
+        "median": 22.0,
+        "p90": 22.0,
+        "p99": 22.0
+      },
+      "pending_pods": {
+        "mean": 13.0,
+        "median": 13.0,
+        "p90": 13.0,
+        "p99": 13.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 2532973000000001.0,
+        "median": 1999715000000001.0,
+        "p90": 3332860000000001.0,
+        "p99": 3332860000000001.0
+      }
+    },
+    "most_allocated": {
+      "total_cost_per_hour": {
+        "mean": 2.7840000000000007,
+        "median": 2.7840000000000007,
+        "p90": 2.7840000000000007,
+        "p99": 2.7840000000000007
+      },
+      "node_count": {
+        "mean": 11.0,
+        "median": 11.0,
+        "p90": 11.0,
+        "p99": 11.0
+      },
+      "running_pods": {
+        "mean": 25.0,
+        "median": 25.0,
+        "p90": 25.0,
+        "p99": 25.0
+      },
+      "pending_pods": {
+        "mean": 10.0,
+        "median": 10.0,
+        "p90": 10.0,
+        "p99": 10.0
+      },
+      "events_processed": {
+        "mean": 1000000.0,
+        "median": 1000000.0,
+        "p90": 1000000.0,
+        "p99": 1000000.0
+      },
+      "final_time": {
+        "mean": 2466317000000001.0,
+        "median": 1999715000000001.0,
+        "p90": 3332860000000001.0,
+        "p99": 3332860000000001.0
+      }
+    }
+  },
+  "comparison": [
+    {
+      "metric": "cumulative_cost",
+      "winner": "most_allocated",
+      "delta": 51.5504,
+      "effect_pct": 2.7026,
+      "p_value": 0.817361,
+      "ci_low": -618.57696,
+      "ci_high": 721.67776
+    },
+    {
+      "metric": "cumulative_vcpu_hours",
+      "winner": "least_allocated",
+      "delta": -3176.42923,
+      "effect_pct": -17.027,
+      "p_value": 0.203092,
+      "ci_low": -8975.980622,
+      "ci_high": 2426.137503
+    },
+    {
+      "metric": "cumulative_memory_gib_hours",
+      "winner": "least_allocated",
+      "delta": -64951.826667,
+      "effect_pct": -67.7219,
+      "p_value": 0.010418,
+      "ci_low": -91540.68,
+      "ci_high": -40955.306667
+    },
+    {
+      "metric": "time_weighted_node_count",
+      "winner": "most_allocated",
+      "delta": 733260.0,
+      "effect_pct": 2.7025,
+      "p_value": 0.817361,
+      "ci_low": -8798724.0,
+      "ci_high": 10265244.0
+    },
+    {
+      "metric": "time_to_stable",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "cumulative_pending_pod_seconds",
+      "winner": "most_allocated",
+      "delta": 8265318.0,
+      "effect_pct": 33.5138,
+      "p_value": 0.200256,
+      "ci_low": -1333290.0,
+      "ci_high": 17863926.0
+    },
+    {
+      "metric": "disruption_count",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "disruption_seconds",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "peak_node_count",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "peak_cost_rate",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    }
+  ],
+  "comparison_diagnostic": [
+    {
+      "metric": "total_cost_per_hour",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "node_count",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "running_pods",
+      "winner": "least_allocated",
+      "delta": -3.0,
+      "effect_pct": -12.0,
+      "p_value": 0.003977,
+      "ci_low": -3.0,
+      "ci_high": -3.0
+    },
+    {
+      "metric": "pending_pods",
+      "winner": "most_allocated",
+      "delta": 3.0,
+      "effect_pct": 30.0,
+      "p_value": 0.003977,
+      "ci_low": 3.0,
+      "ci_high": 3.0
+    },
+    {
+      "metric": "events_processed",
+      "winner": "tie",
+      "delta": 0.0,
+      "effect_pct": 0.0,
+      "p_value": 1.0,
+      "ci_low": 0.0,
+      "ci_high": 0.0
+    },
+    {
+      "metric": "final_time",
+      "winner": "most_allocated",
+      "delta": 66656000000000.0,
+      "effect_pct": 2.7027,
+      "p_value": 0.817361,
+      "ci_low": -799887000000000.0,
+      "ci_high": 933199000000000.0
+    }
+  ]
+}

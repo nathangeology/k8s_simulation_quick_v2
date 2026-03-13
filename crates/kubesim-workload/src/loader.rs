@@ -218,6 +218,21 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     }
                 }
             }
+
+            // Emit scale-up events
+            if let Some(ref scale_ups) = workload.scale_up {
+                for su in scale_ups {
+                    if let Some(time_ns) = parse_duration_ns(&su.at) {
+                        if su.increase_to > replicas {
+                            events.push(Event::ReplicaSetScaleUp {
+                                time: SimTime(time_ns),
+                                owner_id: owner_id,
+                                increase_to: su.increase_to,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 
