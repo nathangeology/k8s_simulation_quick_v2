@@ -30,6 +30,8 @@ pub struct ProvisioningHandler {
     pub overhead: Resources,
     /// Percentage of raw capacity reserved for daemonsets.
     pub daemonset_pct: u32,
+    /// Pods addressed by in-flight nodes (launched but not yet ready).
+    inflight_pods: usize,
 }
 
 impl ProvisioningHandler {
@@ -43,6 +45,7 @@ impl ProvisioningHandler {
             version_profile: None,
             overhead: Resources::default(),
             daemonset_pct: 0,
+            inflight_pods: 0,
         }
     }
 
@@ -73,8 +76,24 @@ impl EventHandler for ProvisioningHandler {
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent> {
         let Event::KarpenterProvisioningLoop = event else {
+            // On NodeReady, clear inflight count since pods are now being scheduled
+            if matches!(event, Event::NodeReady(_)) {
+                self.inflight_pods = 0;
+            }
             return Vec::new();
         };
+
+        // Skip if all pending pods are already addressed by in-flight nodes
+        if state.pending_queue.len() <= self.inflight_pods {
+            // Still re-schedule reconcile in case new pods arrive
+            if !state.pending_queue.is_empty() {
+                return vec![ScheduledEvent {
+                    time: SimTime(time.0 + self.reconcile_interval_ns),
+                    event: Event::KarpenterProvisioningLoop,
+                }];
+            }
+            return Vec::new();
+        }
 
         let decisions = provisioner::provision_versioned(
             state, &self.catalog, &self.pool, &self.usage, self.version_profile.as_ref(), &self.overhead, self.daemonset_pct,
@@ -104,6 +123,7 @@ impl EventHandler for ProvisioningHandler {
         // If progress was made and more pending pods remain, schedule an
         // immediate follow-up for faster convergence.
         let addressed_pods: usize = decisions.iter().map(|d| d.pod_ids.len()).sum();
+        self.inflight_pods += addressed_pods;
         if !decisions.is_empty() && state.pending_queue.len() > addressed_pods {
             follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0 + self.loop_interval_ns),

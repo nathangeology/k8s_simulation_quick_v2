@@ -221,13 +221,15 @@ pub fn provision_versioned(
     daemonset_pct: u32,
 ) -> Vec<ProvisionDecision> {
     let batches = batch_pending_pods(state, Some(pool));
-    let use_ffd = profile.map_or(false, |p| p.version == KarpenterVersion::V1);
+    // Use cost-optimizing provisioner by default (matches Karpenter v1.x).
+    // Only fall back to legacy FFD for explicit v0.35 profiles.
+    let use_cost_opt = profile.map_or(true, |p| p.version != KarpenterVersion::V0_35);
 
     let mut decisions = Vec::new();
     let mut running_usage = usage.clone();
 
     for batch in &batches {
-        if use_ffd {
+        if use_cost_opt {
             // Karpenter-style cost-optimizing provisioner: for each candidate
             // instance type, compute how many pods fit and score by cost-per-pod.
             // Greedily pick the best-scoring type, assign pods, repeat.
