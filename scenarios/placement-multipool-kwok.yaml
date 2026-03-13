@@ -1,0 +1,75 @@
+study:
+  name: placement-multipool-kwok
+  runs: 50
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - name: on-demand
+        instance_types: [c-4x-amd64-linux, c-8x-amd64-linux, c-16x-amd64-linux]
+        min_nodes: 0
+        max_nodes: 30
+        weight: 10
+        labels:
+          - ["karpenter.sh/capacity-type", "on-demand"]
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+      - name: spot
+        instance_types: [c-4x-amd64-linux, c-8x-amd64-linux, c-16x-amd64-linux]
+        min_nodes: 0
+        max_nodes: 30
+        weight: 50
+        labels:
+          - ["karpenter.sh/capacity-type", "spot"]
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "5s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+      provisioner_batch_jitter: "3s"
+      pod_startup: "2s"
+
+  workloads:
+    # Deployment A: 20 pods, no nodeSelector (should prefer spot due to higher weight)
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels:
+        app: "unconstrained"
+
+    # Deployment B: 10 pods, nodeSelector: on-demand
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels:
+        app: "on-demand-only"
+      node_selector:
+        karpenter.sh/capacity-type: "on-demand"
+
+    # Deployment C: 10 pods, nodeSelector: spot
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels:
+        app: "spot-only"
+      node_selector:
+        karpenter.sh/capacity-type: "spot"
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}
