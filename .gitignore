@@ -8,3 +8,12 @@ target/
 .venv/
 *.so
 .hypothesis/
+
+# Rig infrastructure
+.repo.git/
+AGENTS.md
+crew/
+mayor/
+polecats/
+refinery/
+witness/
