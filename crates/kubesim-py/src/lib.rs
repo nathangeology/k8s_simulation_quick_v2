@@ -444,6 +444,12 @@ fn run_single(
                     EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
                 );
             }
+            WorkloadEvent::ReplicaSetScaleUp { time, owner_id, add } => {
+                engine.schedule(
+                    *time,
+                    EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *add),
+                );
+            }
             _ => {}
         }
     }
@@ -1113,6 +1119,12 @@ impl StepSimulation {
                     engine.schedule(
                         *time,
                         EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
+                    );
+                }
+                WorkloadEvent::ReplicaSetScaleUp { time, owner_id, add } => {
+                    engine.schedule(
+                        *time,
+                        EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *add),
                     );
                 }
                 _ => {}

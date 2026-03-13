@@ -156,6 +156,9 @@ pub struct WorkloadDef {
     pub churn: Option<ChurnLevel>,
     #[serde(default)]
     pub traffic: Option<String>,
+    /// Scale-up events: increase replicas at specified times.
+    #[serde(default)]
+    pub scale_up: Option<Vec<ScaleUpEvent>>,
     /// Scale-down events: reduce replicas at specified times.
     #[serde(default)]
     pub scale_down: Option<Vec<ScaleDownEvent>>,
@@ -174,6 +177,15 @@ pub struct WorkloadDef {
     /// Simulates RS controller removing pods one at a time. Default: all at once.
     #[serde(default)]
     pub scale_down_interval: Option<String>,
+}
+
+/// A scale-up event that increases replicas at a given time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScaleUpEvent {
+    /// Time offset (e.g. "10s", "5m") from simulation start.
+    pub at: String,
+    /// Target replica count to set.
+    pub set_replicas: u32,
 }
 
 /// A scale-down event that reduces replicas at a given time.

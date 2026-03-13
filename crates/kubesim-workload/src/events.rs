@@ -78,6 +78,12 @@ pub enum Event {
         owner_id: u32,
         reduce_by: u32,
     },
+    /// Scale up a ReplicaSet by increasing desired replicas.
+    ReplicaSetScaleUp {
+        time: SimTime,
+        owner_id: u32,
+        add: u32,
+    },
 }
 
 impl Event {
@@ -94,7 +100,8 @@ impl Event {
             | Event::MetricsSnapshot { time } => *time,
             Event::ConfigureScheduler { .. } | Event::ConfigureDeletionCost { .. } => SimTime(0),
             Event::ReplicaSetSubmitted { time, .. }
-            | Event::ReplicaSetScaleDown { time, .. } => *time,
+            | Event::ReplicaSetScaleDown { time, .. }
+            | Event::ReplicaSetScaleUp { time, .. } => *time,
         }
     }
 }

@@ -192,6 +192,23 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                 }
             }
 
+            // Emit scale-up events: increase desired replicas at specified times
+            if let Some(ref scale_ups) = workload.scale_up {
+                for su in scale_ups {
+                    if let Some(time_ns) = parse_duration_ns(&su.at) {
+                        // set_replicas is absolute target; compute delta from initial
+                        let add = su.set_replicas.saturating_sub(replicas);
+                        if add > 0 {
+                            events.push(Event::ReplicaSetScaleUp {
+                                time: SimTime(time_ns),
+                                owner_id,
+                                add,
+                            });
+                        }
+                    }
+                }
+            }
+
             // Emit scale-down events with per-instance stagger when count > 1
             // and per-pod interval within each scale-down batch
             if let Some(ref scale_downs) = workload.scale_down {
