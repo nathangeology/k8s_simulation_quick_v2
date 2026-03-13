@@ -66,7 +66,9 @@ impl ClusterState {
         let pod = self.pods.get_mut(pod_id).unwrap();
         pod.phase = PodPhase::Running;
         pod.node = Some(node_id);
-        self.pending_queue.retain(|id| *id != pod_id);
+        if let Some(pos) = self.pending_queue.iter().position(|id| *id == pod_id) {
+            self.pending_queue.swap_remove(pos);
+        }
         true
     }
 
@@ -79,7 +81,9 @@ impl ClusterState {
                 node.pods.retain(|id| *id != pod_id);
             }
         }
-        self.pending_queue.retain(|id| *id != pod_id);
+        if let Some(pos) = self.pending_queue.iter().position(|id| *id == pod_id) {
+            self.pending_queue.swap_remove(pos);
+        }
         Some(pod)
     }
 

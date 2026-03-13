@@ -10,6 +10,7 @@
 use kubesim_core::*;
 use kubesim_ec2::Catalog;
 use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
+use std::collections::HashSet;
 
 use crate::nodepool::NodePool;
 use crate::version::{ConsolidationStrategy, DisruptionReason, VersionProfile, evaluate_schedule};
@@ -109,7 +110,7 @@ fn sort_candidates(state: &ClusterState, candidates: &mut [(NodeId, &Node)]) {
 fn pods_can_reschedule(
     state: &ClusterState,
     candidate: NodeId,
-    nodes_being_removed: &[NodeId],
+    nodes_being_removed: &HashSet<NodeId>,
 ) -> Option<Vec<PodId>> {
     use kubesim_scheduler::{
         FilterResult, TaintToleration, NodeAffinity,
@@ -121,12 +122,12 @@ fn pods_can_reschedule(
         return Some(Vec::new());
     }
 
-    let filters: Vec<Box<dyn FilterPlugin>> = vec![
-        Box::new(TaintToleration),
-        Box::new(NodeAffinity),
-        Box::new(InterPodAffinityFilter),
-        Box::new(PodTopologySpreadFilter),
-    ];
+    // Use stack-allocated filter references to avoid heap allocation per call
+    let f1 = TaintToleration;
+    let f2 = NodeAffinity;
+    let f3 = InterPodAffinityFilter;
+    let f4 = PodTopologySpreadFilter;
+    let filters: [&dyn FilterPlugin; 4] = [&f1, &f2, &f3, &f4];
 
     // Collect pods to move
     let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
@@ -190,7 +191,7 @@ fn find_underutilized_nodes(
     consolidate_after_ns: u64,
 ) -> Vec<ConsolidationAction> {
     let mut actions = Vec::new();
-    let mut nodes_being_removed: Vec<NodeId> = Vec::new();
+    let mut nodes_being_removed: HashSet<NodeId> = HashSet::new();
 
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
@@ -205,7 +206,7 @@ fn find_underutilized_nodes(
 
     for (nid, _) in candidates {
         if let Some(pod_ids) = pods_can_reschedule(state, nid, &nodes_being_removed) {
-            nodes_being_removed.push(nid);
+            nodes_being_removed.insert(nid);
             actions.push(ConsolidationAction::DrainAndTerminate {
                 node_id: nid,
                 pod_ids,
@@ -248,7 +249,7 @@ fn find_replace_candidates(
 
     for (nid, node) in candidates {
         // Skip if pods can already be rescheduled (delete path handles these)
-        if pods_can_reschedule(state, nid, &[]).is_some() {
+        if pods_can_reschedule(state, nid, &HashSet::new()).is_some() {
             continue;
         }
 
@@ -448,18 +449,17 @@ fn simulate_and_validate(
         return actions;
     }
 
-    let filters: Vec<Box<dyn FilterPlugin>> = vec![
-        Box::new(TaintToleration),
-        Box::new(NodeAffinity),
-        Box::new(InterPodAffinityFilter),
-        Box::new(PodTopologySpreadFilter),
-    ];
+    let f1 = TaintToleration;
+    let f2 = NodeAffinity;
+    let f3 = InterPodAffinityFilter;
+    let f4 = PodTopologySpreadFilter;
+    let filters: [&dyn FilterPlugin; 4] = [&f1, &f2, &f3, &f4];
 
     let mut validated = actions;
 
     loop {
         // Collect all candidate node IDs
-        let candidate_nodes: Vec<NodeId> = validated.iter().map(|a| match a {
+        let candidate_nodes: HashSet<NodeId> = validated.iter().map(|a| match a {
             ConsolidationAction::TerminateEmpty(nid) => *nid,
             ConsolidationAction::DrainAndTerminate { node_id, .. } => *node_id,
             ConsolidationAction::Replace { node_id, .. } => *node_id,
@@ -540,7 +540,7 @@ fn validate_before_execute(
     actions: Vec<ConsolidationAction>,
 ) -> Vec<ConsolidationAction> {
     let mut validated = Vec::new();
-    let mut nodes_being_removed: Vec<NodeId> = Vec::new();
+    let mut nodes_being_removed: HashSet<NodeId> = HashSet::new();
 
     for action in actions {
         let (nid, is_empty) = match &action {
@@ -562,7 +562,7 @@ fn validate_before_execute(
             continue; // pods no longer fit elsewhere
         }
 
-        nodes_being_removed.push(nid);
+        nodes_being_removed.insert(nid);
         validated.push(action);
     }
 

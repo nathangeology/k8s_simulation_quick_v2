@@ -648,7 +648,7 @@ impl Scheduler {
 
         // Filter phase
         let mut feasible: Vec<(NodeId, &Node)> = Vec::new();
-        let mut reasons: Vec<String> = Vec::new();
+        let mut any_rejected = false;
 
         for (nid, node) in state.nodes.iter() {
             if !node.conditions.ready || node.cordoned {
@@ -656,8 +656,8 @@ impl Scheduler {
             }
             let mut passed = true;
             for filter in &self.profile.filters {
-                if let FilterResult::Reject(reason) = filter.filter(state, pod, node) {
-                    reasons.push(format!("{}: {}", filter.name(), reason));
+                if let FilterResult::Reject(_) = filter.filter(state, pod, node) {
+                    any_rejected = true;
                     passed = false;
                     break;
                 }
@@ -677,7 +677,11 @@ impl Scheduler {
                     };
                 }
                 PreemptResult::NoCandidate => {
-                    return ScheduleResult::Unschedulable(reasons);
+                    return ScheduleResult::Unschedulable(if any_rejected {
+                        vec!["no feasible node found".into()]
+                    } else {
+                        vec!["no ready nodes available".into()]
+                    });
                 }
             }
         }

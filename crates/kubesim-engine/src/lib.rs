@@ -185,18 +185,13 @@ impl Engine {
         };
         state.time = scheduled.time;
 
-        // Collect follow-up events from all handlers.
-        let mut follow_ups = Vec::new();
+        // Collect follow-up events from all handlers, pushing directly to queue.
         for i in 0..self.handlers.len() {
-            // Safety: we take a mutable ref to handlers[i] while passing state.
-            // This is safe because handlers don't alias state.
             let handler = &mut self.handlers[i];
             let new_events = handler.handle(&scheduled.event, scheduled.time, state);
-            follow_ups.extend(new_events);
-        }
-
-        for se in follow_ups {
-            self.queue.push(Reverse(se));
+            for se in new_events {
+                self.queue.push(Reverse(se));
+            }
         }
         true
     }
