@@ -230,43 +230,83 @@ pub fn provision_versioned(
 
     for batch in &batches {
         if use_cost_opt {
-            // Karpenter-style cost-optimizing provisioner: for each candidate
-            // instance type, compute how many pods fit and score by cost-per-pod.
-            // Greedily pick the best-scoring type, assign pods, repeat.
+            // Karpenter-style pod-at-a-time scheduling with flexible NodeClaims.
+            // Each NodeClaim starts compatible with all instance types. As pods are
+            // added, the type list narrows. Final type = cheapest that fits all pods.
             let mut pods: Vec<(PodId, Resources)> = batch.pod_ids.iter().filter_map(|&pid| {
                 state.pods.get(pid).map(|p| (pid, p.requests))
             }).collect();
-            // Sort largest-first so greedy packing fills big pods first
             pods.sort_by(|a, b| {
                 let sa = a.1.cpu_millis + a.1.memory_bytes / 1_000_000;
                 let sb = b.1.cpu_millis + b.1.memory_bytes / 1_000_000;
                 sb.cmp(&sa)
             });
 
-            let mut remaining = pods;
-            while !remaining.is_empty() {
-                if !pool.can_launch(&running_usage, 0, 0) { break; }
+            // Flexible NodeClaim: tracks assigned pods and total resource demand
+            struct FlexNodeClaim {
+                pod_ids: Vec<PodId>,
+                total_cpu: u64,
+                total_mem: u64,
+                total_gpu: u32,
+            }
 
-                // Score each allowed instance type by cost-per-pod
-                let best = score_best_instance(
-                    catalog, pool, &running_usage, &remaining,
-                    batch.gpu_required, overhead, daemonset_pct,
-                );
-                let Some((it_name, price, fit_count)) = best else { break };
+            let mut claims: Vec<FlexNodeClaim> = Vec::new();
 
-                let assigned: Vec<PodId> = remaining.iter().take(fit_count).map(|&(pid, _)| pid).collect();
-                remaining = remaining.split_off(fit_count);
-
-                if let Some(spec) = catalog.get(&it_name) {
-                    running_usage.node_count += 1;
-                    running_usage.cpu_millis += (spec.vcpu as u64) * 1000;
-                    running_usage.memory_bytes += (spec.memory_gib as u64) * 1024 * 1024 * 1024;
+            for &(pid, ref req) in &pods {
+                // Try to fit on an existing in-flight NodeClaim
+                let mut placed = false;
+                for claim in &mut claims {
+                    let new_cpu = claim.total_cpu + req.cpu_millis;
+                    let new_mem = claim.total_mem + req.memory_bytes;
+                    let new_gpu = claim.total_gpu + req.gpu;
+                    // Check if ANY allowed instance type can still fit
+                    let fits = allowed_types(catalog, pool).iter().any(|it| {
+                        let eff_cpu = effective_cpu(it, overhead, daemonset_pct);
+                        let eff_mem = effective_mem(it, overhead, daemonset_pct);
+                        it.gpu_count >= new_gpu && eff_cpu >= new_cpu && eff_mem >= new_mem
+                    });
+                    if fits {
+                        claim.pod_ids.push(pid);
+                        claim.total_cpu = new_cpu;
+                        claim.total_mem = new_mem;
+                        claim.total_gpu = new_gpu;
+                        placed = true;
+                        break;
+                    }
                 }
-                decisions.push(ProvisionDecision {
-                    instance_type: it_name,
-                    cost_per_hour: price,
-                    pod_ids: assigned,
-                });
+                if !placed {
+                    if !pool.can_launch(&running_usage, 0, 0) { break; }
+                    // Create new NodeClaim
+                    claims.push(FlexNodeClaim {
+                        pod_ids: vec![pid],
+                        total_cpu: req.cpu_millis,
+                        total_mem: req.memory_bytes,
+                        total_gpu: req.gpu,
+                    });
+                    // Tentatively count toward usage (use smallest type as estimate)
+                    running_usage.node_count += 1;
+                }
+            }
+
+            // Finalize: pick cheapest instance type for each NodeClaim
+            let types = allowed_types(catalog, pool);
+            for claim in claims {
+                if claim.pod_ids.is_empty() { continue; }
+                let best = types.iter()
+                    .filter(|it| {
+                        let eff_cpu = effective_cpu(it, overhead, daemonset_pct);
+                        let eff_mem = effective_mem(it, overhead, daemonset_pct);
+                        it.gpu_count >= claim.total_gpu && eff_cpu >= claim.total_cpu && eff_mem >= claim.total_mem
+                    })
+                    .min_by(|a, b| a.on_demand_price_per_hour.partial_cmp(&b.on_demand_price_per_hour).unwrap());
+
+                if let Some(it) = best {
+                    decisions.push(ProvisionDecision {
+                        instance_type: it.instance_type.clone(),
+                        cost_per_hour: it.on_demand_price_per_hour,
+                        pod_ids: claim.pod_ids,
+                    });
+                }
             }
         } else {
             // Legacy v0.35: try to fit entire batch on one cheapest instance
@@ -371,6 +411,15 @@ fn cheapest_fit(
 }
 
 /// Score all candidate instance types by cost-per-pod and return the best one.
+/// Get allowed instance types for a pool from the catalog.
+fn allowed_types<'a>(catalog: &'a Catalog, pool: &NodePool) -> Vec<&'a kubesim_ec2::InstanceType> {
+    if pool.instance_types.is_empty() {
+        catalog.all().iter().collect()
+    } else {
+        pool.instance_types.iter().filter_map(|n| catalog.get(n)).collect()
+    }
+}
+
 /// For each instance type, greedily counts how many pods (sorted largest-first)
 /// fit, then scores as price / pods_that_fit. Returns (instance_type, price, fit_count).
 fn score_best_instance(
