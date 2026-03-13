@@ -207,9 +207,10 @@ fn pod_matches_pool(pod: &Pod, pool: &NodePool) -> bool {
 /// Version-aware provisioning.
 ///
 /// v0.35: cheapest-fit per batch (original behavior).
-/// v1.x: first-fit-decreasing bin-packing like real Karpenter — sorts pods
-///        largest-first, packs onto virtual nodes, then right-sizes each node
-///        to the cheapest instance type that fits, producing a heterogeneous fleet.
+/// v1.x: cost-optimizing bin-packing like real Karpenter — evaluates all
+///        candidate instance types by cost-per-pod ratio (price / pods_that_fit),
+///        picks the best-scoring type, assigns pods, and repeats. Ties broken
+///        by preferring the instance that fits more pods (fewer, larger nodes).
 pub fn provision_versioned(
     state: &ClusterState,
     catalog: &Catalog,
@@ -227,57 +228,43 @@ pub fn provision_versioned(
 
     for batch in &batches {
         if use_ffd {
-            // FFD bin-packing: sort pods largest-first, pack onto virtual nodes,
-            // right-size each node to cheapest fitting instance.
+            // Karpenter-style cost-optimizing provisioner: for each candidate
+            // instance type, compute how many pods fit and score by cost-per-pod.
+            // Greedily pick the best-scoring type, assign pods, repeat.
             let mut pods: Vec<(PodId, Resources)> = batch.pod_ids.iter().filter_map(|&pid| {
                 state.pods.get(pid).map(|p| (pid, p.requests))
             }).collect();
+            // Sort largest-first so greedy packing fills big pods first
             pods.sort_by(|a, b| {
                 let sa = a.1.cpu_millis + a.1.memory_bytes / 1_000_000;
                 let sb = b.1.cpu_millis + b.1.memory_bytes / 1_000_000;
                 sb.cmp(&sa)
             });
 
-            let mut node_pods: Vec<PodId> = Vec::new();
-            let mut node_total = Resources::default();
+            let mut remaining = pods;
+            while !remaining.is_empty() {
+                if !pool.can_launch(&running_usage, 0, 0) { break; }
 
-            for (pid, req) in pods {
-                let combined = node_total.saturating_add(&req);
-                // Check if any instance can fit the combined load
-                if !node_pods.is_empty() && cheapest_fit(catalog, pool, &running_usage, &combined, batch.gpu_required, overhead, daemonset_pct).is_none() {
-                    // Right-size and flush current node
-                    if let Some((it, price)) = cheapest_fit(catalog, pool, &running_usage, &node_total, batch.gpu_required, overhead, daemonset_pct) {
-                        if let Some(spec) = catalog.get(&it) {
-                            running_usage.node_count += 1;
-                            running_usage.cpu_millis += (spec.vcpu as u64) * 1000;
-                            running_usage.memory_bytes += (spec.memory_gib as u64) * 1024 * 1024 * 1024;
-                        }
-                        decisions.push(ProvisionDecision {
-                            instance_type: it,
-                            cost_per_hour: price,
-                            pod_ids: std::mem::take(&mut node_pods),
-                        });
-                    }
-                    node_total = Resources::default();
-                    if !pool.can_launch(&running_usage, 0, 0) { break; }
+                // Score each allowed instance type by cost-per-pod
+                let best = score_best_instance(
+                    catalog, pool, &running_usage, &remaining,
+                    batch.gpu_required, overhead, daemonset_pct,
+                );
+                let Some((it_name, price, fit_count)) = best else { break };
+
+                let assigned: Vec<PodId> = remaining.iter().take(fit_count).map(|&(pid, _)| pid).collect();
+                remaining = remaining.split_off(fit_count);
+
+                if let Some(spec) = catalog.get(&it_name) {
+                    running_usage.node_count += 1;
+                    running_usage.cpu_millis += (spec.vcpu as u64) * 1000;
+                    running_usage.memory_bytes += (spec.memory_gib as u64) * 1024 * 1024 * 1024;
                 }
-                node_total = node_total.saturating_add(&req);
-                node_pods.push(pid);
-            }
-            // Flush last node
-            if !node_pods.is_empty() {
-                if let Some((it, price)) = cheapest_fit(catalog, pool, &running_usage, &node_total, batch.gpu_required, overhead, daemonset_pct) {
-                    if let Some(spec) = catalog.get(&it) {
-                        running_usage.node_count += 1;
-                        running_usage.cpu_millis += (spec.vcpu as u64) * 1000;
-                        running_usage.memory_bytes += (spec.memory_gib as u64) * 1024 * 1024 * 1024;
-                    }
-                    decisions.push(ProvisionDecision {
-                        instance_type: it,
-                        cost_per_hour: price,
-                        pod_ids: node_pods,
-                    });
-                }
+                decisions.push(ProvisionDecision {
+                    instance_type: it_name,
+                    cost_per_hour: price,
+                    pod_ids: assigned,
+                });
             }
         } else {
             // Legacy v0.35: try to fit entire batch on one cheapest instance
@@ -379,6 +366,60 @@ fn cheapest_fit(
         }
     }
     best.map(|(it, price)| (it.instance_type.clone(), price))
+}
+
+/// Score all candidate instance types by cost-per-pod and return the best one.
+/// For each instance type, greedily counts how many pods (sorted largest-first)
+/// fit, then scores as price / pods_that_fit. Returns (instance_type, price, fit_count).
+fn score_best_instance(
+    catalog: &Catalog,
+    pool: &NodePool,
+    usage: &NodePoolUsage,
+    pods: &[(PodId, Resources)],
+    gpu_needed: u32,
+    overhead: &Resources,
+    daemonset_pct: u32,
+) -> Option<(String, f64, usize)> {
+    let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
+        catalog.all().iter().collect()
+    } else {
+        pool.instance_types.iter().filter_map(|n| catalog.get(n)).collect()
+    };
+
+    let mut best: Option<(f64, &kubesim_ec2::InstanceType, usize)> = None; // (score, it, count)
+
+    for it in &allowed {
+        if it.gpu_count < gpu_needed { continue; }
+        let raw_cpu = (it.vcpu as u64) * 1000;
+        let raw_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+        if !pool.can_launch(usage, raw_cpu, raw_mem) { continue; }
+
+        let avail_cpu = effective_cpu(it, overhead, daemonset_pct);
+        let avail_mem = effective_mem(it, overhead, daemonset_pct);
+
+        // Greedily pack pods (already sorted largest-first)
+        let mut used_cpu: u64 = 0;
+        let mut used_mem: u64 = 0;
+        let mut count = 0usize;
+        for &(_, ref req) in pods {
+            if used_cpu + req.cpu_millis <= avail_cpu && used_mem + req.memory_bytes <= avail_mem {
+                used_cpu += req.cpu_millis;
+                used_mem += req.memory_bytes;
+                count += 1;
+            }
+        }
+        if count == 0 { continue; }
+
+        let score = it.on_demand_price_per_hour / count as f64;
+        let better = best.as_ref().map_or(true, |(bs, _, bc)| {
+            score < *bs || (score == *bs && count > *bc)
+        });
+        if better {
+            best = Some((score, it, count));
+        }
+    }
+
+    best.map(|(_, it, count)| (it.instance_type.clone(), it.on_demand_price_per_hour, count))
 }
 
 /// Find the largest allowed instance type that can still be launched.
