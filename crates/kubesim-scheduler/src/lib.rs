@@ -616,6 +616,178 @@ fn evaluate_preemption(
     }
 }
 
+// ── Scheduling caches ───────────────────────────────────────────
+
+/// Cache key for topology spread domain counts: (topology_key, label_selector serialized).
+type SpreadCacheKey = (String, String);
+
+/// Pre-computed caches for batch scheduling. Avoids re-scanning all pods/nodes
+/// on every `schedule_one` call in a loop.
+pub(crate) struct SchedulingCaches {
+    /// domain_counts cache: (topology_key, selector_key) → { domain_value → count }
+    spread_counts: HashMap<SpreadCacheKey, HashMap<String, i32>>,
+    /// Pod affinity: (topology_key, topology_value, selector_key, anti) → has_match
+    affinity_match: HashMap<(String, String, String, bool), bool>,
+    /// Pod affinity count: (topology_key, topology_value, selector_key) → count
+    affinity_count: HashMap<(String, String, String), i64>,
+}
+
+fn selector_key(sel: &kubesim_core::LabelSelector) -> String {
+    let mut pairs: Vec<_> = sel.match_labels.0.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
+    pairs.sort();
+    pairs.join(",")
+}
+
+fn affinity_term_selector_key(term: &PodAffinityTerm) -> String {
+    selector_key(&term.label_selector)
+}
+
+impl SchedulingCaches {
+    fn build(_state: &ClusterState) -> Self {
+        Self {
+            spread_counts: HashMap::new(),
+            affinity_match: HashMap::new(),
+            affinity_count: HashMap::new(),
+        }
+    }
+
+    fn get_domain_counts(&mut self, state: &ClusterState, topology_key: &str, selector: &kubesim_core::LabelSelector) -> &HashMap<String, i32> {
+        let key = (topology_key.to_string(), selector_key(selector));
+        self.spread_counts.entry(key).or_insert_with_key(|_| {
+            domain_counts(state, topology_key, selector)
+        })
+    }
+
+    fn get_affinity_match(&mut self, state: &ClusterState, topology_key: &str, topology_value: &str, term: &PodAffinityTerm) -> bool {
+        let key = (topology_key.to_string(), topology_value.to_string(), affinity_term_selector_key(term), term.anti);
+        *self.affinity_match.entry(key).or_insert_with(|| {
+            topology_has_matching_pod(state, topology_key, topology_value, term)
+        })
+    }
+
+    fn get_affinity_count(&mut self, state: &ClusterState, topology_key: &str, topology_value: &str, term: &PodAffinityTerm) -> i64 {
+        let key = (topology_key.to_string(), topology_value.to_string(), affinity_term_selector_key(term));
+        *self.affinity_count.entry(key).or_insert_with(|| {
+            count_matching_pods_in_domain(state, topology_key, topology_value, term)
+        })
+    }
+
+    /// Invalidate caches after a pod is bound (state changed).
+    fn invalidate(&mut self) {
+        self.spread_counts.clear();
+        self.affinity_match.clear();
+        self.affinity_count.clear();
+    }
+}
+
+// ── Cached filter/score functions ───────────────────────────────
+
+fn filter_inter_pod_affinity_cached(
+    state: &ClusterState,
+    pod: &Pod,
+    node: &Node,
+    caches: &mut SchedulingCaches,
+) -> FilterResult {
+    for term in &pod.scheduling_constraints.pod_affinity {
+        if !matches!(term.affinity_type, AffinityType::Required) {
+            continue;
+        }
+        let topo_val = match node_topology_value(node, &term.topology_key) {
+            Some(v) => v,
+            None => {
+                if term.anti { continue; }
+                else {
+                    return FilterResult::Reject(format!("node missing topology key {}", term.topology_key));
+                }
+            }
+        };
+        let has_match = caches.get_affinity_match(state, &term.topology_key, topo_val, term);
+        if term.anti && has_match {
+            return FilterResult::Reject(format!("anti-affinity violated in topology {}={}", term.topology_key, topo_val));
+        }
+        if !term.anti && !has_match {
+            return FilterResult::Reject(format!("affinity unsatisfied in topology {}={}", term.topology_key, topo_val));
+        }
+    }
+    FilterResult::Pass
+}
+
+fn filter_topology_spread_cached(
+    state: &ClusterState,
+    pod: &Pod,
+    node: &Node,
+    caches: &mut SchedulingCaches,
+) -> FilterResult {
+    for constraint in &pod.scheduling_constraints.topology_spread {
+        if constraint.when_unsatisfiable != WhenUnsatisfiable::DoNotSchedule { continue; }
+        let domain = match node.labels.get(&constraint.topology_key) {
+            Some(d) => d.to_string(),
+            None => return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key)),
+        };
+        let counts = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
+        let min_count = counts.values().copied().min().unwrap_or(0);
+        let my_count = counts.get(&domain).copied().unwrap_or(0);
+        let new_count = my_count + 1;
+        let new_min = if my_count == min_count {
+            counts.values().copied().map(|c| if c == my_count { new_count.min(c) } else { c }).min().unwrap_or(new_count)
+        } else { min_count };
+        let skew = new_count - new_min;
+        if skew > constraint.max_skew as i32 {
+            return FilterResult::Reject(format!("topology {} skew {} exceeds maxSkew {}", constraint.topology_key, skew, constraint.max_skew));
+        }
+    }
+    FilterResult::Pass
+}
+
+fn score_inter_pod_affinity_cached(
+    state: &ClusterState,
+    pod: &Pod,
+    node: &Node,
+    _weight: i64,
+    caches: &mut SchedulingCaches,
+) -> i64 {
+    let mut total = 0i64;
+    for term in &pod.scheduling_constraints.pod_affinity {
+        let term_weight = match term.affinity_type {
+            AffinityType::Preferred { weight } => weight as i64,
+            AffinityType::Required => continue,
+        };
+        let topo_val = match node_topology_value(node, &term.topology_key) {
+            Some(v) => v,
+            None => continue,
+        };
+        let count = caches.get_affinity_count(state, &term.topology_key, topo_val, term);
+        if term.anti { total -= count * term_weight; } else { total += count * term_weight; }
+    }
+    total
+}
+
+fn score_topology_spread_cached(
+    state: &ClusterState,
+    pod: &Pod,
+    node: &Node,
+    _weight: i64,
+    caches: &mut SchedulingCaches,
+) -> i64 {
+    let mut total_skew: i32 = 0;
+    let mut num_constraints: i32 = 0;
+    for constraint in &pod.scheduling_constraints.topology_spread {
+        if constraint.when_unsatisfiable != WhenUnsatisfiable::ScheduleAnyway { continue; }
+        let domain = match node.labels.get(&constraint.topology_key) {
+            Some(d) => d.to_string(),
+            None => continue,
+        };
+        let counts = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
+        let min_count = counts.values().copied().min().unwrap_or(0);
+        let my_count = counts.get(&domain).copied().unwrap_or(0) + 1;
+        total_skew += (my_count - min_count).max(0);
+        num_constraints += 1;
+    }
+    if num_constraints == 0 { return 0; }
+    let avg_skew = total_skew as f64 / num_constraints as f64;
+    (100.0 - avg_skew.min(100.0)) as i64
+}
+
 // ── Scheduler ───────────────────────────────────────────────────
 
 /// The result of scheduling a single pod.
@@ -736,6 +908,98 @@ impl Scheduler {
         ScheduleResult::Bound(best)
     }
 
+    /// Like `schedule_one` but uses pre-built caches for expensive topology/affinity lookups.
+    fn schedule_one_cached(&mut self, state: &ClusterState, pod_id: PodId, caches: &mut SchedulingCaches) -> ScheduleResult {
+        let pod = match state.pods.get(pod_id) {
+            Some(p) => p,
+            None => return ScheduleResult::Unschedulable(vec!["pod not found".into()]),
+        };
+
+        // Filter phase — use cached versions for expensive plugins
+        let mut feasible: Vec<(NodeId, &Node)> = Vec::new();
+        let mut any_rejected = false;
+
+        for (nid, node) in state.nodes.iter() {
+            if !node.conditions.ready || node.cordoned {
+                continue;
+            }
+            let mut passed = true;
+            for filter in &self.profile.filters {
+                let result = match filter.name() {
+                    "InterPodAffinity" => filter_inter_pod_affinity_cached(state, pod, node, caches),
+                    "PodTopologySpreadFilter" => filter_topology_spread_cached(state, pod, node, caches),
+                    _ => filter.filter(state, pod, node),
+                };
+                if let FilterResult::Reject(_) = result {
+                    any_rejected = true;
+                    passed = false;
+                    break;
+                }
+            }
+            if passed {
+                feasible.push((nid, node));
+            }
+        }
+
+        if feasible.is_empty() {
+            match evaluate_preemption(state, pod, &self.profile.filters) {
+                PreemptResult::Preempt(candidate) => {
+                    return ScheduleResult::Preempted {
+                        node_id: candidate.node_id,
+                        victims: candidate.victims,
+                    };
+                }
+                PreemptResult::NoCandidate => {
+                    return ScheduleResult::Unschedulable(if any_rejected {
+                        vec!["no feasible node found".into()]
+                    } else {
+                        vec!["no ready nodes available".into()]
+                    });
+                }
+            }
+        }
+
+        // Score phase — use cached versions for expensive scorers
+        let mut node_totals: Vec<(NodeId, i64)> = feasible.iter().map(|&(nid, _)| (nid, 0i64)).collect();
+
+        for scorer in &self.profile.scorers {
+            let raw: Vec<i64> = match scorer.name() {
+                "InterPodAffinity" => feasible.iter().map(|&(_, node)| {
+                    score_inter_pod_affinity_cached(state, pod, node, scorer.weight(), caches)
+                }).collect(),
+                "PodTopologySpreadScore" => feasible.iter().map(|&(_, node)| {
+                    score_topology_spread_cached(state, pod, node, scorer.weight(), caches)
+                }).collect(),
+                _ => feasible.iter().map(|&(_, node)| scorer.score(state, pod, node)).collect(),
+            };
+            let min = raw.iter().copied().min().unwrap_or(0);
+            let max = raw.iter().copied().max().unwrap_or(0);
+            let range = max - min;
+            for (i, &raw_val) in raw.iter().enumerate() {
+                let normalized = if range > 0 { (raw_val - min) * 100 / range } else { 100 };
+                node_totals[i].1 += normalized * scorer.weight();
+            }
+        }
+
+        let best = if let Some(ref mut rng) = self.rng {
+            use rand::seq::SliceRandom;
+            let max_score = node_totals.iter().map(|&(_, s)| s).max().unwrap();
+            let tied: Vec<NodeId> = node_totals.iter()
+                .filter(|&&(_, s)| s == max_score)
+                .map(|&(nid, _)| nid)
+                .collect();
+            if tied.len() > 1 {
+                *tied.choose(rng).unwrap()
+            } else {
+                tied[0]
+            }
+        } else {
+            node_totals.iter().max_by_key(|&&(_, score)| score).map(|&(nid, _)| nid).unwrap()
+        };
+
+        ScheduleResult::Bound(best)
+    }
+
     /// Schedule all pending pods in priority order. Returns (bound, unschedulable) counts.
     pub fn schedule_pending(&mut self, state: &mut ClusterState) -> (u32, u32) {
         let mut queue: Vec<PodId> = state.pending_queue.clone();
@@ -760,6 +1024,38 @@ impl Scheduler {
                         state.evict_pod(*vid);
                     }
                     state.bind_pod(pod_id, node_id);
+                    bound += 1;
+                }
+                ScheduleResult::Unschedulable(_) => {
+                    unschedulable += 1;
+                }
+            }
+        }
+
+        (bound, unschedulable)
+    }
+
+    /// Schedule a batch of pods using cached constraint lookups.
+    /// Unlike `schedule_pending`, does NOT sort by priority — caller controls order.
+    /// Returns (bound, unschedulable) counts.
+    pub fn schedule_pending_from(&mut self, state: &mut ClusterState, pod_ids: &[PodId]) -> (u32, u32) {
+        let mut bound = 0u32;
+        let mut unschedulable = 0u32;
+        let mut caches = SchedulingCaches::build(state);
+
+        for &pod_id in pod_ids {
+            match self.schedule_one_cached(state, pod_id, &mut caches) {
+                ScheduleResult::Bound(node_id) => {
+                    state.bind_pod(pod_id, node_id);
+                    caches.invalidate();
+                    bound += 1;
+                }
+                ScheduleResult::Preempted { node_id, victims } => {
+                    for vid in &victims {
+                        state.evict_pod(*vid);
+                    }
+                    state.bind_pod(pod_id, node_id);
+                    caches.invalidate();
                     bound += 1;
                 }
                 ScheduleResult::Unschedulable(_) => {

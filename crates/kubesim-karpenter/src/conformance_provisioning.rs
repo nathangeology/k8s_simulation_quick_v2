@@ -198,7 +198,7 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
     use crate::DrainHandler;
     use kubesim_core::*;
     use kubesim_engine::*;
-    use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy, ScheduleResult};
+    use kubesim_scheduler::{Scheduler, SchedulerProfile, ScoringStrategy};
 
     BehaviorSpec {
         name: "drain-triggers-rs-reconcile",
@@ -264,11 +264,7 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
                     if matches!(event, Event::ReplicaSetReconcile(_) | Event::NodeDrained(_)) {
                         let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
                         let pending: Vec<PodId> = state.pending_queue.clone();
-                        for pid in pending {
-                            if let ScheduleResult::Bound(nid) = sched.schedule_one(state, pid) {
-                                state.bind_pod(pid, nid);
-                            }
-                        }
+                        sched.schedule_pending_from(state, &pending);
                     }
                     Vec::new()
                 }
