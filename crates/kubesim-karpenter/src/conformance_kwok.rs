@@ -286,11 +286,7 @@ fn run_kwok_benchmark(seed: u64) -> Result<(u32, Vec<Snapshot>, u32), String> {
                         n.conditions.ready = true;
                     }
                     let pending: Vec<_> = state.pending_queue.clone();
-                    for pid in pending {
-                        if let ScheduleResult::Bound(nid) = self.scheduler.schedule_one(state, pid) {
-                            state.bind_pod(pid, nid);
-                        }
-                    }
+                    self.scheduler.schedule_pending_from(state, &pending);
                     if !state.pending_queue.is_empty() {
                         return vec![ScheduledEvent {
                             time: SimTime(time.0 + 1),

@@ -75,13 +75,7 @@ impl EventHandler for SimGlueHandler {
                 // provisioner launches new ones. This catches evicted pods that
                 // were returned to pending by DrainHandler.
                 let pending: Vec<PodId> = state.pending_queue.clone();
-                for pid in pending {
-                    if let ScheduleResult::Bound(nid) =
-                        self.scheduler.schedule_one(state, pid)
-                    {
-                        state.bind_pod(pid, nid);
-                    }
-                }
+                self.scheduler.schedule_pending_from(state, &pending);
                 Vec::new()
             }
             Event::NodeLaunching(spec) => {
@@ -109,13 +103,7 @@ impl EventHandler for SimGlueHandler {
                     state.add_node(node);
                     // Schedule pending pods onto available nodes
                     let pending: Vec<PodId> = state.pending_queue.clone();
-                    for pid in pending {
-                        if let ScheduleResult::Bound(nid) =
-                            self.scheduler.schedule_one(state, pid)
-                        {
-                            state.bind_pod(pid, nid);
-                        }
-                    }
+                    self.scheduler.schedule_pending_from(state, &pending);
                 }
                 Vec::new()
             }

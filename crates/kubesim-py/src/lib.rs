@@ -265,13 +265,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 // Try to schedule pending pods onto the new node (only if instant startup)
                 if self.node_startup_ns == 0 {
                     let pending: Vec<_> = state.pending_queue.clone();
-                    for pod_id in pending {
-                        if let kubesim_scheduler::ScheduleResult::Bound(nid) =
-                            self.scheduler.schedule_one(state, pod_id)
-                        {
-                            state.bind_pod(pod_id, nid);
-                        }
-                    }
+                    self.scheduler.schedule_pending_from(state, &pending);
                 }
                 let startup_delay = self.jittered_delay(self.node_startup_ns, self.node_startup_jitter_ns);
                 vec![kubesim_engine::ScheduledEvent {
@@ -285,13 +279,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                     n.conditions.ready = true;
                 }
                 let pending: Vec<_> = state.pending_queue.clone();
-                for pod_id in pending {
-                    if let kubesim_scheduler::ScheduleResult::Bound(nid) =
-                        self.scheduler.schedule_one(state, pod_id)
-                    {
-                        state.bind_pod(pod_id, nid);
-                    }
-                }
+                self.scheduler.schedule_pending_from(state, &pending);
                 // Trigger provisioning if pods are still pending
                 if !state.pending_queue.is_empty() {
                     return vec![kubesim_engine::ScheduledEvent {
@@ -306,13 +294,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 // provisioner launches new ones. This catches evicted pods that
                 // were returned to pending by DrainHandler.
                 let pending: Vec<_> = state.pending_queue.clone();
-                for pod_id in pending {
-                    if let kubesim_scheduler::ScheduleResult::Bound(nid) =
-                        self.scheduler.schedule_one(state, pod_id)
-                    {
-                        state.bind_pod(pod_id, nid);
-                    }
-                }
+                self.scheduler.schedule_pending_from(state, &pending);
                 Vec::new()
             }
             EngineEvent::NodeCordoned(node_id) => {
