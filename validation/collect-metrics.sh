@@ -4,7 +4,6 @@ set -euo pipefail
 # Collect cluster metrics every INTERVAL seconds, output JSON timeseries
 INTERVAL=${INTERVAL:-30}
 OUTPUT=${1:-/dev/stdout}
-INSTANCE_PRICES='{"m5.xlarge":0.192,"m5.2xlarge":0.384}'
 
 log() { echo "[$(date +%H:%M:%S)] $1" >&2; }
 
@@ -29,23 +28,40 @@ while true; do
 
     # Count nodes (exclude control-plane and real worker)
     kwok_nodes=$(kubectl get nodes -l 'karpenter.sh/nodepool' --no-headers 2>/dev/null || true)
-    node_count=$(echo "$kwok_nodes" | grep -c "Ready" 2>/dev/null || echo 0)
+    node_count=0
+    if [ -n "$kwok_nodes" ]; then
+        node_count=$(echo "$kwok_nodes" | grep -c "Ready" || true)
+    fi
 
-    # Compute cost from instance types
+    # Compute cost from node allocatable CPU (approximate: $0.048/vCPU/hr on-demand)
     cost_per_hour=0
-    if [ -n "$kwok_nodes" ] && [ "$node_count" -gt 0 ]; then
-        while IFS= read -r line; do
-            node_name=$(echo "$line" | awk '{print $1}')
-            itype=$(kubectl get node "$node_name" -o jsonpath='{.metadata.labels.node\.kubernetes\.io/instance-type}' 2>/dev/null || echo "unknown")
-            price=$(echo "$INSTANCE_PRICES" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$itype', 0))" 2>/dev/null || echo 0)
-            cost_per_hour=$(python3 -c "print($cost_per_hour + $price)")
-        done <<< "$kwok_nodes"
+    if [ "$node_count" -gt 0 ]; then
+        cost_per_hour=$(kubectl get nodes -l 'karpenter.sh/nodepool' -o json 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+cost = 0
+for n in data.get('items', []):
+    # Get price from karpenter label if available, else estimate from CPU
+    labels = n.get('metadata', {}).get('labels', {})
+    price_str = labels.get('karpenter.kwok.sh/instance-price', '')
+    if price_str:
+        cost += float(price_str)
+    else:
+        alloc = n.get('status', {}).get('allocatable', {})
+        cpu_str = alloc.get('cpu', '0')
+        vcpu = int(cpu_str[:-1])/1000 if cpu_str.endswith('m') else int(cpu_str)
+        cost += vcpu * 0.048  # ~m5 pricing
+print(f'{cost:.4f}')
+" 2>/dev/null || echo "0")
     fi
 
     # Count pods
     all_pods=$(kubectl get pods --all-namespaces --field-selector='status.phase!=Succeeded,status.phase!=Failed' --no-headers 2>/dev/null || true)
     pod_count=$(echo "$all_pods" | grep -v "^$" | wc -l | tr -d ' ')
-    pending_count=$(echo "$all_pods" | grep -c "Pending" 2>/dev/null || echo 0)
+    pending_count=0
+    if [ -n "$all_pods" ]; then
+        pending_count=$(echo "$all_pods" | grep -c "Pending" || true)
+    fi
 
     # Compute total allocated vCPU and memory on kwok nodes
     total_vcpu=0
