@@ -1273,6 +1273,172 @@ impl StepSimulation {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kubesim_metrics::{MetricsSnapshot, Percentiles};
+    use kubesim_core::SimTime;
+
+    fn snap(time_val: u64, cost_rate: f64, node_count: u32, pending: u32, disruptions: u64) -> MetricsSnapshot {
+        MetricsSnapshot {
+            time: SimTime(time_val),
+            total_cost_per_hour: cost_rate,
+            disruption_count: disruptions,
+            scheduling_latency: Percentiles::default(),
+            cpu_utilization: Percentiles::default(),
+            memory_utilization: Percentiles::default(),
+            availability: 1.0,
+            node_count,
+            pod_count: 0,
+            pending_count: pending,
+            detail_level: "cluster".into(),
+            pod_placement_entropy: 0.0,
+            pod_placement_entropy_normalized: 0.0,
+            cpu_weighted_entropy: 0.0,
+            cpu_weighted_entropy_normalized: 0.0,
+        }
+    }
+
+    // --- compute_cumulative sanity checks ---
+
+    #[test]
+    fn constant_cost_one_hour_wallclock() {
+        // 3 nodes at $1/hr for 1 hour → cumulative_cost = $3.00
+        let snaps = vec![
+            snap(0, 3.0, 3, 0, 0),
+            snap(3_600_000_000_000, 3.0, 3, 0, 0),
+        ];
+        let (cost, _, _, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        assert!((cost - 3.0).abs() < 0.001, "expected ~3.0, got {cost}");
+    }
+
+    #[test]
+    fn constant_cost_half_hour_wallclock() {
+        // 3 nodes at $1/hr for 30 min → cumulative_cost = $1.50
+        let snaps = vec![
+            snap(0, 3.0, 3, 0, 0),
+            snap(1_800_000_000_000, 3.0, 3, 0, 0),
+        ];
+        let (cost, _, _, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        assert!((cost - 1.5).abs() < 0.001, "expected ~1.5, got {cost}");
+    }
+
+    #[test]
+    fn step_change_cost_wallclock() {
+        // 3 nodes at $1/hr for 30 min, then 1 node at $1/hr for 30 min → $2.00
+        let snaps = vec![
+            snap(0, 3.0, 3, 0, 0),
+            snap(1_800_000_000_000, 3.0, 3, 0, 0),
+            snap(1_800_000_000_001, 1.0, 1, 0, 0),
+            snap(3_600_000_000_000, 1.0, 1, 0, 0),
+        ];
+        let (cost, _, _, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        assert!((cost - 2.0).abs() < 0.01, "expected ~2.0, got {cost}");
+    }
+
+    #[test]
+    fn zero_duration_single_snapshot() {
+        let snaps = vec![snap(0, 5.0, 3, 0, 0)];
+        let (cost, _, _, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        assert!((cost - 0.0).abs() < 0.001, "single snapshot should have 0 cost, got {cost}");
+    }
+
+    #[test]
+    fn logical_and_wallclock_same_result() {
+        // Logical: each tick = 1 second. 3600 ticks = 1 hour → $3.00
+        let snaps_logical = vec![
+            snap(0, 3.0, 3, 0, 0),
+            snap(3600, 3.0, 3, 0, 0),
+        ];
+        let (cost_logical, _, _, _, _, _, _, _) = compute_cumulative(&snaps_logical, TimeMode::Logical);
+
+        // WallClock: 1 hour in ns
+        let snaps_wc = vec![
+            snap(0, 3.0, 3, 0, 0),
+            snap(3_600_000_000_000, 3.0, 3, 0, 0),
+        ];
+        let (cost_wc, _, _, _, _, _, _, _) = compute_cumulative(&snaps_wc, TimeMode::WallClock);
+
+        assert!((cost_logical - cost_wc).abs() < 0.001,
+            "logical={cost_logical}, wallclock={cost_wc} should match");
+    }
+
+    // --- Resource metric sanity checks ---
+
+    #[test]
+    fn time_weighted_node_count_constant() {
+        // 5 nodes for 1 hour → 5 * 3600 = 18000 node-seconds
+        let snaps = vec![
+            snap(0, 0.0, 5, 0, 0),
+            snap(3_600_000_000_000, 0.0, 5, 0, 0),
+        ];
+        let (_, twn, _, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        assert!((twn - 18000.0).abs() < 1.0, "expected ~18000 node-seconds, got {twn}");
+    }
+
+    // --- Report-level bound checks ---
+
+    #[test]
+    fn cumulative_cost_positive_for_nontrivial() {
+        let snaps = vec![
+            snap(0, 1.0, 2, 0, 0),
+            snap(1_000_000_000, 1.0, 2, 0, 0),
+        ];
+        let (cost, _, _, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        assert!(cost > 0.0, "non-trivial scenario should have positive cost, got {cost}");
+    }
+
+    #[test]
+    fn cumulative_cost_bounded_by_peak_rate() {
+        let snaps = vec![
+            snap(0, 5.0, 3, 0, 0),
+            snap(1_800_000_000_000, 10.0, 5, 0, 0),
+            snap(3_600_000_000_000, 3.0, 2, 0, 0),
+        ];
+        let (cost, _, _, _, _, _, _, peak_rate) = compute_cumulative(&snaps, TimeMode::WallClock);
+        let total_hours = 1.0;
+        assert!(cost < peak_rate * total_hours,
+            "cost {cost} should be < peak_rate {peak_rate} * hours {total_hours}");
+    }
+
+    #[test]
+    fn time_to_stable_bounded_by_sim_time() {
+        let snaps = vec![
+            snap(0, 1.0, 2, 0, 0),
+            snap(1_000_000_000, 1.0, 3, 0, 0),
+            snap(2_000_000_000, 1.0, 3, 0, 0),
+        ];
+        let (_, _, tts, _, _, _, _, _) = compute_cumulative(&snaps, TimeMode::WallClock);
+        let total_sim_secs = 2.0;
+        assert!(tts <= total_sim_secs,
+            "time_to_stable {tts} should be <= total_sim_time {total_sim_secs}");
+    }
+
+    #[test]
+    fn empty_snapshots_returns_zeros() {
+        let (cost, twn, tts, pps, dc, ds, pnc, pcr) = compute_cumulative(&[], TimeMode::WallClock);
+        assert_eq!(cost, 0.0);
+        assert_eq!(twn, 0.0);
+        assert_eq!(tts, 0.0);
+        assert_eq!(pps, 0.0);
+        assert_eq!(dc, 0);
+        assert_eq!(ds, 0.0);
+        assert_eq!(pnc, 0);
+        assert_eq!(pcr, 0.0);
+    }
+
+    #[test]
+    fn peak_node_count_tracked() {
+        let snaps = vec![
+            snap(0, 1.0, 2, 0, 0),
+            snap(100, 1.0, 5, 0, 0),
+            snap(200, 1.0, 3, 0, 0),
+        ];
+        let (_, _, _, _, _, _, peak_nc, _) = compute_cumulative(&snaps, TimeMode::Logical);
+        assert_eq!(peak_nc, 5);
+    }
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;

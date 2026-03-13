@@ -312,6 +312,104 @@ mod tests {
     }
 
     #[test]
+    fn node_count_matches_actual_nodes() {
+        let mut state = ClusterState::new();
+        state.add_node(test_node(4000, 8_000_000_000));
+        state.add_node(test_node(2000, 4_000_000_000));
+        state.add_node(test_node(8000, 16_000_000_000));
+
+        let mut collector = MetricsCollector::new(MetricsConfig::default());
+        collector.handle(&Event::MetricsSnapshot, SimTime(100), &mut state);
+
+        let snap = &collector.snapshots()[0];
+        assert_eq!(snap.node_count, state.nodes.len());
+    }
+
+    #[test]
+    fn running_pods_matches_actual() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(test_node(8000, 16_000_000_000));
+
+        // Submit and bind 3 pods (Running), leave 1 Pending
+        for _ in 0..3 {
+            let pod = Pod {
+                requests: Resources { cpu_millis: 500, memory_bytes: 1_000_000, gpu: 0, ephemeral_bytes: 0 },
+                limits: Resources::default(),
+                phase: PodPhase::Pending,
+                node: None,
+                scheduling_constraints: SchedulingConstraints::default(),
+                deletion_cost: None,
+                owner: OwnerId(0),
+                qos_class: QoSClass::Burstable,
+                priority: 0,
+                labels: LabelSet::default(),
+                do_not_disrupt: false,
+                duration_ns: None,
+            };
+            let pid = state.submit_pod(pod);
+            state.bind_pod(pid, nid);
+        }
+        // One pending pod
+        let pending_pod = Pod {
+            requests: Resources { cpu_millis: 500, memory_bytes: 1_000_000, gpu: 0, ephemeral_bytes: 0 },
+            limits: Resources::default(),
+            phase: PodPhase::Pending,
+            node: None,
+            scheduling_constraints: SchedulingConstraints::default(),
+            deletion_cost: None,
+            owner: OwnerId(0),
+            qos_class: QoSClass::Burstable,
+            priority: 0,
+            labels: LabelSet::default(),
+            do_not_disrupt: false,
+            duration_ns: None,
+        };
+        state.submit_pod(pending_pod);
+
+        let mut collector = MetricsCollector::new(MetricsConfig::default());
+        collector.handle(&Event::MetricsSnapshot, SimTime(100), &mut state);
+
+        let snap = &collector.snapshots()[0];
+        // pod_count in snapshot counts ALL pods
+        assert_eq!(snap.pod_count, 4);
+        assert_eq!(snap.pending_count, 1);
+        // availability = running / active = 3/4
+        assert!((snap.availability - 0.75).abs() < 0.01);
+    }
+
+    #[test]
+    fn pending_zero_when_all_scheduled() {
+        let mut state = ClusterState::new();
+        let nid = state.add_node(test_node(8000, 16_000_000_000));
+
+        for _ in 0..3 {
+            let pod = Pod {
+                requests: Resources { cpu_millis: 500, memory_bytes: 1_000_000, gpu: 0, ephemeral_bytes: 0 },
+                limits: Resources::default(),
+                phase: PodPhase::Pending,
+                node: None,
+                scheduling_constraints: SchedulingConstraints::default(),
+                deletion_cost: None,
+                owner: OwnerId(0),
+                qos_class: QoSClass::Burstable,
+                priority: 0,
+                labels: LabelSet::default(),
+                do_not_disrupt: false,
+                duration_ns: None,
+            };
+            let pid = state.submit_pod(pod);
+            state.bind_pod(pid, nid);
+        }
+
+        let mut collector = MetricsCollector::new(MetricsConfig::default());
+        collector.handle(&Event::MetricsSnapshot, SimTime(100), &mut state);
+
+        let snap = &collector.snapshots()[0];
+        assert_eq!(snap.pending_count, 0);
+        assert!((snap.availability - 1.0).abs() < 0.001);
+    }
+
+    #[test]
     fn export_json_valid() {
         let mut state = ClusterState::new();
         state.add_node(test_node(4000, 8_000_000_000));
