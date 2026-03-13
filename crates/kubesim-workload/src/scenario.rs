@@ -74,15 +74,27 @@ pub struct ActionDelays {
     /// Time from NodeLaunching to NodeReady (default "0s").
     #[serde(default = "default_zero_duration")]
     pub node_startup: String,
+    /// Jitter range for node startup delay (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub node_startup_jitter: Option<String>,
     /// Time from NodeDrained to NodeTerminated (default "0s").
     #[serde(default = "default_zero_duration")]
     pub node_shutdown: String,
+    /// Jitter range for node shutdown delay (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub node_shutdown_jitter: Option<String>,
     /// Provisioner batch window — delay before first provisioning pass (default "0s").
     #[serde(default = "default_zero_duration")]
     pub provisioner_batch: String,
+    /// Jitter range for provisioner batch window (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub provisioner_batch_jitter: Option<String>,
     /// Time for a pod to transition from Pending to Running once bound (default "0s").
     #[serde(default = "default_zero_duration")]
     pub pod_startup: String,
+    /// Jitter range for pod startup delay (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub pod_startup_jitter: Option<String>,
 }
 
 fn default_zero_duration() -> String { "0s".to_string() }
@@ -91,18 +103,26 @@ impl Default for ActionDelays {
     fn default() -> Self {
         Self {
             node_startup: "0s".to_string(),
+            node_startup_jitter: None,
             node_shutdown: "0s".to_string(),
+            node_shutdown_jitter: None,
             provisioner_batch: "0s".to_string(),
+            provisioner_batch_jitter: None,
             pod_startup: "0s".to_string(),
+            pod_startup_jitter: None,
         }
     }
 }
 
 impl ActionDelays {
     pub fn node_startup_ns(&self) -> u64 { parse_duration_ns(&self.node_startup).unwrap_or(0) }
+    pub fn node_startup_jitter_ns(&self) -> u64 { self.node_startup_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
     pub fn node_shutdown_ns(&self) -> u64 { parse_duration_ns(&self.node_shutdown).unwrap_or(0) }
+    pub fn node_shutdown_jitter_ns(&self) -> u64 { self.node_shutdown_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
     pub fn provisioner_batch_ns(&self) -> u64 { parse_duration_ns(&self.provisioner_batch).unwrap_or(0) }
+    pub fn provisioner_batch_jitter_ns(&self) -> u64 { self.provisioner_batch_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
     pub fn pod_startup_ns(&self) -> u64 { parse_duration_ns(&self.pod_startup).unwrap_or(0) }
+    pub fn pod_startup_jitter_ns(&self) -> u64 { self.pod_startup_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
 }
 
 /// A daemonset definition in scenario YAML.

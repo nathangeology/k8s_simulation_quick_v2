@@ -31,7 +31,7 @@ fn node_resources_fit_spec() -> BehaviorSpec {
             state.add_node(mk_node(1000, 1_000_000_000));
             let pid = state.submit_pod(mk_pod(2000, 1_000_000_000));
 
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             let (bound, unsched) = sched.schedule_pending(&mut state);
 
             if bound != 0 || unsched != 1 {
@@ -72,7 +72,7 @@ fn node_affinity_spec() -> BehaviorSpec {
             });
             let pid = state.submit_pod(pod);
 
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             let (bound, _) = sched.schedule_pending(&mut state);
 
             if bound != 1 {
@@ -110,7 +110,7 @@ fn taint_toleration_spec() -> BehaviorSpec {
 
             let pid = state.submit_pod(mk_pod(500, 500_000_000));
 
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             let (bound, _) = sched.schedule_pending(&mut state);
 
             if bound != 1 {
@@ -166,7 +166,7 @@ fn topology_spread_spec() -> BehaviorSpec {
             });
             let pid = state.submit_pod(pod);
 
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             let (bound, _) = sched.schedule_pending(&mut state);
 
             if bound != 1 {
@@ -204,7 +204,7 @@ fn most_allocated_spec() -> BehaviorSpec {
             });
 
             let pid = state.submit_pod(mk_pod(500, 500_000_000));
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::MostAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::MostAllocated));
             sched.schedule_pending(&mut state);
 
             if state.pods.get(pid).unwrap().node != Some(full_nid) {
@@ -239,7 +239,7 @@ fn least_allocated_spec() -> BehaviorSpec {
             });
 
             let pid = state.submit_pod(mk_pod(500, 500_000_000));
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             sched.schedule_pending(&mut state);
 
             if state.pods.get(pid).unwrap().node != Some(empty_nid) {
@@ -268,7 +268,7 @@ fn score_tiebreaking_spec() -> BehaviorSpec {
                 state.add_node(mk_node(4000, 8_000_000_000));
                 let pid = state.submit_pod(mk_pod(500, 500_000_000));
 
-                let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+                let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
                 sched.schedule_pending(&mut state);
                 results.push(state.pods.get(pid).unwrap().node);
             }
@@ -302,7 +302,7 @@ fn pending_fifo_spec() -> BehaviorSpec {
             high.priority = 100;
             let high_id = state.submit_pod(high);
 
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             let (bound, unsched) = sched.schedule_pending(&mut state);
 
             if bound != 1 || unsched != 1 {
@@ -333,7 +333,7 @@ fn unschedulable_stays_pending_spec() -> BehaviorSpec {
             // No nodes at all
             let pid = state.submit_pod(mk_pod(1000, 1_000_000_000));
 
-            let sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
+            let mut sched = Scheduler::new(SchedulerProfile::with_scoring("default", ScoringStrategy::LeastAllocated));
             let (bound, unsched) = sched.schedule_pending(&mut state);
 
             if bound != 0 || unsched != 1 {

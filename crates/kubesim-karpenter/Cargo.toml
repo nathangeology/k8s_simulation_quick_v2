@@ -8,6 +8,7 @@ kubesim-core = { workspace = true }
 kubesim-ec2 = { workspace = true }
 kubesim-engine = { workspace = true }
 kubesim-scheduler = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
 thiserror = { workspace = true }

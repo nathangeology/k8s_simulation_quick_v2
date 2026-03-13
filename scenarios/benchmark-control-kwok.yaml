@@ -21,8 +21,10 @@ study:
         memory_request: "256Mi"
     delays:
       node_startup: "30s"      # KWOK node registration + ready
+      node_startup_jitter: "10s"  # ±10s jitter on startup
       node_shutdown: "5s"      # drain + terminate
       provisioner_batch: "10s" # Karpenter batch window
+      provisioner_batch_jitter: "5s"  # ±5s batch window jitter
       pod_startup: "2s"        # scheduler bind latency
 
   workloads:
