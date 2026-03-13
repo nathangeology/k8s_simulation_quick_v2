@@ -177,9 +177,237 @@ EOFB
         log "Benchmark control complete"
         ;;
 
+    adversarial-churn)
+        log "=== Adversarial Churn: Rapid scale-up/down (5 min) ==="
+
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: churn-workload
+  labels:
+    kubesim-scenario: adversarial-churn
+spec:
+  replicas: 50
+  selector:
+    matchLabels:
+      app: churn-workload
+  template:
+    metadata:
+      labels:
+        app: churn-workload
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+        log "Created 50 pods (500m CPU each)"
+
+        # t=30s: scale to 200
+        sleep 30
+        log "t=30s: Scaling to 200 replicas..."
+        kubectl scale deployment churn-workload --replicas=200
+
+        # t=90s: scale down to 20
+        sleep 60
+        log "t=90s: Scaling down to 20 replicas..."
+        kubectl scale deployment churn-workload --replicas=20
+
+        # t=150s: scale to 150
+        sleep 60
+        log "t=150s: Scaling up to 150 replicas..."
+        kubectl scale deployment churn-workload --replicas=150
+
+        # t=210s: scale down to 10
+        sleep 60
+        log "t=210s: Scaling down to 10 replicas..."
+        kubectl scale deployment churn-workload --replicas=10
+
+        # Wait until t=300s for stabilization
+        sleep 90
+        log "t=300s: Stabilization complete"
+        ;;
+
+    adversarial-heterogeneous)
+        log "=== Adversarial Heterogeneous: Mixed pod sizes (10 min) ==="
+
+        # Tiny pods: 20 × 100m CPU, 128Mi
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hetero-tiny
+  labels:
+    kubesim-scenario: adversarial-heterogeneous
+spec:
+  replicas: 20
+  selector:
+    matchLabels:
+      app: hetero-tiny
+  template:
+    metadata:
+      labels:
+        app: hetero-tiny
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+
+        # Medium pods: 10 × 500m CPU, 2Gi
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hetero-medium
+  labels:
+    kubesim-scenario: adversarial-heterogeneous
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: hetero-medium
+  template:
+    metadata:
+      labels:
+        app: hetero-medium
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+
+        # Large pods: 5 × 2000m CPU, 8Gi
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hetero-large
+  labels:
+    kubesim-scenario: adversarial-heterogeneous
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: hetero-large
+  template:
+    metadata:
+      labels:
+        app: hetero-large
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: "2000m"
+            memory: 8Gi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+        log "Created 35 pods (20 tiny + 10 medium + 5 large)"
+
+        # t=3m: scale down tiny to 5, add 10 more large
+        sleep 180
+        log "t=3m: Scaling tiny 20→5, large 5→15..."
+        kubectl scale deployment hetero-tiny --replicas=5
+        kubectl scale deployment hetero-large --replicas=15
+
+        # t=6m: scale down all to minimum
+        sleep 180
+        log "t=6m: Scaling all to minimum (1 each)..."
+        kubectl scale deployment hetero-tiny --replicas=1
+        kubectl scale deployment hetero-medium --replicas=1
+        kubectl scale deployment hetero-large --replicas=1
+
+        # Wait until t=10m
+        sleep 240
+        log "t=10m: Stabilization complete"
+        ;;
+
+    adversarial-deletion-cost)
+        log "=== Adversarial Deletion Cost: Node drain ordering (15 min) ==="
+
+        kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deletion-cost-workload
+  labels:
+    kubesim-scenario: adversarial-deletion-cost
+spec:
+  replicas: 100
+  selector:
+    matchLabels:
+      app: deletion-cost-workload
+  template:
+    metadata:
+      labels:
+        app: deletion-cost-workload
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+      tolerations:
+      - key: "kwok.x-k8s.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+EOF
+        log "Created 100 pods (500m CPU each)"
+
+        # t=5m: scale down to 50
+        sleep 300
+        log "t=5m: Scaling down to 50 replicas..."
+        kubectl scale deployment deletion-cost-workload --replicas=50
+
+        # t=10m: scale down to 10
+        sleep 300
+        log "t=10m: Scaling down to 10 replicas..."
+        kubectl scale deployment deletion-cost-workload --replicas=10
+
+        # Wait until t=15m
+        sleep 300
+        log "t=15m: Stabilization complete"
+        ;;
+
     *)
         echo "Unknown scenario: $SCENARIO"
-        echo "Usage: $0 {smoke-test|benchmark-control}"
+        echo "Usage: $0 {smoke-test|benchmark-control|adversarial-churn|adversarial-heterogeneous|adversarial-deletion-cost}"
         exit 1
         ;;
 esac

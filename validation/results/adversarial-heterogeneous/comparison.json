@@ -1,0 +1,64 @@
+{
+  "real_metrics": {
+    "cumulative_cost": 0.16226800000000002,
+    "cumulative_vcpu_hours": 3.3805833333333344,
+    "cumulative_mem_gib_hours": 13.611058333333336,
+    "peak_nodes": 2,
+    "peak_cost_per_hour": 2.2944,
+    "end_nodes": 1,
+    "end_pods": 23,
+    "end_cost_per_hour": 0.1872
+  },
+  "sim_distribution": {
+    "n_seeds": 100,
+    "cumulative_cost": {
+      "mean": 0.06339676836817068,
+      "p5": 0.06309020447146668,
+      "p95": 0.06361424532053335
+    },
+    "peak_nodes": {
+      "mean": 10.0,
+      "p5": 10.0,
+      "p95": 10.0
+    },
+    "end_nodes": {
+      "mean": 1.0,
+      "p5": 1.0,
+      "p95": 1.0
+    }
+  },
+  "gaps": [
+    {
+      "metric": "Cumulative Cost ($)",
+      "real": 0.16226800000000002,
+      "sim_mean": 0.06339676836817068,
+      "pct_diff": 155.9562642966974,
+      "percentile": 100.0,
+      "status": "OUTLIER"
+    },
+    {
+      "metric": "Peak Nodes",
+      "real": 2,
+      "sim_mean": 10.0,
+      "pct_diff": 80.0,
+      "percentile": 0.0,
+      "status": "OUTLIER"
+    },
+    {
+      "metric": "End-State Nodes",
+      "real": 1,
+      "sim_mean": 1.0,
+      "pct_diff": 0.0,
+      "percentile": 0.0,
+      "status": "OUTLIER"
+    },
+    {
+      "metric": "End-State Cost ($/hr)",
+      "real": 0.1872,
+      "sim_mean": 0.11717986918399999,
+      "pct_diff": 59.7544026150532,
+      "percentile": 100.0,
+      "status": "OUTLIER"
+    }
+  ]
+}
