@@ -99,19 +99,25 @@ fn compute_overhead(cluster: &kubesim_workload::ClusterConfig) -> Resources {
 }
 
 fn instance_to_node_with_pct(catalog: &Catalog, instance_type: &str, overhead: &Resources, daemonset_pct: u32) -> Node {
-    let (cpu, mem, gpu, cost) = catalog
-        .get(instance_type)
+    let it_spec = catalog.get(instance_type);
+    let (cpu, mem, gpu, cost, vcpu) = it_spec
         .map(|it| (
             it.vcpu as u64 * 1000,
             it.memory_gib as u64 * 1024 * 1024 * 1024,
             it.gpu_count,
             it.on_demand_price_per_hour,
+            it.vcpu,
         ))
-        .unwrap_or((4000, 16 * 1024 * 1024 * 1024, 0, 0.192));
+        .unwrap_or((4000, 16 * 1024 * 1024 * 1024, 0, 0.192, 4));
 
-    // Apply fixed overhead then percentage-based daemonset reserve
-    let mut alloc_cpu = cpu.saturating_sub(overhead.cpu_millis);
-    let mut alloc_mem = mem.saturating_sub(overhead.memory_bytes);
+    // Use EKS table overhead when no explicit flat overhead is set, otherwise use flat
+    let (oh_cpu, oh_mem) = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+        kubesim_ec2::eks_overhead(vcpu)
+    } else {
+        (overhead.cpu_millis, overhead.memory_bytes)
+    };
+    let mut alloc_cpu = cpu.saturating_sub(oh_cpu);
+    let mut alloc_mem = mem.saturating_sub(oh_mem);
     if daemonset_pct > 0 {
         alloc_cpu = alloc_cpu.saturating_sub(cpu * daemonset_pct as u64 / 100);
         alloc_mem = alloc_mem.saturating_sub(mem * daemonset_pct as u64 / 100);
