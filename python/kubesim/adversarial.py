@@ -121,6 +121,21 @@ def _extract_features(scenario: dict) -> dict[str, float]:
     features["has_pdb"] = float(any("pdb" in w for w in wls))
     features["has_topology_spread"] = float(any("topology_spread" in w for w in wls))
     features["has_anti_affinity"] = float(any("pod_anti_affinity" in w for w in wls))
+    # Karpenter config dimensions
+    for p in pools:
+        karp = p.get("karpenter", {})
+        if karp:
+            consol = karp.get("consolidation", {})
+            ca = consol.get("consolidateAfter", "0s")
+            features["max_consol_after_s"] = max(features.get("max_consol_after_s", 0), int(ca.rstrip("s") or 0))
+            budgets = karp.get("disruption", {}).get("budgets", [{}])
+            if budgets:
+                features["max_disruption_nodes"] = max(features.get("max_disruption_nodes", 0), budgets[0].get("nodes", 0))
+                features["max_disruption_pct"] = max(features.get("max_disruption_pct", 0), budgets[0].get("percent", 0))
+            ea = karp.get("expireAfter", "0h")
+            features["max_expire_h"] = max(features.get("max_expire_h", 0), int(ea.rstrip("h") or 0))
+            bi = karp.get("batchIdleDuration", "0s")
+            features["max_batch_idle_s"] = max(features.get("max_batch_idle_s", 0), int(bi.rstrip("s") or 0))
     return features
 
 
@@ -438,7 +453,16 @@ class OptunaAdversarialSearch:
                         "policy": trial.suggest_categorical(
                             f"pool{p}_consol", CONSOLIDATION_POLICIES
                         ),
-                    }
+                        "consolidateAfter": f"{trial.suggest_int(f'pool{p}_consol_after_s', 0, 1800)}s",
+                    },
+                    "disruption": {
+                        "budgets": [{
+                            "nodes": trial.suggest_int(f"pool{p}_disruption_nodes", 1, 10),
+                            "percent": trial.suggest_int(f"pool{p}_disruption_pct", 5, 50),
+                        }],
+                    },
+                    "expireAfter": f"{trial.suggest_int(f'pool{p}_expire_h', 1, 720)}h",
+                    "batchIdleDuration": f"{trial.suggest_int(f'pool{p}_batch_idle_s', 1, 30)}s",
                 }
             pools.append(pool)
 
