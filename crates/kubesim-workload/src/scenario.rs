@@ -48,6 +48,10 @@ pub enum SchedulingStrategy {
     HintBased,
     /// Partition pods by constraint class, only try relevant pods per NodeReady.
     Partitioned,
+    /// Like FullScan but skips saturated nodes in the filter loop.
+    NodePruning,
+    /// On NodeReady, only evaluate the new node instead of scanning all nodes.
+    ReverseSchedule,
 }
 
 fn default_runs() -> u32 {

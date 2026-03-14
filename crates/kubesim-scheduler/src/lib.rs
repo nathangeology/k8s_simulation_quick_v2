@@ -14,7 +14,7 @@ use kubesim_core::{
     AffinityType, ClusterState, Node, NodeId, Pod, PodAffinityTerm, PodId, PodPhase, Resources,
     Taint, WhenUnsatisfiable,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // Re-export rand types used by consumers constructing Scheduler with RNG
 pub use rand;
@@ -902,11 +902,13 @@ pub struct Scheduler {
     rng: Option<rand::rngs::StdRng>,
     /// Persistent caches for topology/affinity lookups across schedule_pending_from calls.
     caches: SchedulingCaches,
+    /// Set of saturated node IDs to skip in NodePruning strategy.
+    saturated_nodes: HashSet<NodeId>,
 }
 
 impl Scheduler {
     pub fn new(profile: SchedulerProfile) -> Self {
-        Self { profile, rng: None, caches: SchedulingCaches::new() }
+        Self { profile, rng: None, caches: SchedulingCaches::new(), saturated_nodes: HashSet::new() }
     }
 
     /// Create a scheduler with a seeded RNG for tie-breaking randomness.
@@ -916,6 +918,7 @@ impl Scheduler {
             profile,
             rng: Some(rand::rngs::StdRng::seed_from_u64(seed)),
             caches: SchedulingCaches::new(),
+            saturated_nodes: HashSet::new(),
         }
     }
 
@@ -932,6 +935,69 @@ impl Scheduler {
     /// Incrementally update persistent caches after a pod is bound.
     pub fn on_pod_bound_caches(&mut self, pod: &Pod, node: &Node) {
         self.caches.on_pod_bound(pod, node);
+    }
+
+    /// Mark a node as saturated (NodePruning strategy).
+    pub fn mark_saturated(&mut self, node_id: NodeId) {
+        self.saturated_nodes.insert(node_id);
+    }
+
+    /// Clear the saturated node set.
+    pub fn clear_saturated(&mut self) {
+        self.saturated_nodes.clear();
+    }
+
+    /// Check if a node is marked saturated.
+    pub fn is_saturated(&self, node_id: NodeId) -> bool {
+        self.saturated_nodes.contains(&node_id)
+    }
+
+    /// Schedule pending pods against a single specific node only (ReverseSchedule).
+    /// Returns (bound, unschedulable) counts.
+    pub fn schedule_for_node(&mut self, state: &mut ClusterState, node_id: NodeId, pod_ids: &[PodId]) -> (u32, u32) {
+        let mut to_bind: Vec<PodId> = Vec::new();
+        // Phase 1: filter (immutable state access)
+        if let Some(node) = state.nodes.get(node_id) {
+            if !node.conditions.ready || node.cordoned {
+                return (0, 0);
+            }
+            let mut remaining = node.allocatable.saturating_sub(&node.allocated);
+            for &pod_id in pod_ids {
+                let pod = match state.pods.get(pod_id) {
+                    Some(p) if p.phase == PodPhase::Pending => p,
+                    _ => continue,
+                };
+                if !pod.requests.fits_in(&remaining) {
+                    continue;
+                }
+                let mut passes = true;
+                for filter in &self.profile.filters {
+                    if let FilterResult::Reject(_) = filter.filter(state, pod, node) {
+                        passes = false;
+                        break;
+                    }
+                }
+                if passes {
+                    remaining = remaining.saturating_sub(&pod.requests);
+                    to_bind.push(pod_id);
+                    if remaining.cpu_millis == 0 {
+                        break;
+                    }
+                }
+            }
+        } else {
+            return (0, 0);
+        }
+        // Phase 2: bind
+        let mut bound = 0u32;
+        for pid in to_bind {
+            state.bind_pod(pid, node_id);
+            if let (Some(pod), Some(node)) = (state.pods.get(pid), state.nodes.get(node_id)) {
+                self.caches.on_pod_bound(pod, node);
+            }
+            bound += 1;
+        }
+        (bound, 0)
     }
 
     /// Attempt to schedule a single pod. Returns the chosen node or failure reasons.
@@ -1032,6 +1098,7 @@ impl Scheduler {
             if !node.conditions.ready || node.cordoned {
                 continue;
             }
+            if self.saturated_nodes.contains(&nid) { continue; }
             let mut passed = true;
             for filter in &self.profile.filters {
                 let result = match filter.name() {

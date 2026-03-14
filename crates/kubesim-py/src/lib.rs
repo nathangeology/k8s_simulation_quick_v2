@@ -324,7 +324,6 @@ impl kubesim_engine::EventHandler for SimHandler {
                     }
                     SchedulingStrategy::Partitioned => {
                         let pending: Vec<_> = state.pending_queue.clone();
-                        // Partition into unconstrained vs constrained
                         let (unconstrained, constrained): (Vec<_>, Vec<_>) = pending.iter().partition(|&&pid| {
                             state.pods.get(pid).map_or(true, |p| {
                                 p.scheduling_constraints.topology_spread.is_empty()
@@ -335,7 +334,6 @@ impl kubesim_engine::EventHandler for SimHandler {
                             let ids: Vec<PodId> = unconstrained.into_iter().copied().collect();
                             self.scheduler.schedule_pending_from(state, &ids);
                         }
-                        // For constrained: deduplicate by owner (spread means 1 per node)
                         let mut seen_owners = std::collections::HashSet::new();
                         let deduped: Vec<PodId> = constrained.into_iter()
                             .filter(|&&pid| state.pods.get(pid).map_or(false, |p| seen_owners.insert(p.owner)))
@@ -344,6 +342,31 @@ impl kubesim_engine::EventHandler for SimHandler {
                         if !deduped.is_empty() {
                             self.scheduler.schedule_pending_from(state, &deduped);
                         }
+                    }
+                    SchedulingStrategy::NodePruning => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        let before = state.pending_queue.len();
+                        self.scheduler.schedule_pending_from(state, &pending);
+                        // After scheduling, mark nodes that are full
+                        let bound_count = before - state.pending_queue.len();
+                        if bound_count > 0 {
+                            let min_cpu = state.pending_queue.iter()
+                                .filter_map(|&pid| state.pods.get(pid))
+                                .map(|p| p.requests.cpu_millis)
+                                .min()
+                                .unwrap_or(0);
+                            for (nid, node) in state.nodes.iter() {
+                                if !node.conditions.ready || node.cordoned { continue; }
+                                let avail = node.allocatable.saturating_sub(&node.allocated);
+                                if avail.cpu_millis < min_cpu {
+                                    self.scheduler.mark_saturated(nid);
+                                }
+                            }
+                        }
+                    }
+                    SchedulingStrategy::ReverseSchedule => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        self.scheduler.schedule_for_node(state, *node_id, &pending);
                     }
                 }
                 // Trigger provisioning if pods are still pending
@@ -377,6 +400,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                 state.remove_node(*node_id);
                 // Invalidate scheduler caches — topology domains changed
                 self.scheduler.invalidate_caches();
+                self.scheduler.clear_saturated();
                 Vec::new()
             }
             EngineEvent::PodCompleted(pod_id) => {
