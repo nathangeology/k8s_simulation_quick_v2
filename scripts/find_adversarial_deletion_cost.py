@@ -92,6 +92,7 @@ def evaluate(scenario: dict) -> dict | None:
     """Run scenario with all 5 variants, return divergence metrics."""
     study = scenario.get("study", scenario)
     study["variants"] = VARIANTS
+    study["scheduling_strategy"] = "reverse_schedule"
     config_yaml = yaml.dump(scenario, default_flow_style=False)
     try:
         raw = batch_run(config_yaml, SEEDS)

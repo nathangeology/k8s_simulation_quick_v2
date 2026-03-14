@@ -149,6 +149,7 @@ class AdversarialFinder:
     chaos: bool = False
     variant_pair: VariantPair | None = None
     track_features: bool = False
+    screen_threshold: float = 0.01
 
     # ── public API ───────────────────────────────────────────────
 
@@ -253,7 +254,11 @@ class AdversarialFinder:
         )
 
     def _evaluate(self, scenario: dict, rng: random.Random) -> float:
-        """Serialize scenario to YAML, run via batch_run, return metric score."""
+        """Serialize scenario to YAML, run via batch_run, return metric score.
+
+        Uses two-phase progressive evaluation: a quick screen with 1 seed,
+        then full evaluation only if the quick score meets the threshold.
+        """
         from kubesim._native import batch_run
 
         study = scenario.get("study", scenario)
@@ -264,7 +269,20 @@ class AdversarialFinder:
         elif not study.get("variants"):
             study["variants"] = [{"name": "baseline", "scheduler": {"scoring": "LeastAllocated", "weight": 1}}]
 
+        # Use faster scheduling path during search
+        study["scheduling_strategy"] = "reverse_schedule"
+
         config_yaml = yaml.dump(scenario, default_flow_style=False)
+
+        # Phase 1: Quick screen with 1 seed
+        quick_raw = batch_run(config_yaml, [self.seeds[0]])
+        quick_results = [dict(r) if not isinstance(r, dict) else r for r in quick_raw]
+        quick_score = float(self.metric(quick_results))
+        if abs(quick_score) < self.screen_threshold:
+            self._last_results = quick_results
+            return quick_score
+
+        # Phase 2: Full evaluation with all seeds
         raw = batch_run(config_yaml, self.seeds)
         self._last_results = [dict(r) if not isinstance(r, dict) else r for r in raw]
         return float(self.metric(self._last_results))

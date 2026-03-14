@@ -61,6 +61,8 @@ PRIORITY_LEVELS = ["low", "medium", "high", "critical"]
 
 SCALING_METRICS = ["cpu", "memory", "rps"]
 
+SEARCH_RUNS = 50  # Fixed during adversarial search; report phase uses higher counts
+
 
 # ── Leaf strategies ──────────────────────────────────────────────
 
@@ -498,7 +500,7 @@ def cluster_scenario(
                     alphabet="abcdefghijklmnopqrstuvwxyz0123456789-",
                     min_size=3, max_size=30,
                 )),
-                "runs": draw(st.integers(1, 10000)),
+                "runs": SEARCH_RUNS,
                 "time_mode": draw(st.sampled_from(["logical", "wall_clock"])),
                 "cluster": {"node_pools": pools},
                 "workloads": wls,
@@ -544,7 +546,7 @@ def chaos_scenario(
                     alphabet="abcdefghijklmnopqrstuvwxyz0123456789",
                     min_size=3, max_size=10,
                 )),
-                "runs": draw(st.integers(100, 5000)),
+                "runs": SEARCH_RUNS,
                 "time_mode": "logical",
                 "cluster": {"node_pools": pools},
                 "workloads": edge_wls + normal_wls,
