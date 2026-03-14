@@ -698,6 +698,19 @@ impl SchedulingCaches {
         self.affinity_count.clear();
     }
 
+    /// Incrementally update caches when a new node is added.
+    /// Adds the new domain with count=0 instead of invalidating everything.
+    pub fn on_node_added(&mut self, node: &Node) {
+        for (key, counts) in &mut self.spread_counts {
+            if let Some(domain) = node.labels.get(&key.0) {
+                counts.entry(domain.to_string()).or_insert(0);
+            }
+        }
+        for (_key, min_val) in &mut self.spread_min {
+            *min_val = (*min_val).min(0);
+        }
+    }
+
     /// Incrementally update caches after a pod is bound to a node.
     pub fn on_pod_bound(&mut self, pod: &Pod, node: &Node) {
         let keys: Vec<_> = self.spread_counts.keys().cloned().collect();
@@ -906,9 +919,14 @@ impl Scheduler {
         }
     }
 
-    /// Invalidate persistent caches (call when nodes are added/removed).
+    /// Invalidate persistent caches (call when nodes are removed).
     pub fn invalidate_caches(&mut self) {
         self.caches.invalidate();
+    }
+
+    /// Incrementally update caches when a new node is added.
+    pub fn on_node_added(&mut self, node: &Node) {
+        self.caches.on_node_added(node);
     }
 
     /// Incrementally update persistent caches after a pod is bound.

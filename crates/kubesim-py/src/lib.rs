@@ -262,8 +262,10 @@ impl kubesim_engine::EventHandler for SimHandler {
                     node.conditions.ready = false; // not ready until NodeReady fires
                 }
                 let node_id = state.add_node(node);
-                // Invalidate scheduler caches — topology domains changed
-                self.scheduler.invalidate_caches();
+                // Incrementally update scheduler caches — new topology domain
+                if let Some(n) = state.nodes.get(node_id) {
+                    self.scheduler.on_node_added(n);
+                }
                 // Try to schedule pending pods onto the new node (only if instant startup)
                 if self.node_startup_ns == 0 {
                     let pending: Vec<_> = state.pending_queue.clone();
