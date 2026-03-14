@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use kubesim_core::{
     AffinityType, ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeId, NodeLifecycle, OwnerId, Pod, PodId, PodPhase,
-    PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime,
+    PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime, WhenUnsatisfiable,
 };
 use kubesim_ec2::Catalog;
 use kubesim_engine::{DaemonSetHandler, DaemonSetSpec, DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
@@ -162,6 +162,51 @@ fn instance_to_node_with_pct(catalog: &Catalog, instance_type: &str, overhead: &
     }
 }
 
+// ── Domain budget for ReverseSchedule ───────────────────────────
+
+/// Tracks per-owner, per-topology-key pod counts across domains for fast constraint checking.
+struct DomainBudget {
+    /// (owner_id, topology_key) -> (max_per_domain, domain_value -> current_count)
+    budgets: std::collections::HashMap<(OwnerId, String), (u32, std::collections::HashMap<String, u32>)>,
+}
+
+impl DomainBudget {
+    fn new() -> Self { Self { budgets: std::collections::HashMap::new() } }
+
+    fn register(&mut self, owner: OwnerId, topology_key: String, max_skew: u32) {
+        self.budgets.entry((owner, topology_key)).or_insert((max_skew, std::collections::HashMap::new()));
+    }
+
+    fn has_room(&self, owner: OwnerId, topology_key: &str, domain_value: &str) -> bool {
+        match self.budgets.get(&(owner, topology_key.to_string())) {
+            Some((max_skew, counts)) => {
+                let current = counts.get(domain_value).copied().unwrap_or(0);
+                // In ReverseSchedule, nodes arrive one at a time. Using global
+                // skew (current+1 - min) allows overpacking when few domains
+                // exist. Instead, enforce a hard cap: at most max_skew pods per
+                // domain. This is equivalent to the skew constraint when all
+                // domains are evenly filled (the steady-state goal).
+                current < *max_skew
+            }
+            None => true,
+        }
+    }
+
+    fn record_placement(&mut self, owner: OwnerId, topology_key: &str, domain_value: &str) {
+        if let Some((_, counts)) = self.budgets.get_mut(&(owner, topology_key.to_string())) {
+            *counts.entry(domain_value.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    fn register_domain(&mut self, topology_key: &str, domain_value: &str) {
+        for ((_, tk), (_, counts)) in &mut self.budgets {
+            if tk == topology_key {
+                counts.entry(domain_value.to_string()).or_insert(0);
+            }
+        }
+    }
+}
+
 // ── Combined event handler ──────────────────────────────────────
 
 struct SimHandler {
@@ -184,6 +229,8 @@ struct SimHandler {
     pod_node_hints: std::collections::HashMap<PodId, usize>,
     /// HintBased: NodeIds in launch order.
     launched_nodes: Vec<NodeId>,
+    /// Budget-based domain tracking for ReverseSchedule constraint enforcement.
+    domain_budget: DomainBudget,
 }
 
 impl SimHandler {
@@ -231,6 +278,32 @@ impl kubesim_engine::EventHandler for SimHandler {
                     is_daemonset: false,
                 };
                 let pod_id = state.submit_pod(pod);
+
+                // Register spread/anti-affinity constraints in budget for ReverseSchedule
+                if self.strategy == SchedulingStrategy::ReverseSchedule {
+                    for constraint in &spec.scheduling_constraints.topology_spread {
+                        if constraint.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule {
+                            self.domain_budget.register(
+                                spec.owner,
+                                constraint.topology_key.clone(),
+                                constraint.max_skew,
+                            );
+                        }
+                    }
+                    for term in &spec.scheduling_constraints.pod_affinity {
+                        if term.anti && matches!(term.affinity_type, AffinityType::Required)
+                            && term.topology_key == "kubernetes.io/hostname"
+                        {
+                            if spec.labels.matches(&term.label_selector) {
+                                self.domain_budget.register(
+                                    spec.owner,
+                                    term.topology_key.clone(),
+                                    1,
+                                );
+                            }
+                        }
+                    }
+                }
 
                 if let kubesim_scheduler::ScheduleResult::Bound(node_id) =
                     self.scheduler.schedule_one(state, pod_id)
@@ -282,7 +355,8 @@ impl kubesim_engine::EventHandler for SimHandler {
                     self.scheduler.on_node_added(n);
                 }
                 // Try to schedule pending pods onto the new node (only if instant startup)
-                if self.node_startup_ns == 0 {
+                // Skip for ReverseSchedule — scheduling happens in NodeReady via budget.
+                if self.node_startup_ns == 0 && self.strategy != SchedulingStrategy::ReverseSchedule {
                     let pending: Vec<_> = state.pending_queue.clone();
                     self.scheduler.schedule_pending_from(state, &pending);
                 }
@@ -365,8 +439,94 @@ impl kubesim_engine::EventHandler for SimHandler {
                         }
                     }
                     SchedulingStrategy::ReverseSchedule => {
+                        let hostname = state.nodes.get(*node_id)
+                            .and_then(|n| n.labels.get("kubernetes.io/hostname").map(|s| s.to_string()))
+                            .unwrap_or_default();
+
                         let pending: Vec<_> = state.pending_queue.clone();
-                        self.scheduler.schedule_for_node(state, *node_id, &pending);
+
+                        // Lazily register constraints for all pending pods
+                        for &pod_id in &pending {
+                            let pod = match state.pods.get(pod_id) {
+                                Some(p) if p.phase == PodPhase::Pending => p,
+                                _ => continue,
+                            };
+                            for c in &pod.scheduling_constraints.topology_spread {
+                                if c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule {
+                                    self.domain_budget.register(pod.owner, c.topology_key.clone(), c.max_skew);
+                                }
+                            }
+                            for t in &pod.scheduling_constraints.pod_affinity {
+                                if t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                    && t.topology_key == "kubernetes.io/hostname"
+                                    && pod.labels.matches(&t.label_selector)
+                                {
+                                    self.domain_budget.register(pod.owner, t.topology_key.clone(), 1);
+                                }
+                            }
+                        }
+
+                        // Register new node's domain in all budgets
+                        if !hostname.is_empty() {
+                            self.domain_budget.register_domain("kubernetes.io/hostname", &hostname);
+                        }
+
+                        let mut to_bind: Vec<PodId> = Vec::new();
+                        if let Some(node) = state.nodes.get(*node_id) {
+                            let mut remaining = node.allocatable.saturating_sub(&node.allocated);
+                            for &pod_id in &pending {
+                                let pod = match state.pods.get(pod_id) {
+                                    Some(p) if p.phase == PodPhase::Pending => p,
+                                    _ => continue,
+                                };
+                                if !pod.requests.fits_in(&remaining) { continue; }
+
+                                let mut budget_ok = true;
+                                for c in &pod.scheduling_constraints.topology_spread {
+                                    if c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule
+                                        && !self.domain_budget.has_room(pod.owner, &c.topology_key, &hostname)
+                                    {
+                                        budget_ok = false;
+                                        break;
+                                    }
+                                }
+                                if budget_ok {
+                                    for t in &pod.scheduling_constraints.pod_affinity {
+                                        if t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                            && t.topology_key == "kubernetes.io/hostname"
+                                            && pod.labels.matches(&t.label_selector)
+                                            && !self.domain_budget.has_room(pod.owner, "kubernetes.io/hostname", &hostname)
+                                        {
+                                            budget_ok = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !budget_ok { continue; }
+
+                                // Speculatively record placement so subsequent pods see updated counts
+                                for c in &pod.scheduling_constraints.topology_spread {
+                                    if c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule {
+                                        self.domain_budget.record_placement(pod.owner, &c.topology_key, &hostname);
+                                    }
+                                }
+                                for t in &pod.scheduling_constraints.pod_affinity {
+                                    if t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                        && t.topology_key == "kubernetes.io/hostname"
+                                    {
+                                        self.domain_budget.record_placement(pod.owner, "kubernetes.io/hostname", &hostname);
+                                    }
+                                }
+
+                                remaining = remaining.saturating_sub(&pod.requests);
+                                to_bind.push(pod_id);
+                                if remaining.cpu_millis == 0 { break; }
+                            }
+                        }
+
+                        for pid in &to_bind {
+                            state.bind_pod(*pid, *node_id);
+                        }
                     }
                 }
                 // Trigger provisioning if pods are still pending
@@ -382,8 +542,11 @@ impl kubesim_engine::EventHandler for SimHandler {
                 // Try to schedule pending pods onto existing nodes before the
                 // provisioner launches new ones. This catches evicted pods that
                 // were returned to pending by DrainHandler.
-                let pending: Vec<_> = state.pending_queue.clone();
-                self.scheduler.schedule_pending_from(state, &pending);
+                // Skip for ReverseSchedule — scheduling happens in NodeReady via budget.
+                if self.strategy != SchedulingStrategy::ReverseSchedule {
+                    let pending: Vec<_> = state.pending_queue.clone();
+                    self.scheduler.schedule_pending_from(state, &pending);
+                }
                 Vec::new()
             }
             EngineEvent::NodeCordoned(node_id) => {
@@ -667,6 +830,7 @@ fn run_single(
         strategy: scenario.study.scheduling_strategy,
         pod_node_hints: std::collections::HashMap::new(),
         launched_nodes: Vec::new(),
+        domain_budget: DomainBudget::new(),
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -1384,6 +1548,7 @@ impl StepSimulation {
             strategy: self.scenario.study.scheduling_strategy,
             pod_node_hints: std::collections::HashMap::new(),
             launched_nodes: Vec::new(),
+            domain_budget: DomainBudget::new(),
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));
