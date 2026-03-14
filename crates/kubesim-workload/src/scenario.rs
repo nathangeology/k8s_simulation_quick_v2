@@ -25,6 +25,8 @@ pub struct Study {
     pub time_mode: TimeMode,
     #[serde(default)]
     pub catalog_provider: CatalogProvider,
+    #[serde(default)]
+    pub scheduling_strategy: SchedulingStrategy,
     pub cluster: ClusterConfig,
     pub workloads: Vec<WorkloadDef>,
     #[serde(default)]
@@ -33,6 +35,19 @@ pub struct Study {
     pub variants: Vec<Variant>,
     #[serde(default)]
     pub metrics: MetricsConfig,
+}
+
+/// Scheduling strategy controlling how SimHandler schedules pods on NodeReady.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulingStrategy {
+    /// Run full filter chain for all pending pods (current behavior, faithful to real k8s).
+    #[default]
+    FullScan,
+    /// Provisioner passes pod-to-node hints, scheduler binds directly on NodeReady.
+    HintBased,
+    /// Partition pods by constraint class, only try relevant pods per NodeReady.
+    Partitioned,
 }
 
 fn default_runs() -> u32 {

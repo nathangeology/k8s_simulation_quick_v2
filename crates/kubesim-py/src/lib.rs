@@ -5,7 +5,7 @@ use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
 
 use kubesim_core::{
-    ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeLifecycle, OwnerId, Pod, PodPhase,
+    AffinityType, ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeId, NodeLifecycle, OwnerId, Pod, PodId, PodPhase,
     PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime,
 };
 use kubesim_ec2::Catalog;
@@ -22,6 +22,7 @@ use kubesim_workload::{
     Event as WorkloadEvent, TimeMode as ScenarioTimeMode,
     generate_random_scenario, RandomScenarioConfig,
     RangeU32, InstanceWeight, ArchetypeWeights,
+    SchedulingStrategy,
 };
 
 use std::path::Path;
@@ -177,6 +178,12 @@ struct SimHandler {
     rng: Option<rand::rngs::StdRng>,
     /// Counter for generating unique node hostnames.
     node_counter: u32,
+    /// Scheduling strategy (FullScan, HintBased, Partitioned).
+    strategy: SchedulingStrategy,
+    /// HintBased: maps pod to its expected node launch index.
+    pod_node_hints: std::collections::HashMap<PodId, usize>,
+    /// HintBased: NodeIds in launch order.
+    launched_nodes: Vec<NodeId>,
 }
 
 impl SimHandler {
@@ -262,6 +269,14 @@ impl kubesim_engine::EventHandler for SimHandler {
                     node.conditions.ready = false; // not ready until NodeReady fires
                 }
                 let node_id = state.add_node(node);
+                // HintBased: record launch order and snapshot pending pods as hints
+                if self.strategy == SchedulingStrategy::HintBased {
+                    let launch_idx = self.launched_nodes.len();
+                    self.launched_nodes.push(node_id);
+                    for &pid in &state.pending_queue {
+                        self.pod_node_hints.entry(pid).or_insert(launch_idx);
+                    }
+                }
                 // Incrementally update scheduler caches — new topology domain
                 if let Some(n) = state.nodes.get(node_id) {
                     self.scheduler.on_node_added(n);
@@ -282,8 +297,55 @@ impl kubesim_engine::EventHandler for SimHandler {
                 if let Some(n) = state.nodes.get_mut(*node_id) {
                     n.conditions.ready = true;
                 }
-                let pending: Vec<_> = state.pending_queue.clone();
-                self.scheduler.schedule_pending_from(state, &pending);
+                match self.strategy {
+                    SchedulingStrategy::FullScan => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        self.scheduler.schedule_pending_from(state, &pending);
+                    }
+                    SchedulingStrategy::HintBased => {
+                        // Bind hinted pods for this node first
+                        if let Some(launch_idx) = self.launched_nodes.iter().position(|&nid| nid == *node_id) {
+                            let hinted: Vec<PodId> = self.pod_node_hints.iter()
+                                .filter(|(_, &idx)| idx == launch_idx)
+                                .map(|(&pid, _)| pid)
+                                .collect();
+                            if !hinted.is_empty() {
+                                self.scheduler.schedule_pending_from(state, &hinted);
+                            }
+                            for pid in &hinted {
+                                self.pod_node_hints.remove(pid);
+                            }
+                        }
+                        // Fall back to normal scheduling for remaining pending pods
+                        if !state.pending_queue.is_empty() {
+                            let remaining: Vec<_> = state.pending_queue.clone();
+                            self.scheduler.schedule_pending_from(state, &remaining);
+                        }
+                    }
+                    SchedulingStrategy::Partitioned => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        // Partition into unconstrained vs constrained
+                        let (unconstrained, constrained): (Vec<_>, Vec<_>) = pending.iter().partition(|&&pid| {
+                            state.pods.get(pid).map_or(true, |p| {
+                                p.scheduling_constraints.topology_spread.is_empty()
+                                && !p.scheduling_constraints.pod_affinity.iter().any(|t| t.anti && matches!(t.affinity_type, AffinityType::Required))
+                            })
+                        });
+                        if !unconstrained.is_empty() {
+                            let ids: Vec<PodId> = unconstrained.into_iter().copied().collect();
+                            self.scheduler.schedule_pending_from(state, &ids);
+                        }
+                        // For constrained: deduplicate by owner (spread means 1 per node)
+                        let mut seen_owners = std::collections::HashSet::new();
+                        let deduped: Vec<PodId> = constrained.into_iter()
+                            .filter(|&&pid| state.pods.get(pid).map_or(false, |p| seen_owners.insert(p.owner)))
+                            .copied()
+                            .collect();
+                        if !deduped.is_empty() {
+                            self.scheduler.schedule_pending_from(state, &deduped);
+                        }
+                    }
+                }
                 // Trigger provisioning if pods are still pending
                 if !state.pending_queue.is_empty() {
                     return vec![kubesim_engine::ScheduledEvent {
@@ -578,6 +640,9 @@ fn run_single(
             None
         },
         node_counter: 0,
+        strategy: scenario.study.scheduling_strategy,
+        pod_node_hints: std::collections::HashMap::new(),
+        launched_nodes: Vec::new(),
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
@@ -1292,6 +1357,9 @@ impl StepSimulation {
                 None
             },
             node_counter: 0,
+            strategy: self.scenario.study.scheduling_strategy,
+            pod_node_hints: std::collections::HashMap::new(),
+            launched_nodes: Vec::new(),
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));
