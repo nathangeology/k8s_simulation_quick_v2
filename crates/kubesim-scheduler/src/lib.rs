@@ -394,10 +394,12 @@ impl FilterPlugin for PodTopologySpreadFilter {
     fn filter(&self, state: &ClusterState, pod: &Pod, node: &Node) -> FilterResult {
         for constraint in &pod.scheduling_constraints.topology_spread {
             if constraint.when_unsatisfiable != WhenUnsatisfiable::DoNotSchedule { continue; }
-            let domain = match node.labels.get(&constraint.topology_key) {
-                Some(d) => d.to_string(),
-                None => return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key)),
-            };
+            if node.labels.get(&constraint.topology_key).is_none() {
+                return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key));
+            }
+            // Fast path: empty node always satisfies spread (count=1, skew≤1≤maxSkew)
+            if node.pods.is_empty() && constraint.max_skew >= 1 { continue; }
+            let domain = node.labels.get(&constraint.topology_key).unwrap().to_string();
             let counts = domain_counts(state, &constraint.topology_key, &constraint.label_selector);
             let min_count = counts.values().copied().min().unwrap_or(0);
             let my_count = counts.get(&domain).copied().unwrap_or(0);
@@ -796,10 +798,12 @@ fn filter_topology_spread_cached(
 ) -> FilterResult {
     for constraint in &pod.scheduling_constraints.topology_spread {
         if constraint.when_unsatisfiable != WhenUnsatisfiable::DoNotSchedule { continue; }
-        let domain = match node.labels.get(&constraint.topology_key) {
-            Some(d) => d.to_string(),
-            None => return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key)),
-        };
+        if node.labels.get(&constraint.topology_key).is_none() {
+            return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key));
+        }
+        // Fast path: empty node always satisfies spread (count=1, skew≤1≤maxSkew)
+        if node.pods.is_empty() && constraint.max_skew >= 1 { continue; }
+        let domain = node.labels.get(&constraint.topology_key).unwrap().to_string();
         let (counts, cached_min) = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
         let my_count = counts.get(&domain).copied().unwrap_or(0);
         let min_count = if counts.contains_key(&domain) { cached_min } else { 0 };

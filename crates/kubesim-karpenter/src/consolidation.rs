@@ -687,7 +687,7 @@ impl ConsolidationHandler {
             max_interval_ns: 300_000_000_000, // 5 min cap
             version_profile: None,
             catalog: None,
-            consolidate_after_ns: 0,
+            consolidate_after_ns: 15_000_000_000, // 15s default, matches Karpenter
             overhead: Resources::default(),
             daemonset_pct: 0,
         }
@@ -1034,9 +1034,12 @@ mod tests {
         state.add_node(test_node(4000, 8_000_000_000)); // empty node
 
         let mut handler = ConsolidationHandler::new(test_pool(), ConsolidationPolicy::WhenEmpty);
+        // Run after consolidate_after_ns (15s) so the node is eligible
+        let t = SimTime(handler.consolidate_after_ns + 1000);
+        state.time = t;
         let events = handler.handle(
             &kubesim_engine::Event::KarpenterConsolidationLoop,
-            SimTime(1000),
+            t,
             &mut state,
         );
         // Should have NodeCordoned + NodeTerminated + re-schedule for continued consolidation

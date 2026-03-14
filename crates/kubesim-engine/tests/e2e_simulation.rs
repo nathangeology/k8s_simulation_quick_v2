@@ -218,9 +218,12 @@ fn full_simulation_loop() {
     let nodes_before = state.nodes.len();
 
     // ── Phase 4: Trigger consolidation ──────────────────────────
-    engine.schedule(SimTime(400), Event::KarpenterConsolidationLoop);
-    engine.schedule(SimTime(500), Event::MetricsSnapshot);
-    engine.run_until(&mut state, SimTime(600));
+    // Schedule after consolidate_after_ns (15s = 15_000_000_000ns) so nodes are eligible
+    let consol_time = 15_000_000_000 + 1000;
+    state.time = SimTime(consol_time);
+    engine.schedule(SimTime(consol_time), Event::KarpenterConsolidationLoop);
+    engine.schedule(SimTime(consol_time + 100), Event::MetricsSnapshot);
+    engine.run_until(&mut state, SimTime(consol_time + 200));
 
     // Verify: consolidation removed underutilized/empty nodes
     assert!(
@@ -230,8 +233,8 @@ fn full_simulation_loop() {
     );
 
     // ── Phase 5: Final verification ─────────────────────────────
-    engine.schedule(SimTime(700), Event::MetricsSnapshot);
-    engine.run_until(&mut state, SimTime(800));
+    engine.schedule(SimTime(consol_time + 300), Event::MetricsSnapshot);
+    engine.run_until(&mut state, SimTime(consol_time + 400));
 
     // Remaining pods should still be alive
     let final_alive = state
