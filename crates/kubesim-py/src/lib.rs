@@ -351,18 +351,25 @@ impl kubesim_engine::EventHandler for SimHandler {
                     }
                 }
 
-                if let kubesim_scheduler::ScheduleResult::Bound(node_id) =
-                    self.scheduler.schedule_one(state, pod_id)
-                {
-                    state.bind_pod(pod_id, node_id);
-                    // Schedule PodCompleted if duration is set
-                    if let Some(dur) = duration_ns {
-                        return vec![kubesim_engine::ScheduledEvent {
-                            time: SimTime(time.0 + dur),
-                            event: EngineEvent::PodCompleted(pod_id),
-                        }];
+                // Short-circuit: skip scheduling if no ready nodes exist
+                let has_ready_nodes = state.nodes.iter().any(|(_, n)| n.conditions.ready && !n.cordoned);
+                if has_ready_nodes {
+                    if let kubesim_scheduler::ScheduleResult::Bound(node_id) =
+                        self.scheduler.schedule_one(state, pod_id)
+                    {
+                        state.bind_pod(pod_id, node_id);
+                        // Schedule PodCompleted if duration is set
+                        if let Some(dur) = duration_ns {
+                            return vec![kubesim_engine::ScheduledEvent {
+                                time: SimTime(time.0 + dur),
+                                event: EngineEvent::PodCompleted(pod_id),
+                            }];
+                        }
+                        return follow_ups;
                     }
-                } else {
+                }
+                // Pod unschedulable — handle wait queue and trigger provisioning
+                {
                     // Pod couldn't be scheduled — add to wait queue for ReverseSchedule
                     if self.strategy == SchedulingStrategy::ReverseSchedule {
                         let has_constraints = !spec.scheduling_constraints.topology_spread.is_empty()
