@@ -527,7 +527,7 @@ class OptunaAdversarialSearch:
             else:
                 workloads.append({"type": wtype, "count": 1})
 
-        time_mode = trial.suggest_categorical("time_mode", ["logical", "wall_clock"])
+        time_mode = "wall_clock"  # logical mode causes consolidation thrash (33M+ events)
 
         scenario = {
             "study": {
