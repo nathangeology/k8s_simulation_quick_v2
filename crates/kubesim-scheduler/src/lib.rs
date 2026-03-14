@@ -1216,6 +1216,13 @@ impl Scheduler {
                 }
                 ScheduleResult::Unschedulable(_) => {
                     unschedulable += 1;
+                    // Early-exit: if we already bound pods this pass and now hit
+                    // an unschedulable pod, the feasible nodes are full. Remaining
+                    // pods likely need nodes that haven't arrived yet — stop to
+                    // avoid O(N) wasted filter evaluations.
+                    if bound > 0 {
+                        break;
+                    }
                     if let Some(pod) = state.pods.get(pod_id) {
                         last_unsched_fp = Some((pod.requests, pod.scheduling_constraints.clone()));
                     }
