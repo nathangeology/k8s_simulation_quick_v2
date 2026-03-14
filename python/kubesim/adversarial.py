@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import math
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -139,6 +140,55 @@ def _extract_features(scenario: dict) -> dict[str, float]:
     return features
 
 
+def diverse_top_k(scored: list[ScoredScenario], k: int) -> list[ScoredScenario]:
+    """Select top-k scenarios maximizing score × diversity in feature space.
+
+    Greedy selection: start with the highest-scoring scenario, then iteratively
+    pick the candidate that maximizes ``score × min_distance_to_selected``
+    (Euclidean distance in normalized feature space).
+    """
+    if len(scored) <= k:
+        return list(scored)
+
+    # Extract and normalize feature vectors
+    raw_features = [_extract_features(s.scenario) for s in scored]
+    all_keys = sorted({fk for f in raw_features for fk in f})
+    if not all_keys:
+        return scored[:k]
+
+    vectors = [[f.get(key, 0.0) for key in all_keys] for f in raw_features]
+
+    # Compute per-feature min/max for normalization
+    mins = [min(v[i] for v in vectors) for i in range(len(all_keys))]
+    maxs = [max(v[i] for v in vectors) for i in range(len(all_keys))]
+    ranges = [mx - mn if mx > mn else 1.0 for mn, mx in zip(mins, maxs)]
+
+    norm = [[((v[i] - mins[i]) / ranges[i]) for i in range(len(all_keys))] for v in vectors]
+
+    def _dist(a: list[float], b: list[float]) -> float:
+        return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+    # Greedy diverse selection
+    selected_idx: list[int] = [0]  # Start with highest-scoring (already sorted)
+    remaining = set(range(1, len(scored)))
+
+    for _ in range(k - 1):
+        if not remaining:
+            break
+        best_idx = -1
+        best_val = -1.0
+        for idx in remaining:
+            min_d = min(_dist(norm[idx], norm[s]) for s in selected_idx)
+            val = scored[idx].score * min_d
+            if val > best_val:
+                best_val = val
+                best_idx = idx
+        selected_idx.append(best_idx)
+        remaining.discard(best_idx)
+
+    return [scored[i] for i in selected_idx]
+
+
 @dataclass
 class AdversarialFinder:
     """Search for extreme scenarios under a user-defined metric.
@@ -215,7 +265,7 @@ class AdversarialFinder:
 
         reverse = self.objective == "maximize"
         found.sort(key=lambda s: s.score, reverse=reverse)
-        result = found[:self.top_k]
+        result = diverse_top_k(found, self.top_k)
 
         if self.track_features and feature_scores:
             self.feature_importance = {
@@ -566,4 +616,4 @@ class OptunaAdversarialSearch:
                 ))
 
         scored.sort(key=lambda s: s.score, reverse=True)
-        return scored[: self.top_k]
+        return diverse_top_k(scored, self.top_k)
