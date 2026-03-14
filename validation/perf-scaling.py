@@ -106,17 +106,24 @@ def main():
 
     # results[pod_count][constraint_name] = ms_per_seed or "TIMEOUT" or "ERROR"
     results = {}
+    # Track constraint types that have timed out — skip higher pod counts
+    timed_out = set()
 
     for pod_count in POD_COUNTS:
         seeds = list(range(42, 42 + (3 if pod_count <= 100 else 1)))
         results[pod_count] = {}
         for cname, cextra in CONSTRAINT_TYPES.items():
+            if cname in timed_out:
+                results[pod_count][cname] = "SKIPPED"
+                print(f"  {pod_count:>5} pods / {cname:<12} => SKIPPED (timed out at lower count)")
+                continue
             config_yaml = make_scenario(pod_count, cextra)
             t0 = time.monotonic()
             out = run_with_timeout(config_yaml, seeds)
             elapsed = time.monotonic() - t0
             if out is None:
                 results[pod_count][cname] = "TIMEOUT"
+                timed_out.add(cname)
                 print(f"  {pod_count:>5} pods / {cname:<12} => TIMEOUT ({elapsed:.1f}s)")
             else:
                 ms_per_seed = (elapsed / len(seeds)) * 1000
@@ -140,6 +147,9 @@ def main():
             if v == "TIMEOUT":
                 row += f" | {'TIMEOUT':>14}"
                 notes.append(f"{c}=TIMEOUT")
+            elif v == "SKIPPED":
+                row += f" | {'SKIPPED':>14}"
+                notes.append(f"{c}=SKIPPED")
             else:
                 row += f" | {v:>11.1f} ms"
         row += f" | {'; '.join(notes)}" if notes else " |"

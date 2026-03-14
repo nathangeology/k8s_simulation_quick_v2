@@ -256,6 +256,30 @@ fn pod_matches_pool(pod: &Pod, pool: &NodePool) -> bool {
     true
 }
 
+/// Compute the maximum number of pods from the same owner that can share a single
+/// claim, based on hostname-level spread and anti-affinity constraints.
+fn compute_max_per_claim(pod: &Pod) -> usize {
+    let mut max_per = usize::MAX;
+    for c in &pod.scheduling_constraints.topology_spread {
+        if c.topology_key == "kubernetes.io/hostname"
+            && c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule
+        {
+            max_per = max_per.min(c.max_skew as usize);
+        }
+    }
+    for t in &pod.scheduling_constraints.pod_affinity {
+        if t.anti
+            && matches!(t.affinity_type, AffinityType::Required)
+            && t.topology_key == "kubernetes.io/hostname"
+        {
+            if pod.labels.matches(&t.label_selector) {
+                max_per = max_per.min(1);
+            }
+        }
+    }
+    max_per
+}
+
 /// Version-aware provisioning.
 ///
 /// v0.35: cheapest-fit per batch (original behavior).
@@ -293,6 +317,70 @@ pub fn provision_versioned(
                 let sb = b.1.cpu_millis + b.1.memory_bytes / 1_000_000;
                 sb.cmp(&sa)
             });
+
+            // --- Batch-aware fast path for uniform pods ---
+            let all_same = pods.len() > 1 && pods.windows(2).all(|w| {
+                let (p0, p1) = match (state.pods.get(w[0].0), state.pods.get(w[1].0)) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => return false,
+                };
+                p0.requests == p1.requests
+                    && p0.scheduling_constraints == p1.scheduling_constraints
+                    && p0.owner == p1.owner
+            });
+
+            if all_same {
+                if let Some(first_pod) = pods.first().and_then(|&(pid, _)| state.pods.get(pid)) {
+                    let max_per = compute_max_per_claim(first_pod);
+                    let req = &first_pod.requests;
+                    let types_for_fast = allowed_types(catalog, pool);
+                    let caps: Vec<(u64, u64, u32)> = types_for_fast.iter()
+                        .map(|it| (effective_cpu(it, overhead, daemonset_pct), effective_mem(it, overhead, daemonset_pct), it.gpu_count))
+                        .collect();
+                    // Max pods per claim by resources (using largest type)
+                    let max_by_res = caps.iter().map(|&(cpu, mem, gpu)| {
+                        if req.gpu > 0 && gpu < req.gpu { return 0; }
+                        let by_cpu = if req.cpu_millis > 0 { cpu / req.cpu_millis } else { usize::MAX as u64 };
+                        let by_mem = if req.memory_bytes > 0 { mem / req.memory_bytes } else { usize::MAX as u64 };
+                        by_cpu.min(by_mem) as usize
+                    }).max().unwrap_or(0);
+                    let effective_max = max_per.min(max_by_res).max(1);
+                    let claims_needed = (pods.len() + effective_max - 1) / effective_max;
+
+                    // Pre-create claims and round-robin assign
+                    struct FastClaim { pod_ids: Vec<PodId>, total_cpu: u64, total_mem: u64, total_gpu: u32 }
+                    let mut fast_claims: Vec<FastClaim> = (0..claims_needed).map(|_| FastClaim {
+                        pod_ids: Vec::with_capacity(effective_max), total_cpu: 0, total_mem: 0, total_gpu: 0,
+                    }).collect();
+                    for (i, &(pid, ref r)) in pods.iter().enumerate() {
+                        let ci = i % claims_needed;
+                        fast_claims[ci].pod_ids.push(pid);
+                        fast_claims[ci].total_cpu += r.cpu_millis;
+                        fast_claims[ci].total_mem += r.memory_bytes;
+                        fast_claims[ci].total_gpu += r.gpu;
+                    }
+                    // Finalize: pick cheapest instance type for each claim
+                    let types = allowed_types(catalog, pool);
+                    for fc in fast_claims {
+                        if fc.pod_ids.is_empty() { continue; }
+                        let best = types.iter()
+                            .filter(|it| {
+                                let ec = effective_cpu(it, overhead, daemonset_pct);
+                                let em = effective_mem(it, overhead, daemonset_pct);
+                                it.gpu_count >= fc.total_gpu && ec >= fc.total_cpu && em >= fc.total_mem
+                            })
+                            .min_by(|a, b| a.on_demand_price_per_hour.partial_cmp(&b.on_demand_price_per_hour).unwrap());
+                        if let Some(it) = best {
+                            decisions.push(ProvisionDecision {
+                                instance_type: it.instance_type.clone(),
+                                cost_per_hour: it.on_demand_price_per_hour,
+                                pod_ids: fc.pod_ids,
+                            });
+                        }
+                    }
+                    continue; // skip the general-case loop for this batch
+                }
+            }
 
             // Flexible NodeClaim: tracks assigned pods, resources, and scheduling constraints
             struct FlexNodeClaim {
@@ -374,7 +462,10 @@ pub fn provision_versioned(
 
                 let mut placed = false;
                 let mut placed_idx = 0usize;
+                let mut consecutive_misses = 0u32;
+                let use_early_abandon = has_spread || has_anti_affinity;
                 for &ci in &candidates {
+                    if use_early_abandon && consecutive_misses >= 3 { break; }
                     let claim = &mut claims[ci];
 
                     // Capacity ceiling: skip if already over max
@@ -382,16 +473,19 @@ pub fn provision_versioned(
                     let new_mem = claim.total_mem + req.memory_bytes;
                     let new_gpu = claim.total_gpu + req.gpu;
                     if new_cpu > max_cpu || new_mem > max_mem || new_gpu > max_gpu {
+                        consecutive_misses += 1;
                         continue;
                     }
 
                     // Anti-affinity check (index narrows candidates, full check validates)
                     if has_hostname_anti_affinity_conflict(pod, &claim.owner_ids, &claim.pod_ids, state) {
+                        consecutive_misses += 1;
                         continue;
                     }
 
                     // Spread check (index narrows candidates, full check validates)
                     if violates_hostname_spread(pod, &claim.pods_per_owner) {
+                        consecutive_misses += 1;
                         continue;
                     }
 
@@ -408,8 +502,10 @@ pub fn provision_versioned(
                         *claim.pods_per_owner.entry(pod.owner).or_insert(0) += 1;
                         placed = true;
                         placed_idx = ci;
+                        consecutive_misses = 0;
                         break;
                     }
+                    consecutive_misses += 1;
                 }
 
                 if placed {
