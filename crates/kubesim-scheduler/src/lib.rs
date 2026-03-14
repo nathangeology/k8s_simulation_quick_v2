@@ -626,6 +626,8 @@ type SpreadCacheKey = (String, String);
 pub struct SchedulingCaches {
     /// domain_counts cache: (topology_key, selector_key) → { domain_value → count }
     spread_counts: HashMap<SpreadCacheKey, HashMap<String, i32>>,
+    /// Cached min count per spread key
+    spread_min: HashMap<SpreadCacheKey, i32>,
     /// Pod affinity: (topology_key, topology_value, selector_key, anti) → has_match
     affinity_match: HashMap<(String, String, String, bool), bool>,
     /// Pod affinity count: (topology_key, topology_value, selector_key) → count
@@ -636,6 +638,7 @@ impl Default for SchedulingCaches {
     fn default() -> Self {
         Self {
             spread_counts: HashMap::new(),
+            spread_min: HashMap::new(),
             affinity_match: HashMap::new(),
             affinity_count: HashMap::new(),
         }
@@ -658,11 +661,17 @@ impl SchedulingCaches {
     }
 
 
-    fn get_domain_counts(&mut self, state: &ClusterState, topology_key: &str, selector: &kubesim_core::LabelSelector) -> &HashMap<String, i32> {
+    fn get_domain_counts(&mut self, state: &ClusterState, topology_key: &str, selector: &kubesim_core::LabelSelector) -> (&HashMap<String, i32>, i32) {
         let key = (topology_key.to_string(), selector_key(selector));
-        self.spread_counts.entry(key).or_insert_with_key(|_| {
-            domain_counts(state, topology_key, selector)
-        })
+        if !self.spread_counts.contains_key(&key) {
+            let counts = domain_counts(state, topology_key, selector);
+            let min = counts.values().copied().min().unwrap_or(0);
+            self.spread_min.insert(key.clone(), min);
+            self.spread_counts.insert(key.clone(), counts);
+        }
+        let counts = self.spread_counts.get(&key).unwrap();
+        let min = *self.spread_min.get(&key).unwrap();
+        (counts, min)
     }
 
     fn get_affinity_match(&mut self, state: &ClusterState, topology_key: &str, topology_value: &str, term: &PodAffinityTerm) -> bool {
@@ -682,8 +691,68 @@ impl SchedulingCaches {
     /// Invalidate caches after a pod is bound (state changed).
     pub fn invalidate(&mut self) {
         self.spread_counts.clear();
+        self.spread_min.clear();
         self.affinity_match.clear();
         self.affinity_count.clear();
+    }
+
+    /// Incrementally update caches after a pod is bound to a node.
+    pub fn on_pod_bound(&mut self, pod: &Pod, node: &Node) {
+        let keys: Vec<_> = self.spread_counts.keys().cloned().collect();
+        for key in keys {
+            let pairs: Vec<(String, String)> = key.1.split(',')
+                .filter(|s| !s.is_empty())
+                .filter_map(|pair| {
+                    let mut parts = pair.splitn(2, '=');
+                    Some((parts.next()?.to_string(), parts.next()?.to_string()))
+                })
+                .collect();
+            let selector = kubesim_core::LabelSelector {
+                match_labels: kubesim_core::LabelSet(pairs),
+            };
+            if pod.labels.matches(&selector) {
+                if let Some(domain) = node.labels.get(&key.0) {
+                    if let Some(counts) = self.spread_counts.get_mut(&key) {
+                        let old_count = counts.get(domain).copied().unwrap_or(0);
+                        *counts.entry(domain.to_string()).or_insert(0) += 1;
+                        if let Some(cached_min) = self.spread_min.get_mut(&key) {
+                            if old_count == *cached_min {
+                                let still_at_min = counts.values().any(|&c| c == old_count);
+                                if !still_at_min {
+                                    *cached_min = old_count + 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for (key, val) in self.affinity_match.iter_mut() {
+            let (ref topo_key, ref topo_val, ref sel_key, _anti) = *key;
+            if let Some(node_topo) = node.labels.get(topo_key) {
+                if node_topo == topo_val {
+                    let pairs: Vec<(String, String)> = sel_key.split(',')
+                        .filter(|s| !s.is_empty())
+                        .filter_map(|p| { let mut parts = p.splitn(2, '='); Some((parts.next()?.to_string(), parts.next()?.to_string())) })
+                        .collect();
+                    let selector = kubesim_core::LabelSelector { match_labels: kubesim_core::LabelSet(pairs) };
+                    if pod.labels.matches(&selector) { *val = true; }
+                }
+            }
+        }
+        for (key, count) in self.affinity_count.iter_mut() {
+            let (ref topo_key, ref topo_val, ref sel_key) = *key;
+            if let Some(node_topo) = node.labels.get(topo_key) {
+                if node_topo == topo_val {
+                    let pairs: Vec<(String, String)> = sel_key.split(',')
+                        .filter(|s| !s.is_empty())
+                        .filter_map(|p| { let mut parts = p.splitn(2, '='); Some((parts.next()?.to_string(), parts.next()?.to_string())) })
+                        .collect();
+                    let selector = kubesim_core::LabelSelector { match_labels: kubesim_core::LabelSet(pairs) };
+                    if pod.labels.matches(&selector) { *count += 1; }
+                }
+            }
+        }
     }
 }
 
@@ -731,13 +800,11 @@ fn filter_topology_spread_cached(
             Some(d) => d.to_string(),
             None => return FilterResult::Reject(format!("node missing topology key {}", constraint.topology_key)),
         };
-        let counts = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
-        let min_count = counts.values().copied().min().unwrap_or(0);
+        let (counts, cached_min) = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
         let my_count = counts.get(&domain).copied().unwrap_or(0);
+        let min_count = if counts.contains_key(&domain) { cached_min } else { 0 };
         let new_count = my_count + 1;
-        let new_min = if my_count == min_count {
-            counts.values().copied().map(|c| if c == my_count { new_count.min(c) } else { c }).min().unwrap_or(new_count)
-        } else { min_count };
+        let new_min = if my_count == min_count { new_count } else { min_count };
         let skew = new_count - new_min;
         if skew > constraint.max_skew as i32 {
             return FilterResult::Reject(format!("topology {} skew {} exceeds maxSkew {}", constraint.topology_key, skew, constraint.max_skew));
@@ -784,9 +851,9 @@ fn score_topology_spread_cached(
             Some(d) => d.to_string(),
             None => continue,
         };
-        let counts = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
-        let min_count = counts.values().copied().min().unwrap_or(0);
+        let (counts, cached_min) = caches.get_domain_counts(state, &constraint.topology_key, &constraint.label_selector);
         let my_count = counts.get(&domain).copied().unwrap_or(0) + 1;
+        let min_count = if counts.contains_key(&domain) { cached_min } else { 0 };
         total_skew += (my_count - min_count).max(0);
         num_constraints += 1;
     }
@@ -838,6 +905,11 @@ impl Scheduler {
     /// Invalidate persistent caches (call when nodes are added/removed).
     pub fn invalidate_caches(&mut self) {
         self.caches.invalidate();
+    }
+
+    /// Incrementally update persistent caches after a pod is bound.
+    pub fn on_pod_bound_caches(&mut self, pod: &Pod, node: &Node) {
+        self.caches.on_pod_bound(pod, node);
     }
 
     /// Attempt to schedule a single pod. Returns the chosen node or failure reasons.
@@ -1056,31 +1128,79 @@ impl Scheduler {
     pub fn schedule_pending_from(&mut self, state: &mut ClusterState, pod_ids: &[PodId]) -> (u32, u32) {
         let mut bound = 0u32;
         let mut unschedulable = 0u32;
-        // Take persistent caches out to avoid double-mutable-borrow on self
         let mut caches = std::mem::take(&mut self.caches);
 
+        // Pre-filter: collect ready, uncordoned nodes with any remaining capacity
+        let min_cpu: u64 = pod_ids.iter()
+            .filter_map(|&pid| state.pods.get(pid))
+            .map(|p| p.requests.cpu_millis)
+            .min()
+            .unwrap_or(0);
+        let min_mem: u64 = pod_ids.iter()
+            .filter_map(|&pid| state.pods.get(pid))
+            .map(|p| p.requests.memory_bytes)
+            .min()
+            .unwrap_or(0);
+        let mut candidate_nodes: Vec<NodeId> = state.nodes.iter()
+            .filter(|(_, n)| n.conditions.ready && !n.cordoned)
+            .filter(|(_, n)| {
+                let avail = n.allocatable.saturating_sub(&n.allocated);
+                avail.cpu_millis >= min_cpu && avail.memory_bytes >= min_mem
+            })
+            .map(|(nid, _)| nid)
+            .collect();
+
+        // Track last unschedulable pod's fingerprint to skip identical pods
+        let mut last_unsched_fp: Option<(kubesim_core::Resources, kubesim_core::SchedulingConstraints)> = None;
+
         for &pod_id in pod_ids {
+            if candidate_nodes.is_empty() {
+                unschedulable += pod_ids.len() as u32 - bound - unschedulable;
+                break;
+            }
+            if let Some(ref fp) = last_unsched_fp {
+                if let Some(pod) = state.pods.get(pod_id) {
+                    if pod.requests == fp.0 && pod.scheduling_constraints == fp.1 {
+                        unschedulable += 1;
+                        continue;
+                    }
+                }
+            }
             match self.schedule_one_cached(state, pod_id, &mut caches) {
                 ScheduleResult::Bound(node_id) => {
                     state.bind_pod(pod_id, node_id);
-                    caches.invalidate();
+                    if let (Some(pod), Some(node)) = (state.pods.get(pod_id), state.nodes.get(node_id)) {
+                        caches.on_pod_bound(pod, node);
+                    }
                     bound += 1;
+                    last_unsched_fp = None;
+                    candidate_nodes.retain(|&nid| {
+                        if let Some(n) = state.nodes.get(nid) {
+                            let avail = n.allocatable.saturating_sub(&n.allocated);
+                            avail.cpu_millis >= min_cpu && avail.memory_bytes >= min_mem
+                        } else { false }
+                    });
                 }
                 ScheduleResult::Preempted { node_id, victims } => {
                     for vid in &victims {
                         state.evict_pod(*vid);
                     }
                     state.bind_pod(pod_id, node_id);
-                    caches.invalidate();
+                    if let (Some(pod), Some(node)) = (state.pods.get(pod_id), state.nodes.get(node_id)) {
+                        caches.on_pod_bound(pod, node);
+                    }
                     bound += 1;
+                    last_unsched_fp = None;
                 }
                 ScheduleResult::Unschedulable(_) => {
                     unschedulable += 1;
+                    if let Some(pod) = state.pods.get(pod_id) {
+                        last_unsched_fp = Some((pod.requests, pod.scheduling_constraints.clone()));
+                    }
                 }
             }
         }
 
-        // Put caches back for reuse across calls
         self.caches = caches;
         (bound, unschedulable)
     }
