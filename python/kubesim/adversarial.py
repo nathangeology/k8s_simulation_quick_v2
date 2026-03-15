@@ -412,7 +412,7 @@ _WORKLOAD_ARCHETYPES = {
     "varying_batch": lambda trial, i: {
         "type": "batch_job",
         "count": trial.suggest_int(f"w{i}_count", 5, 50),
-        "priority": trial.suggest_categorical(f"w{i}_prio", ["low", "medium"]),
+        "priority": trial.suggest_categorical(f"w{i}_prio", ["low", "medium", "high"]),
     },
     "gpu_on_non_gpu": lambda trial, i: {
         "type": "ml_training",
@@ -425,8 +425,8 @@ _WORKLOAD_ARCHETYPES = {
         "type": "web_app",
         "count": 1,
         "replicas": {
-            "min": trial.suggest_int(f"w{i}_rep_min", 200, 500),
-            "max": trial.suggest_int(f"w{i}_rep_max", 500, 1000),
+            "min": trial.suggest_int(f"w{i}_rep_min", 50, 200),
+            "max": trial.suggest_int(f"w{i}_rep_max", 200, 400),
         },
         "churn": "low",
         "traffic": "steady",
@@ -491,10 +491,12 @@ class OptunaAdversarialSearch:
                         its.append(it)
                 if not its:
                     its = [INSTANCE_TYPES[0]]
+                max_n = max(5, self.max_nodes)
+                min_cap = min(10, max_n - 1)
                 pool = {
                     "instance_types": its,
-                    "min_nodes": trial.suggest_int(f"pool{p}_min", 0, 10),
-                    "max_nodes": trial.suggest_int(f"pool{p}_max", 11, self.max_nodes),
+                    "min_nodes": trial.suggest_int(f"pool{p}_min", 0, max(0, min_cap)),
+                    "max_nodes": trial.suggest_int(f"pool{p}_max", max(1, min_cap + 1), max_n),
                 }
             # Optional karpenter config
             if trial.suggest_categorical(f"pool{p}_karp", [True, False]):
@@ -532,7 +534,7 @@ class OptunaAdversarialSearch:
         scenario = {
             "study": {
                 "name": f"optuna-{trial.number}",
-                "runs": 50,
+                "runs": 20,  # was 50 — reduce to limit memory; increase after resource monitor lands
                 "time_mode": time_mode,
                 "scheduling_strategy": "reverse_schedule",
                 "cluster": {"node_pools": pools},
@@ -595,14 +597,17 @@ class OptunaAdversarialSearch:
         scenarios: dict[int, dict] = {}
 
         def objective(trial):
-            scenario = self._build_scenario(trial)
+            try:
+                scenario = self._build_scenario(trial)
+            except Exception:
+                return float("-inf")
             scenarios[trial.number] = scenario
             try:
                 return self._evaluate(scenario)
             except Exception:
                 return float("-inf")
 
-        study.optimize(objective, n_trials=self.budget)
+        study.optimize(objective, n_trials=self.budget, catch=(Exception,))
 
         # Collect all completed trials as ScoredScenario
         scored = []

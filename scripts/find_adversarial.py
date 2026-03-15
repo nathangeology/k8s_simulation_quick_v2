@@ -26,9 +26,10 @@ from kubesim.objectives import (
     cost_efficiency, availability, scheduling_failure_rate, entropy_deviation, OBJECTIVES,
 )
 
-BUDGET = 500
+BUDGET = 100          # was 500 — dial back to avoid OOM crashes, increase gradually
 TOP_K = 10
 SEEDS = [42, 100, 200]
+SEARCH_SEEDS = [42]   # single seed during search for speed; full SEEDS for final re-eval
 BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
 SCENARIO_DIR = os.path.join(BASE_DIR, "scenarios", "adversarial", "scheduling")
 RESULTS_DIR = os.path.join(BASE_DIR, "results", "adversarial")
@@ -157,16 +158,16 @@ def main():
     budget = args.budget
     top_k = args.top_k
 
-    # Normal search
+    # Normal search — use single seed during search, full seeds for final re-eval
     print(f"Running normal Optuna search (budget={budget})...")
     normal_search = OptunaAdversarialSearch(
         objective_fn=_combined_divergence,
-        seeds=SEEDS,
+        seeds=SEARCH_SEEDS,
         budget=budget,
-        top_k=budget,  # collect all for re-categorization
+        top_k=min(50, budget),  # cap re-eval pool to avoid OOM
         workload_types=ALL_WORKLOAD_TYPES,
         max_pools=3,
-        max_nodes=200,
+        max_nodes=50,           # was 200 — dial back, increase gradually
         variant_pair=VARIANT_PAIR,
         chaos=False,
     )
@@ -177,12 +178,12 @@ def main():
     print(f"Running chaos Optuna search (budget={budget})...")
     chaos_search = OptunaAdversarialSearch(
         objective_fn=_combined_divergence,
-        seeds=SEEDS,
+        seeds=SEARCH_SEEDS,
         budget=budget,
-        top_k=budget,
+        top_k=min(50, budget),
         workload_types=ALL_WORKLOAD_TYPES,
         max_pools=3,
-        max_nodes=200,
+        max_nodes=50,
         variant_pair=VARIANT_PAIR,
         chaos=True,
     )
@@ -190,12 +191,15 @@ def main():
     print(f"  Chaos: {len(chaos_ranked)} scenarios evaluated")
 
     # Re-evaluate top scenarios for detailed categorization
+    # Only re-eval top 30 by score (not all) to limit memory
     all_scored = normal_ranked + chaos_ranked
-    print(f"\nTotal evaluated: {len(all_scored)} scenarios")
+    all_scored.sort(key=lambda s: s.score, reverse=True)
+    top_for_reeval = all_scored[:30]
+    print(f"\nTotal evaluated: {len(all_scored)} scenarios, re-evaluating top {len(top_for_reeval)} with full seeds")
 
-    # Re-run top scenarios to get per-variant metrics for categorization
+    # Re-run top scenarios with full SEEDS to get per-variant metrics
     categorized: list[tuple[dict, dict]] = []
-    for scored in all_scored:
+    for scored in top_for_reeval:
         scenario = copy.deepcopy(scored.scenario)
         study = scenario.get("study", scenario)
         study["variants"] = VARIANTS
