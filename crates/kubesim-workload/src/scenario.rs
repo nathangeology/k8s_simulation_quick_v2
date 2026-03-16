@@ -25,6 +25,8 @@ pub struct Study {
     pub time_mode: TimeMode,
     #[serde(default)]
     pub catalog_provider: CatalogProvider,
+    #[serde(default)]
+    pub scheduling_strategy: SchedulingStrategy,
     pub cluster: ClusterConfig,
     pub workloads: Vec<WorkloadDef>,
     #[serde(default)]
@@ -33,6 +35,23 @@ pub struct Study {
     pub variants: Vec<Variant>,
     #[serde(default)]
     pub metrics: MetricsConfig,
+}
+
+/// Scheduling strategy controlling how SimHandler schedules pods on NodeReady.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulingStrategy {
+    /// Run full filter chain for all pending pods (current behavior, faithful to real k8s).
+    #[default]
+    FullScan,
+    /// Provisioner passes pod-to-node hints, scheduler binds directly on NodeReady.
+    HintBased,
+    /// Partition pods by constraint class, only try relevant pods per NodeReady.
+    Partitioned,
+    /// Like FullScan but skips saturated nodes in the filter loop.
+    NodePruning,
+    /// On NodeReady, only evaluate the new node instead of scanning all nodes.
+    ReverseSchedule,
 }
 
 fn default_runs() -> u32 {
@@ -54,6 +73,127 @@ pub enum TimeMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterConfig {
     pub node_pools: Vec<NodePoolDef>,
+    /// Fixed system overhead subtracted from every node's allocatable resources.
+    #[serde(default)]
+    pub system_overhead: Option<SystemOverhead>,
+    /// Percentage of node capacity reserved for daemonsets (applied after fixed overhead).
+    #[serde(default)]
+    pub daemonset_overhead_percent: Option<u32>,
+    /// Daemonset pods created on every node at NodeReady.
+    #[serde(default)]
+    pub daemonsets: Option<Vec<DaemonSetDef>>,
+    /// Action delays to model real-world latency.
+    #[serde(default)]
+    pub delays: ActionDelays,
+}
+
+/// Configurable delays for realistic timing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionDelays {
+    /// Time from NodeLaunching to NodeReady (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub node_startup: String,
+    /// Jitter range for node startup delay (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub node_startup_jitter: Option<String>,
+    /// Time from NodeDrained to NodeTerminated (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub node_shutdown: String,
+    /// Jitter range for node shutdown delay (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub node_shutdown_jitter: Option<String>,
+    /// Provisioner batch window — delay before first provisioning pass (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub provisioner_batch: String,
+    /// Jitter range for provisioner batch window (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub provisioner_batch_jitter: Option<String>,
+    /// Time for a pod to transition from Pending to Running once bound (default "0s").
+    #[serde(default = "default_zero_duration")]
+    pub pod_startup: String,
+    /// Jitter range for pod startup delay (uniform ±jitter). Optional.
+    #[serde(default)]
+    pub pod_startup_jitter: Option<String>,
+}
+
+fn default_zero_duration() -> String { "0s".to_string() }
+
+impl Default for ActionDelays {
+    fn default() -> Self {
+        Self {
+            node_startup: "0s".to_string(),
+            node_startup_jitter: None,
+            node_shutdown: "0s".to_string(),
+            node_shutdown_jitter: None,
+            provisioner_batch: "0s".to_string(),
+            provisioner_batch_jitter: None,
+            pod_startup: "0s".to_string(),
+            pod_startup_jitter: None,
+        }
+    }
+}
+
+impl ActionDelays {
+    pub fn node_startup_ns(&self) -> u64 { parse_duration_ns(&self.node_startup).unwrap_or(0) }
+    pub fn node_startup_jitter_ns(&self) -> u64 { self.node_startup_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
+    pub fn node_shutdown_ns(&self) -> u64 { parse_duration_ns(&self.node_shutdown).unwrap_or(0) }
+    pub fn node_shutdown_jitter_ns(&self) -> u64 { self.node_shutdown_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
+    pub fn provisioner_batch_ns(&self) -> u64 { parse_duration_ns(&self.provisioner_batch).unwrap_or(0) }
+    pub fn provisioner_batch_jitter_ns(&self) -> u64 { self.provisioner_batch_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
+    pub fn pod_startup_ns(&self) -> u64 { parse_duration_ns(&self.pod_startup).unwrap_or(0) }
+    pub fn pod_startup_jitter_ns(&self) -> u64 { self.pod_startup_jitter.as_deref().and_then(parse_duration_ns).unwrap_or(0) }
+}
+
+/// A daemonset definition in scenario YAML.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonSetDef {
+    pub name: String,
+    #[serde(default = "default_ds_cpu")]
+    pub cpu_request: String,
+    #[serde(default = "default_ds_memory")]
+    pub memory_request: String,
+}
+
+fn default_ds_cpu() -> String { "150m".into() }
+fn default_ds_memory() -> String { "500Mi".into() }
+
+impl DaemonSetDef {
+    pub fn cpu_millis(&self) -> u64 {
+        parse_cpu_millis(&self.cpu_request).unwrap_or(150)
+    }
+    pub fn memory_bytes(&self) -> u64 {
+        parse_memory_bytes(&self.memory_request).unwrap_or(500 * 1024 * 1024)
+    }
+}
+
+/// Fixed resource overhead subtracted from node allocatable capacity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemOverhead {
+    #[serde(default = "default_overhead_cpu")]
+    pub cpu: String,
+    #[serde(default = "default_overhead_memory")]
+    pub memory: String,
+}
+
+impl Default for SystemOverhead {
+    fn default() -> Self {
+        Self {
+            cpu: "250m".into(),
+            memory: "500Mi".into(),
+        }
+    }
+}
+
+fn default_overhead_cpu() -> String { "250m".into() }
+fn default_overhead_memory() -> String { "500Mi".into() }
+
+impl SystemOverhead {
+    pub fn cpu_millis(&self) -> u64 {
+        parse_cpu_millis(&self.cpu).unwrap_or(250)
+    }
+    pub fn memory_bytes(&self) -> u64 {
+        parse_memory_bytes(&self.memory).unwrap_or(500 * 1024 * 1024)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,6 +291,12 @@ pub struct WorkloadDef {
     #[serde(default)]
     pub topology_spread: Option<TopologySpreadDef>,
     #[serde(default)]
+    pub pod_anti_affinity: Option<PodAntiAffinityDef>,
+    #[serde(default)]
+    pub node_selector: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    pub labels: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
     pub pdb: Option<PdbDef>,
     #[serde(default)]
     pub churn: Option<ChurnLevel>,
@@ -174,6 +320,9 @@ pub struct WorkloadDef {
     /// Simulates RS controller removing pods one at a time. Default: all at once.
     #[serde(default)]
     pub scale_down_interval: Option<String>,
+    /// Scale-up events: increase replicas at specified times.
+    #[serde(default)]
+    pub scale_up: Option<Vec<ScaleUpEvent>>,
 }
 
 /// A scale-down event that reduces replicas at a given time.
@@ -183,6 +332,15 @@ pub struct ScaleDownEvent {
     pub at: String,
     /// Number of replicas to reduce by.
     pub reduce_by: u32,
+}
+
+/// A scale-up event that increases replicas at a given time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScaleUpEvent {
+    /// Time offset (e.g. "10s", "5m") from simulation start.
+    pub at: String,
+    /// Target replica count to scale up to.
+    pub increase_to: u32,
 }
 
 /// Either a fixed integer or a distribution.
@@ -373,6 +531,27 @@ pub struct TopologySpreadDef {
     pub max_skew: u32,
     pub topology_key: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodAntiAffinityDef {
+    /// Label key to match against (e.g. "app")
+    pub label_key: String,
+    /// Topology key (e.g. "kubernetes.io/hostname")
+    pub topology_key: String,
+    /// "required" or "preferred" (default: "preferred")
+    #[serde(default = "default_affinity_type")]
+    pub affinity_type: String,
+    /// Weight for preferred anti-affinity (default: 100)
+    #[serde(default = "default_affinity_weight")]
+    pub weight: u32,
+    /// Override selector value for cross anti-affinity.
+    /// If set, the anti-affinity selector uses this value instead of the pod's own label.
+    #[serde(default)]
+    pub target_label_value: Option<String>,
+}
+
+fn default_affinity_type() -> String { "preferred".into() }
+fn default_affinity_weight() -> u32 { 100 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdbDef {

@@ -12,25 +12,29 @@ study:
           consolidation: {policy: WhenUnderutilized}
 
   workloads:
-    # Deployment A: 500 replicas, 950m CPU, 3.5Gi memory
+    # Deployment A: starts at 1 replica, scales out to 500, then scales in
     - type: web_app
       count: 1
-      replicas: {fixed: 500}
+      replicas: {fixed: 1}
       cpu_request: {dist: uniform, min: "950m", max: "950m"}
       memory_request: {dist: uniform, min: "3.5Gi", max: "3.5Gi"}
+      scale_up:
+        - {at: "10s", increase_to: 500}    # rapid scale-out burst
       scale_down:
-        - {at: "10m", reduce_by: 150}   # 500 → 350
-        - {at: "20m", reduce_by: 340}   # 350 → 10
+        - {at: "15m", reduce_by: 150}      # 500 → 350
+        - {at: "25m", reduce_by: 340}      # 350 → 10
 
-    # Deployment B: 500 replicas, 950m CPU, 6.5Gi memory
+    # Deployment B: starts at 1 replica, scales out to 500, then scales in
     - type: web_app
       count: 1
-      replicas: {fixed: 500}
+      replicas: {fixed: 1}
       cpu_request: {dist: uniform, min: "950m", max: "950m"}
       memory_request: {dist: uniform, min: "6.5Gi", max: "6.5Gi"}
+      scale_up:
+        - {at: "10s", increase_to: 500}    # rapid scale-out burst
       scale_down:
-        - {at: "10m", reduce_by: 150}   # 500 → 350
-        - {at: "20m", reduce_by: 340}   # 350 → 10
+        - {at: "15m", reduce_by: 150}      # 500 → 350
+        - {at: "25m", reduce_by: 340}      # 350 → 10
 
   variants:
     - name: baseline

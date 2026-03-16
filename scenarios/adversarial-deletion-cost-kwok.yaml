@@ -1,0 +1,41 @@
+study:
+  name: adversarial-deletion-cost-kwok
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types: [c-1x-amd64-linux, c-2x-amd64-linux, c-4x-amd64-linux, c-8x-amd64-linux, c-16x-amd64-linux, c-32x-amd64-linux, c-48x-amd64-linux, c-64x-amd64-linux, c-96x-amd64-linux, c-128x-amd64-linux, s-1x-amd64-linux, s-2x-amd64-linux, s-4x-amd64-linux, s-8x-amd64-linux, s-16x-amd64-linux, s-32x-amd64-linux, s-48x-amd64-linux, s-64x-amd64-linux, s-96x-amd64-linux, s-128x-amd64-linux, m-1x-amd64-linux, m-2x-amd64-linux, m-4x-amd64-linux, m-8x-amd64-linux, m-16x-amd64-linux, m-32x-amd64-linux, m-48x-amd64-linux, m-64x-amd64-linux, m-96x-amd64-linux, m-128x-amd64-linux]
+        min_nodes: 0
+        max_nodes: 200
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+      - name: node-agent
+        cpu_request: "50m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+      provisioner_batch_jitter: "5s"
+      pod_startup: "2s"
+
+  workloads:
+    - type: web_app
+      count: 1
+      replicas: {fixed: 100}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      scale_down:
+        - {at: "5m", reduce_by: 50}
+        - {at: "10m", reduce_by: 40}
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}

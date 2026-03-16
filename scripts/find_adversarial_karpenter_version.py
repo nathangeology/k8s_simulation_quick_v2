@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Adversarial discovery: Karpenter v0.35 vs v1.x.
 
-Finds scenarios where the two Karpenter versions diverge most across
-cost_efficiency, availability, and consolidation_waste objectives.
-Includes batch job workloads with lifetimes, scale-down patterns,
-and mixed spot/on-demand pools.
+Uses Optuna TPE (Bayesian optimization) to find scenarios where the two
+Karpenter versions diverge most across cost_efficiency, availability,
+and consolidation_waste objectives.
 """
 
 import copy
@@ -19,9 +18,9 @@ import yaml
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from kubesim._native import batch_run
-from kubesim.adversarial import AdversarialFinder, ScenarioSpace, VariantPair
+from kubesim.adversarial import OptunaAdversarialSearch, VariantPair
 from kubesim.objectives import cost_efficiency, availability, consolidation_waste
-from kubesim.strategies import cluster_scenario, chaos_scenario, ALL_WORKLOAD_TYPES
+from kubesim.strategies import ALL_WORKLOAD_TYPES
 from kubesim.report import run_report
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -54,80 +53,52 @@ def _divergence_metric(results: list[dict]) -> float:
     total = 0.0
     for fn in OBJECTIVE_FNS.values():
         a, b = fn(groups[0]), fn(groups[1])
-        delta = a - b
-        if abs(delta) < float("inf"):
-            total += abs(delta)
+        delta = abs(a - b)
+        if delta < float("inf"):
+            total += delta
     return total
-
-
-def _inject_variants(scenario: dict) -> dict:
-    """Ensure scenario has karpenter version variants."""
-    study = scenario.get("study", scenario)
-    study["variants"] = [KARPENTER_VERSION_PAIR.config_a, KARPENTER_VERSION_PAIR.config_b]
-    return scenario
-
-
-def _strip_variants(scenario: dict) -> dict:
-    clean = copy.deepcopy(scenario)
-    study = clean.get("study", clean)
-    study.pop("variants", None)
-    study.pop("metrics", None)
-    return clean
 
 
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Adversarial finder: Karpenter v0.35 vs v1.x")
+    parser = argparse.ArgumentParser(description="Adversarial finder: Karpenter v0.35 vs v1.x (Optuna TPE)")
     parser.add_argument("--budget", type=int, default=500)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--report-seeds", type=int, default=50)
     parser.add_argument("--report-top", type=int, default=5)
     args = parser.parse_args()
 
-    space = ScenarioSpace(
-        nodes=(10, 200),
-        workload_types=ALL_WORKLOAD_TYPES,
-        min_workloads=2,
-        max_workloads=8,
-        min_pools=1,
-        max_pools=3,
-    )
-
     # Normal search
-    print(f"Running normal search (budget={args.budget})...")
-    normal_finder = AdversarialFinder(
-        objective="maximize",
-        metric=_divergence_metric,
-        objectives=list(OBJECTIVE_FNS.values()),
-        space=space,
-        budget=args.budget,
+    print(f"Running normal Optuna search (budget={args.budget})...")
+    normal_search = OptunaAdversarialSearch(
+        objective_fn=_divergence_metric,
         seeds=SEEDS,
+        budget=args.budget,
         top_k=args.top_k,
-        seed=0,
-        chaos=False,
+        workload_types=ALL_WORKLOAD_TYPES,
+        max_pools=3,
+        max_nodes=200,
         variant_pair=KARPENTER_VERSION_PAIR,
-        track_features=True,
+        chaos=False,
     )
-    normal_ranked = normal_finder.run()
+    normal_ranked = normal_search.run()
     print(f"  Normal: {len(normal_ranked)} top scenarios")
 
     # Chaos search
-    print(f"Running chaos search (budget={args.budget})...")
-    chaos_finder = AdversarialFinder(
-        objective="maximize",
-        metric=_divergence_metric,
-        objectives=list(OBJECTIVE_FNS.values()),
-        space=space,
-        budget=args.budget,
+    print(f"Running chaos Optuna search (budget={args.budget})...")
+    chaos_search = OptunaAdversarialSearch(
+        objective_fn=_divergence_metric,
         seeds=SEEDS,
+        budget=args.budget,
         top_k=args.top_k,
-        seed=1,
-        chaos=True,
+        workload_types=ALL_WORKLOAD_TYPES,
+        max_pools=3,
+        max_nodes=200,
         variant_pair=KARPENTER_VERSION_PAIR,
-        track_features=True,
+        chaos=True,
     )
-    chaos_ranked = chaos_finder.run()
+    chaos_ranked = chaos_search.run()
     print(f"  Chaos: {len(chaos_ranked)} top scenarios")
 
     # Merge and re-rank
@@ -137,7 +108,6 @@ def main():
 
     # Save scenarios
     SCENARIO_DIR.mkdir(parents=True, exist_ok=True)
-    # Clean old files
     for f in SCENARIO_DIR.iterdir():
         if f.name.startswith("worst_case_") and f.suffix == ".yaml":
             f.unlink()
@@ -151,16 +121,17 @@ def main():
         fname = f"worst_case_{i+1:02d}.yaml"
         path = SCENARIO_DIR / fname
         scenario = copy.deepcopy(scored.scenario)
-        _inject_variants(scenario)
+        study = scenario.get("study", scenario)
+        study["variants"] = [KARPENTER_VERSION_PAIR.config_a, KARPENTER_VERSION_PAIR.config_b]
+        study["scheduling_strategy"] = "full_scan"
         with open(path, "w") as f:
             f.write(f"# Adversarial scenario #{i+1} — divergence: {scored.score:.4f}\n")
-            f.write(f"# Karpenter v0.35 vs v1.x\n")
+            f.write(f"# Karpenter v0.35 vs v1.x (Optuna TPE)\n")
             yaml.dump(scenario, f, default_flow_style=False, sort_keys=False)
 
         manifest_entries.append({
             "filename": fname,
             "divergence_score": round(scored.score, 6),
-            "objective_scores": [round(s, 6) for s in scored.objective_scores] if scored.objective_scores else [],
         })
         print(f"{i+1:3d} {scored.score:>10.4f}  {fname}")
 
@@ -168,6 +139,7 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "search_method": "optuna_tpe",
         "budget": args.budget,
         "seeds": SEEDS,
         "top_k": args.top_k,
@@ -192,12 +164,6 @@ def main():
             run_report(str(scenario_path), seeds=args.report_seeds, output_dir=out_dir)
         except Exception as e:
             print(f"    WARNING: report failed: {e}")
-
-    # Feature importance
-    if hasattr(normal_finder, "feature_importance"):
-        print("\nFeature importance (normal search):")
-        for feat, imp in sorted(normal_finder.feature_importance.items(), key=lambda x: -x[1])[:10]:
-            print(f"  {feat:<30} {imp:.4f}")
 
     print(f"\nScenarios: {SCENARIO_DIR}/")
     print(f"Results: {RESULTS_DIR}/")

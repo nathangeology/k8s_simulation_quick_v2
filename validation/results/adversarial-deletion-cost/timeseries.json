@@ -1,0 +1,331 @@
+[
+  {
+    "time": 0,
+    "elapsed_s": 0,
+    "node_count": 0,
+    "pod_count": 36,
+    "pending_count": 15,
+    "total_cost_per_hour": 0,
+    "total_vcpu_allocated": 0,
+    "total_memory_allocated_gib": 0
+  }
+,
+  {
+    "time": 30000000000,
+    "elapsed_s": 30,
+    "node_count": 1,
+    "pod_count": 122,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 60000000000,
+    "elapsed_s": 60,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 91000000000,
+    "elapsed_s": 91,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 121000000000,
+    "elapsed_s": 121,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 151000000000,
+    "elapsed_s": 151,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 182000000000,
+    "elapsed_s": 182,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 212000000000,
+    "elapsed_s": 212,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 242000000000,
+    "elapsed_s": 242,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 273000000000,
+    "elapsed_s": 273,
+    "node_count": 1,
+    "pod_count": 120,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 303000000000,
+    "elapsed_s": 303,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 333000000000,
+    "elapsed_s": 333,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 3.0672,
+    "total_vcpu_allocated": 63.9,
+    "total_memory_allocated_gib": 127.99
+  }
+,
+  {
+    "time": 363000000000,
+    "elapsed_s": 363,
+    "node_count": 1,
+    "pod_count": 72,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 394000000000,
+    "elapsed_s": 394,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 424000000000,
+    "elapsed_s": 424,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 454000000000,
+    "elapsed_s": 454,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 485000000000,
+    "elapsed_s": 485,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 515000000000,
+    "elapsed_s": 515,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 545000000000,
+    "elapsed_s": 545,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 576000000000,
+    "elapsed_s": 576,
+    "node_count": 1,
+    "pod_count": 70,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 606000000000,
+    "elapsed_s": 606,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 636000000000,
+    "elapsed_s": 636,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 1.5312,
+    "total_vcpu_allocated": 31.9,
+    "total_memory_allocated_gib": 63.99
+  }
+,
+  {
+    "time": 667000000000,
+    "elapsed_s": 667,
+    "node_count": 1,
+    "pod_count": 32,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 697000000000,
+    "elapsed_s": 697,
+    "node_count": 1,
+    "pod_count": 32,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 727000000000,
+    "elapsed_s": 727,
+    "node_count": 1,
+    "pod_count": 32,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 758000000000,
+    "elapsed_s": 758,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 788000000000,
+    "elapsed_s": 788,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 818000000000,
+    "elapsed_s": 818,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 849000000000,
+    "elapsed_s": 849,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+,
+  {
+    "time": 879000000000,
+    "elapsed_s": 879,
+    "node_count": 1,
+    "pod_count": 30,
+    "pending_count": 0,
+    "total_cost_per_hour": 0.1872,
+    "total_vcpu_allocated": 3.9,
+    "total_memory_allocated_gib": 7.99
+  }
+]

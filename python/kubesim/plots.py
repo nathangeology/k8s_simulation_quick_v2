@@ -15,6 +15,33 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+# ── Time-axis helpers ─────────────────────────────────────────────
+
+# Heuristic: if max raw time > 1e6, values are nanoseconds (wall_clock mode).
+_NS_THRESHOLD = 1e6
+
+
+def _raw_to_seconds(t: np.ndarray) -> np.ndarray:
+    """Convert raw SimTime values to seconds.
+
+    wall_clock mode emits nanoseconds; logical mode emits seconds (1 tick = 1s).
+    """
+    if len(t) == 0:
+        return t
+    if t.max() > _NS_THRESHOLD:
+        return t / 1e9
+    return t
+
+
+def _time_unit(max_seconds: float) -> tuple[str, float]:
+    """Pick human-readable unit and divisor for the x-axis."""
+    if max_seconds < 120:
+        return "seconds", 1.0
+    if max_seconds < 120 * 60:
+        return "minutes", 60.0
+    return "hours", 3600.0
+
+
 # ── Timeseries plots ─────────────────────────────────────────────
 
 _TIMESERIES_METRICS = [
@@ -62,6 +89,11 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
     if not by_variant:
         return []
 
+    # Determine time unit from all raw time values
+    all_raw = [s["time"] for runs in by_variant.values() for run in runs for s in run]
+    max_seconds = _raw_to_seconds(np.array([max(all_raw)], dtype=float))[0] if all_raw else 0.0
+    unit_label, unit_div = _time_unit(max_seconds)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = []
 
@@ -80,13 +112,14 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
                 v = np.array([s.get(metric_key, 0.0) for s in run], dtype=float)
                 values[i] = np.interp(grid, t, v)
 
+            display_grid = _raw_to_seconds(grid) / unit_div
             mean = values.mean(axis=0)
-            ax.plot(grid, mean, label=variant, linewidth=1.5)
+            ax.plot(display_grid, mean, label=variant, linewidth=1.5)
             if len(ts_runs) > 1:
                 lo, hi = np.percentile(values, [10, 90], axis=0)
-                ax.fill_between(grid, lo, hi, alpha=0.15)
+                ax.fill_between(display_grid, lo, hi, alpha=0.15)
 
-        ax.set_xlabel("Simulation Time")
+        ax.set_xlabel(f"Time ({unit_label})")
         ax.set_ylabel(metric_label)
         ax.set_title(metric_label)
         ax.legend()
@@ -108,6 +141,7 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
             if not all_times:
                 continue
             grid = np.array(all_times, dtype=float)
+            grid_seconds = _raw_to_seconds(grid)
             cum_values = np.zeros((len(ts_runs), len(grid)))
 
             for i, run in enumerate(ts_runs):
@@ -115,18 +149,19 @@ def plot_timeseries(results: list[dict], output_dir: Path) -> list[Path]:
                 v = np.array([s.get(rate_key, 0.0) for s in run], dtype=float)
                 interp_v = np.interp(grid, t, v)
                 # Trapezoidal cumulative integral; dt in hours for $/hr and rate metrics
-                dt = np.diff(grid)
+                dt = np.diff(grid_seconds)
                 avg_rate = (interp_v[:-1] + interp_v[1:]) / 2.0
                 increments = avg_rate * dt / 3600.0
                 cum_values[i, 1:] = np.cumsum(increments)
 
+            display_grid = grid_seconds / unit_div
             mean = cum_values.mean(axis=0)
-            ax.plot(grid, mean, label=variant, linewidth=1.5)
+            ax.plot(display_grid, mean, label=variant, linewidth=1.5)
             if len(ts_runs) > 1:
                 lo, hi = np.percentile(cum_values, [10, 90], axis=0)
-                ax.fill_between(grid, lo, hi, alpha=0.15)
+                ax.fill_between(display_grid, lo, hi, alpha=0.15)
 
-        ax.set_xlabel("Simulation Time")
+        ax.set_xlabel(f"Time ({unit_label})")
         ax.set_ylabel(cum_label)
         ax.set_title(cum_label)
         ax.legend()

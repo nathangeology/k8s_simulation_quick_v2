@@ -40,7 +40,7 @@ pub enum ConsolidationAction {
     },
 }
 
-/// Identify empty nodes (ready, not cordoned, zero pods, not do-not-disrupt) belonging to the given pool.
+/// Identify empty nodes (ready, not cordoned, zero non-daemonset pods, not do-not-disrupt) belonging to the given pool.
 /// Nodes younger than `consolidate_after_ns` are exempt from consolidation.
 fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns: u64) -> Vec<NodeId> {
     state
@@ -48,8 +48,11 @@ fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns:
         .iter()
         .filter(|(_, n)| {
             n.conditions.ready && !n.cordoned && !n.do_not_disrupt
-                && n.pods.is_empty() && n.pool_name == pool_name
+                && n.pool_name == pool_name
                 && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+                && n.pods.iter().all(|&pid| {
+                    state.pods.get(pid).map_or(true, |p| p.is_daemonset)
+                })
         })
         .map(|(id, _)| id)
         .collect()
@@ -68,8 +71,11 @@ fn find_empty_nodes(state: &ClusterState, pool_name: &str, consolidate_after_ns:
 fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
     let mut max_priority: i32 = 0;
     let mut pdb_covered: i64 = 0;
+    let mut non_ds_count: usize = 0;
     for &pid in &node.pods {
         if let Some(pod) = state.pods.get(pid) {
+            if pod.is_daemonset { continue; }
+            non_ds_count += 1;
             if pod.priority > max_priority {
                 max_priority = pod.priority;
             }
@@ -79,7 +85,6 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
         }
     }
     let disruption_cost = max_priority as i64 + pdb_covered;
-    let pod_count = node.pods.len();
     // Invert age so ascending sort prefers older nodes (lower created_at).
     let negative_age = node.created_at.0;
     // Spot nodes get penalty=1 so on-demand nodes (penalty=0) are consolidated first.
@@ -87,7 +92,7 @@ fn candidate_score(state: &ClusterState, node: &Node) -> (u8, i64, usize, u64) {
         NodeLifecycle::Spot { .. } => 1u8,
         NodeLifecycle::OnDemand => 0u8,
     };
-    (spot_penalty, disruption_cost, pod_count, negative_age)
+    (spot_penalty, disruption_cost, non_ds_count, negative_age)
 }
 
 /// Sort candidate nodes by multi-factor disruption score (ascending).
@@ -129,11 +134,12 @@ fn pods_can_reschedule(
     let f4 = PodTopologySpreadFilter;
     let filters: [&dyn FilterPlugin; 4] = [&f1, &f2, &f3, &f4];
 
-    // Collect pods to move
+    // Collect pods to move (exclude daemonset pods — they are non-evictable)
     let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
     let pods: Vec<(PodId, &Pod)> = pod_ids
         .iter()
         .filter_map(|&pid| state.pods.get(pid).map(|p| (pid, p)))
+        .filter(|(_, p)| !p.is_daemonset)
         .collect();
 
     // Build available capacity on other nodes, excluding candidate and nodes already being removed
@@ -168,13 +174,13 @@ fn pods_can_reschedule(
         }
     }
 
-    Some(pod_ids)
+    Some(pods.iter().map(|&(pid, _)| pid).collect())
 }
 
-/// Returns true if the node itself or any pod on the node has `do_not_disrupt` set.
+/// Returns true if the node itself or any non-daemonset pod on the node has `do_not_disrupt` set.
 fn node_has_do_not_disrupt(state: &ClusterState, node: &Node) -> bool {
     node.do_not_disrupt || node.pods.iter().any(|&pid| {
-        state.pods.get(pid).map_or(false, |p| p.do_not_disrupt)
+        state.pods.get(pid).map_or(false, |p| p.do_not_disrupt && !p.is_daemonset)
     })
 }
 
@@ -203,8 +209,12 @@ fn find_underutilized_nodes(
         .nodes
         .iter()
         .filter(|(_, n)| {
-            n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool_name
+            n.conditions.ready && !n.cordoned && n.pool_name == pool_name
                 && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+                // Must have at least one non-daemonset pod (empty nodes handled by find_empty_nodes)
+                && n.pods.iter().any(|&pid| {
+                    state.pods.get(pid).map_or(false, |p| !p.is_daemonset)
+                })
         })
         .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
@@ -267,6 +277,8 @@ fn find_replace_candidates(
     state: &ClusterState,
     catalog: &Catalog,
     pool: &NodePool,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Vec<ConsolidationAction> {
     let allowed: Vec<&kubesim_ec2::InstanceType> = if pool.instance_types.is_empty() {
         catalog.all().iter().collect()
@@ -281,7 +293,10 @@ fn find_replace_candidates(
     let mut candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
-        .filter(|(_, n)| n.conditions.ready && !n.cordoned && !n.pods.is_empty() && n.pool_name == pool.name)
+        .filter(|(_, n)| {
+            n.conditions.ready && !n.cordoned && n.pool_name == pool.name
+                && n.pods.iter().any(|&pid| state.pods.get(pid).map_or(false, |p| !p.is_daemonset))
+        })
         .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
     sort_candidates(state, &mut candidates);
@@ -292,11 +307,13 @@ fn find_replace_candidates(
             continue;
         }
 
-        // Compute total resource demand of pods on this node
+        // Compute total resource demand of non-daemonset pods on this node
         let mut total_cpu: u64 = 0;
         let mut total_mem: u64 = 0;
         let mut total_gpu: u32 = 0;
-        let pod_ids: Vec<PodId> = node.pods.iter().copied().collect();
+        let pod_ids: Vec<PodId> = node.pods.iter().copied()
+            .filter(|&pid| !state.pods.get(pid).map_or(false, |p| p.is_daemonset))
+            .collect();
         for &pid in &pod_ids {
             if let Some(p) = state.pods.get(pid) {
                 total_cpu += p.requests.cpu_millis;
@@ -310,8 +327,20 @@ fn find_replace_candidates(
         let mut best: Option<(&kubesim_ec2::InstanceType, f64)> = None;
 
         for it in &allowed {
-            let it_cpu = (it.vcpu as u64) * 1000;
-            let it_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+            let raw_cpu = (it.vcpu as u64) * 1000;
+            let raw_mem = (it.memory_gib as u64) * 1024 * 1024 * 1024;
+            // Subtract overhead to get effective capacity
+            let (oh_cpu, oh_mem) = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+                kubesim_ec2::eks_overhead(it.vcpu)
+            } else {
+                (overhead.cpu_millis, overhead.memory_bytes)
+            };
+            let mut it_cpu = raw_cpu.saturating_sub(oh_cpu);
+            let mut it_mem = raw_mem.saturating_sub(oh_mem);
+            if daemonset_pct > 0 {
+                it_cpu = it_cpu.saturating_sub(raw_cpu * daemonset_pct as u64 / 100);
+                it_mem = it_mem.saturating_sub(raw_mem * daemonset_pct as u64 / 100);
+            }
             if it_cpu < total_cpu || it_mem < total_mem || it.gpu_count < total_gpu {
                 continue;
             }
@@ -345,7 +374,7 @@ pub fn evaluate(
     max_disrupted: u32,
     pool_name: &str,
 ) -> Vec<ConsolidationAction> {
-    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name, 0)
+    evaluate_versioned(state, policy, max_disrupted, None, None, pool_name, 0, &Resources::default(), 0)
 }
 
 /// Version-aware consolidation evaluation.
@@ -361,6 +390,8 @@ pub fn evaluate_versioned(
     catalog: Option<(&Catalog, &NodePool)>,
     pool_name: &str,
     consolidate_after_ns: u64,
+    overhead: &Resources,
+    daemonset_pct: u32,
 ) -> Vec<ConsolidationAction> {
     let strategy = profile
         .map(|p| p.consolidation_strategy)
@@ -442,7 +473,7 @@ pub fn evaluate_versioned(
         // Replace path (v1.x only)
         if total_used < max_disrupted && replace_enabled && strategy == ConsolidationStrategy::MultiNode {
             if let Some((cat, pool)) = catalog {
-                for action in find_replace_candidates(state, cat, pool) {
+                for action in find_replace_candidates(state, cat, pool, overhead, daemonset_pct) {
                     if underutil_used >= underutilized_budget || total_used >= max_disrupted {
                         break;
                     }
@@ -506,11 +537,12 @@ fn simulate_and_validate(
             ConsolidationAction::Replace { node_id, .. } => *node_id,
         }).collect();
 
-        // Collect all displaced pods
+        // Collect displaced pods that need placement on existing nodes.
+        // Replace pods are excluded — they go on the replacement node.
         let displaced_pods: Vec<PodId> = validated.iter().flat_map(|a| match a {
             ConsolidationAction::TerminateEmpty(_) => vec![],
             ConsolidationAction::DrainAndTerminate { pod_ids, .. } => pod_ids.clone(),
-            ConsolidationAction::Replace { pod_ids, .. } => pod_ids.clone(),
+            ConsolidationAction::Replace { .. } => vec![],
         }).collect();
 
         if displaced_pods.is_empty() {
@@ -584,10 +616,10 @@ fn validate_before_execute(
     let mut nodes_being_removed: HashSet<NodeId> = HashSet::new();
 
     for action in actions {
-        let (nid, is_empty) = match &action {
-            ConsolidationAction::TerminateEmpty(nid) => (*nid, true),
-            ConsolidationAction::DrainAndTerminate { node_id, .. } => (*node_id, false),
-            ConsolidationAction::Replace { node_id, .. } => (*node_id, false),
+        let (nid, is_empty, is_replace) = match &action {
+            ConsolidationAction::TerminateEmpty(nid) => (*nid, true, false),
+            ConsolidationAction::DrainAndTerminate { node_id, .. } => (*node_id, false, false),
+            ConsolidationAction::Replace { node_id, .. } => (*node_id, false, true),
         };
 
         let node = match state.nodes.get(nid) {
@@ -596,10 +628,14 @@ fn validate_before_execute(
         };
 
         if is_empty {
-            if !node.pods.is_empty() {
-                continue; // pods landed since planning
+            // Check that only daemonset pods remain (consistent with find_empty_nodes)
+            let has_non_daemonset = node.pods.iter().any(|&pid| {
+                state.pods.get(pid).map_or(false, |p| !p.is_daemonset)
+            });
+            if has_non_daemonset {
+                continue; // workload pods landed since planning
             }
-        } else if pods_can_reschedule(state, nid, &nodes_being_removed).is_none() {
+        } else if !is_replace && pods_can_reschedule(state, nid, &nodes_being_removed).is_none() {
             continue; // pods no longer fit elsewhere
         }
 
@@ -621,8 +657,12 @@ fn validate_before_execute(
 pub struct ConsolidationHandler {
     pub pool: NodePool,
     pub policy: ConsolidationPolicy,
-    /// Interval (ns) between consolidation loops in WallClock mode.
+    /// Base interval (ns) between consolidation loops in WallClock mode.
     pub loop_interval_ns: u64,
+    /// Current backoff interval (ns). Grows when no actions are taken, resets on action.
+    current_interval_ns: u64,
+    /// Maximum backoff interval (ns) — caps exponential growth.
+    max_interval_ns: u64,
     /// Version profile controlling consolidation strategy.
     pub version_profile: Option<VersionProfile>,
     /// EC2 catalog for replace-path instance selection.
@@ -630,17 +670,26 @@ pub struct ConsolidationHandler {
     /// Minimum node age (ns) before it becomes eligible for consolidation.
     /// Prevents thrashing: provision → immediately consolidate → provision again.
     pub consolidate_after_ns: u64,
+    /// System overhead for replace-path capacity checks.
+    pub overhead: Resources,
+    /// Daemonset overhead percentage for replace-path capacity checks.
+    pub daemonset_pct: u32,
 }
 
 impl ConsolidationHandler {
     pub fn new(pool: NodePool, policy: ConsolidationPolicy) -> Self {
+        let base = 30_000_000_000u64; // 30s default
         Self {
             pool,
             policy,
-            loop_interval_ns: 30_000_000_000, // 30s default
+            loop_interval_ns: base,
+            current_interval_ns: base,
+            max_interval_ns: 300_000_000_000, // 5 min cap
             version_profile: None,
             catalog: None,
-            consolidate_after_ns: 0,
+            consolidate_after_ns: 15_000_000_000, // 15s default, matches Karpenter
+            overhead: Resources::default(),
+            daemonset_pct: 0,
         }
     }
 
@@ -671,7 +720,7 @@ impl EventHandler for ConsolidationHandler {
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after_ns);
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after_ns, &self.overhead, self.daemonset_pct);
 
         // PLAN phase: validate via scheduling simulation — shrink candidate set
         // until all displaced pods can be placed on remaining nodes.
@@ -687,6 +736,8 @@ impl EventHandler for ConsolidationHandler {
         // Pod eviction is deferred to NodeDrained events (handled by DrainHandler).
         const STABILIZATION_NS: u64 = 15_000_000_000;
         let mut action_offset: u64 = 0;
+
+        let has_actions = !actions.is_empty();
 
         for action in actions {
             match action {
@@ -755,9 +806,17 @@ impl EventHandler for ConsolidationHandler {
             }
         }
 
-        // Always re-schedule next consolidation loop
+        // Backoff: if no actions were taken, double the interval (up to max).
+        // If actions were taken, reset to base interval for responsive follow-up.
+        if has_actions {
+            self.current_interval_ns = self.loop_interval_ns;
+        } else {
+            self.current_interval_ns = (self.current_interval_ns * 2).min(self.max_interval_ns);
+        }
+
+        // Re-schedule next consolidation loop with current (possibly backed-off) interval
         follow_ups.push(ScheduledEvent {
-            time: SimTime(time.0 + self.loop_interval_ns),
+            time: SimTime(time.0 + self.current_interval_ns),
             event: Event::KarpenterConsolidationLoop,
         });
 
@@ -798,10 +857,11 @@ impl EventHandler for DrainHandler {
             None => return Vec::new(),
         };
 
-        // Collect unique owners before eviction
+        // Collect unique owners before eviction (skip daemonset pods)
         let mut owners = Vec::new();
         for &pid in &pod_ids {
             if let Some(pod) = state.pods.get(pid) {
+                if pod.is_daemonset { continue; }
                 if !owners.contains(&pod.owner) {
                     owners.push(pod.owner);
                 }
@@ -809,6 +869,7 @@ impl EventHandler for DrainHandler {
         }
 
         for pid in pod_ids {
+            if state.pods.get(pid).map_or(false, |p| p.is_daemonset) { continue; }
             state.evict_pod(pid);
         }
 
@@ -873,6 +934,7 @@ mod tests {
             labels: LabelSet::default(),
             do_not_disrupt: false,
             duration_ns: None,
+            is_daemonset: false,
         }
     }
 
@@ -972,9 +1034,12 @@ mod tests {
         state.add_node(test_node(4000, 8_000_000_000)); // empty node
 
         let mut handler = ConsolidationHandler::new(test_pool(), ConsolidationPolicy::WhenEmpty);
+        // Run after consolidate_after_ns (15s) so the node is eligible
+        let t = SimTime(handler.consolidate_after_ns + 1000);
+        state.time = t;
         let events = handler.handle(
             &kubesim_engine::Event::KarpenterConsolidationLoop,
-            SimTime(1000),
+            t,
             &mut state,
         );
         // Should have NodeCordoned + NodeTerminated + re-schedule for continued consolidation

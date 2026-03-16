@@ -6,8 +6,10 @@ use std::collections::BinaryHeap;
 
 pub mod replicaset;
 pub mod deletion_cost;
+pub mod daemonset;
 pub use replicaset::ReplicaSetController;
 pub use deletion_cost::DeletionCostController;
+pub use daemonset::{DaemonSetHandler, DaemonSetSpec};
 
 // ── Events ──────────────────────────────────────────────────────
 
@@ -212,9 +214,9 @@ impl Engine {
 
     /// Drain the entire event queue, processing all events.
     /// Returns the number of events processed.
-    /// Stops after `max_events` (default 1_000_000) as a safety valve.
+    /// Stops after `max_events` (default 5_000_000) as a safety valve.
     pub fn run_to_completion(&mut self, state: &mut ClusterState) -> u64 {
-        self.run_to_completion_with_limit(state, 1_000_000)
+        self.run_to_completion_with_limit(state, 5_000_000)
     }
 
     /// Drain the event queue with an explicit event limit.

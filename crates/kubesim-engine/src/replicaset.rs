@@ -24,7 +24,7 @@ impl EventHandler for ReplicaSetController {
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent> {
         match event {
-            Event::ReplicaSetReconcile(owner_id) => reconcile(*owner_id, state),
+            Event::ReplicaSetReconcile(owner_id) => reconcile(*owner_id, state, time),
             Event::PodTerminating(pod_id) | Event::PodDeleted(pod_id) => {
                 if let Some(pod) = state.pods.get(*pod_id) {
                     let owner = pod.owner;
@@ -41,7 +41,7 @@ impl EventHandler for ReplicaSetController {
                 let owner = OwnerId(dep_id.0);
                 if let Some(rs_id) = find_rs(state, owner) {
                     let rs = state.replica_sets.get_mut(rs_id).unwrap();
-                    rs.desired_replicas = rs.desired_replicas.saturating_add(*count);
+                    rs.desired_replicas = *count; // Set to absolute target
                     return vec![ScheduledEvent {
                         time: SimTime(time.0 + 1),
                         event: Event::ReplicaSetReconcile(owner),
@@ -86,7 +86,7 @@ fn find_rs(state: &ClusterState, owner: OwnerId) -> Option<ReplicaSetId> {
         .map(|(id, _)| id)
 }
 
-fn reconcile(owner_id: OwnerId, state: &mut ClusterState) -> Vec<ScheduledEvent> {
+fn reconcile(owner_id: OwnerId, state: &mut ClusterState, time: SimTime) -> Vec<ScheduledEvent> {
     let rs_id = match find_rs(state, owner_id) {
         Some(id) => id,
         None => return Vec::new(),
@@ -114,10 +114,15 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState) -> Vec<ScheduledEvent>
                 priority: rs.pod_template.priority,
                 labels: rs.pod_template.labels.clone(),
                 do_not_disrupt: false,
-                duration_ns: None,
+                duration_ns: None, is_daemonset: false,
             };
             state.submit_pod(pod);
         }
+        // Trigger provisioning loop so Karpenter picks up the new pending pods
+        return vec![ScheduledEvent {
+            time: SimTime(time.0 + 1),
+            event: Event::KarpenterProvisioningLoop,
+        }];
     } else if actual > desired {
         // Scale down — K8s victim selection order:
         // 1. Pending pods first

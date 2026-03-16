@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import math
 import random
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -41,7 +42,11 @@ from typing import Callable, Literal
 
 import yaml
 
-from kubesim.strategies import cluster_scenario, chaos_scenario
+from kubesim.strategies import (
+    cluster_scenario, chaos_scenario,
+    INSTANCE_TYPES, TINY_INSTANCE_TYPES, CONSOLIDATION_POLICIES,
+    TRAFFIC_PATTERNS, SCALE_DOWN_PATTERNS, ALL_WORKLOAD_TYPES, WORKLOAD_TYPES,
+)
 
 
 @dataclass
@@ -117,7 +122,71 @@ def _extract_features(scenario: dict) -> dict[str, float]:
     features["has_pdb"] = float(any("pdb" in w for w in wls))
     features["has_topology_spread"] = float(any("topology_spread" in w for w in wls))
     features["has_anti_affinity"] = float(any("pod_anti_affinity" in w for w in wls))
+    # Karpenter config dimensions
+    for p in pools:
+        karp = p.get("karpenter", {})
+        if karp:
+            consol = karp.get("consolidation", {})
+            ca = consol.get("consolidateAfter", "0s")
+            features["max_consol_after_s"] = max(features.get("max_consol_after_s", 0), int(ca.rstrip("s") or 0))
+            budgets = karp.get("disruption", {}).get("budgets", [{}])
+            if budgets:
+                features["max_disruption_nodes"] = max(features.get("max_disruption_nodes", 0), budgets[0].get("nodes", 0))
+                features["max_disruption_pct"] = max(features.get("max_disruption_pct", 0), budgets[0].get("percent", 0))
+            ea = karp.get("expireAfter", "0h")
+            features["max_expire_h"] = max(features.get("max_expire_h", 0), int(ea.rstrip("h") or 0))
+            bi = karp.get("batchIdleDuration", "0s")
+            features["max_batch_idle_s"] = max(features.get("max_batch_idle_s", 0), int(bi.rstrip("s") or 0))
     return features
+
+
+def diverse_top_k(scored: list[ScoredScenario], k: int) -> list[ScoredScenario]:
+    """Select top-k scenarios maximizing score × diversity in feature space.
+
+    Greedy selection: start with the highest-scoring scenario, then iteratively
+    pick the candidate that maximizes ``score × min_distance_to_selected``
+    (Euclidean distance in normalized feature space).
+    """
+    if len(scored) <= k:
+        return list(scored)
+
+    # Extract and normalize feature vectors
+    raw_features = [_extract_features(s.scenario) for s in scored]
+    all_keys = sorted({fk for f in raw_features for fk in f})
+    if not all_keys:
+        return scored[:k]
+
+    vectors = [[f.get(key, 0.0) for key in all_keys] for f in raw_features]
+
+    # Compute per-feature min/max for normalization
+    mins = [min(v[i] for v in vectors) for i in range(len(all_keys))]
+    maxs = [max(v[i] for v in vectors) for i in range(len(all_keys))]
+    ranges = [mx - mn if mx > mn else 1.0 for mn, mx in zip(mins, maxs)]
+
+    norm = [[((v[i] - mins[i]) / ranges[i]) for i in range(len(all_keys))] for v in vectors]
+
+    def _dist(a: list[float], b: list[float]) -> float:
+        return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+    # Greedy diverse selection
+    selected_idx: list[int] = [0]  # Start with highest-scoring (already sorted)
+    remaining = set(range(1, len(scored)))
+
+    for _ in range(k - 1):
+        if not remaining:
+            break
+        best_idx = -1
+        best_val = -1.0
+        for idx in remaining:
+            min_d = min(_dist(norm[idx], norm[s]) for s in selected_idx)
+            val = scored[idx].score * min_d
+            if val > best_val:
+                best_val = val
+                best_idx = idx
+        selected_idx.append(best_idx)
+        remaining.discard(best_idx)
+
+    return [scored[i] for i in selected_idx]
 
 
 @dataclass
@@ -149,6 +218,7 @@ class AdversarialFinder:
     chaos: bool = False
     variant_pair: VariantPair | None = None
     track_features: bool = False
+    screen_threshold: float = 0.01
 
     # ── public API ───────────────────────────────────────────────
 
@@ -195,7 +265,7 @@ class AdversarialFinder:
 
         reverse = self.objective == "maximize"
         found.sort(key=lambda s: s.score, reverse=reverse)
-        result = found[:self.top_k]
+        result = diverse_top_k(found, self.top_k)
 
         if self.track_features and feature_scores:
             self.feature_importance = {
@@ -253,7 +323,11 @@ class AdversarialFinder:
         )
 
     def _evaluate(self, scenario: dict, rng: random.Random) -> float:
-        """Serialize scenario to YAML, run via batch_run, return metric score."""
+        """Serialize scenario to YAML, run via batch_run, return metric score.
+
+        Uses two-phase progressive evaluation: a quick screen with 1 seed,
+        then full evaluation only if the quick score meets the threshold.
+        """
         from kubesim._native import batch_run
 
         study = scenario.get("study", scenario)
@@ -264,7 +338,287 @@ class AdversarialFinder:
         elif not study.get("variants"):
             study["variants"] = [{"name": "baseline", "scheduler": {"scoring": "LeastAllocated", "weight": 1}}]
 
+        # Use faster scheduling path during search
+        study["scheduling_strategy"] = "reverse_schedule"
+
         config_yaml = yaml.dump(scenario, default_flow_style=False)
+
+        # Phase 1: Quick screen with 1 seed
+        quick_raw = batch_run(config_yaml, [self.seeds[0]])
+        quick_results = [dict(r) if not isinstance(r, dict) else r for r in quick_raw]
+        quick_score = float(self.metric(quick_results))
+        if abs(quick_score) < self.screen_threshold:
+            self._last_results = quick_results
+            return quick_score
+
+        # Phase 2: Full evaluation with all seeds
         raw = batch_run(config_yaml, self.seeds)
         self._last_results = [dict(r) if not isinstance(r, dict) else r for r in raw]
         return float(self.metric(self._last_results))
+
+
+# ── Optuna-based Bayesian search ─────────────────────────────────
+
+# Workload archetype builders for Optuna (mirror Hypothesis strategies)
+_WORKLOAD_ARCHETYPES = {
+    "web_app": lambda trial, i: {
+        "type": "web_app",
+        "count": trial.suggest_int(f"w{i}_count", 1, 20),
+        "replicas": {
+            "min": trial.suggest_int(f"w{i}_rep_min", 2, 10),
+            "max": trial.suggest_int(f"w{i}_rep_max", 11, 50),
+        },
+        "churn": "low",
+        "traffic": "diurnal",
+    },
+    "batch_job": lambda trial, i: {
+        "type": "batch_job",
+        "count": trial.suggest_int(f"w{i}_count", 1, 30),
+        "priority": "low",
+    },
+    "ml_training": lambda trial, i: {
+        "type": "ml_training",
+        "count": trial.suggest_int(f"w{i}_count", 1, 10),
+        "replicas": {"fixed": 1},
+        "priority": "high",
+    },
+    "saas_microservice": lambda trial, i: {
+        "type": "saas_microservice",
+        "count": trial.suggest_int(f"w{i}_count", 1, 15),
+        "replicas": {
+            "min": trial.suggest_int(f"w{i}_rep_min", 3, 10),
+            "max": trial.suggest_int(f"w{i}_rep_max", 11, 200),
+        },
+        "churn": trial.suggest_categorical(f"w{i}_churn", ["low", "medium"]),
+    },
+    "overcommit": lambda trial, i: {
+        "type": "batch_job",
+        "count": trial.suggest_int(f"w{i}_count", 20, 100),
+        "priority": trial.suggest_categorical(f"w{i}_prio", ["low", "medium", "high"]),
+        "cpu_request": {"dist": "uniform", "min": "4000m", "max": "8000m"},
+        "memory_request": {"dist": "uniform", "min": "16384Mi", "max": "65536Mi"},
+    },
+    "anti_affinity": lambda trial, i: {
+        "type": "web_app",
+        "count": trial.suggest_int(f"w{i}_count", 1, 5),
+        "replicas": {
+            "min": trial.suggest_int(f"w{i}_rep_min", 3, 20),
+            "max": trial.suggest_int(f"w{i}_rep_max", 20, 50),
+        },
+        "churn": "low",
+        "traffic": "steady",
+        "pod_anti_affinity": {"topology_key": "kubernetes.io/hostname"},
+    },
+    "varying_batch": lambda trial, i: {
+        "type": "batch_job",
+        "count": trial.suggest_int(f"w{i}_count", 5, 50),
+        "priority": trial.suggest_categorical(f"w{i}_prio", ["low", "medium", "high"]),
+    },
+    "gpu_on_non_gpu": lambda trial, i: {
+        "type": "ml_training",
+        "count": trial.suggest_int(f"w{i}_count", 1, 5),
+        "replicas": {"fixed": 1},
+        "priority": "high",
+        "gpu_request": {"dist": "choice", "values": [1, 2, 4, 8]},
+    },
+    "extreme_replicas": lambda trial, i: {
+        "type": "web_app",
+        "count": 1,
+        "replicas": {
+            "min": trial.suggest_int(f"w{i}_rep_min", 50, 200),
+            "max": trial.suggest_int(f"w{i}_rep_max", 200, 400),
+        },
+        "churn": "low",
+        "traffic": "steady",
+    },
+}
+
+
+@dataclass
+class OptunaAdversarialSearch:
+    """Bayesian optimization search for adversarial scenarios using Optuna TPE.
+
+    Drop-in replacement for the Hypothesis-based search loop. Reuses existing
+    objective functions, batch_run, and scenario infrastructure.
+
+    Args:
+        objective_fn: Callable receiving list of result dicts, returning float to maximize.
+        seeds: Seeds passed to ``batch_run`` per evaluation.
+        budget: Maximum number of trials (scenario evaluations).
+        screen_threshold: Quick-screen cutoff for progressive eval.
+        top_k: Number of top scenarios to return.
+        workload_types: Workload archetypes to include in search space.
+        max_pools: Maximum node pools per scenario.
+        max_nodes: Maximum nodes per pool.
+        variant_pair: Optional variant pair to inject into scenarios.
+        chaos: If True, use chaos-style search space.
+    """
+
+    objective_fn: Callable[[list[dict]], float]
+    seeds: list[int] = field(default_factory=lambda: [42])
+    budget: int = 500
+    screen_threshold: float = 0.01
+    top_k: int = 10
+    workload_types: list[str] | None = None
+    max_pools: int = 3
+    max_nodes: int = 200
+    variant_pair: VariantPair | None = None
+    chaos: bool = False
+
+    def _build_scenario(self, trial) -> dict:
+        """Map Optuna trial parameters to a scenario config dict."""
+        import optuna
+
+        n_pools = trial.suggest_int("n_pools", 1, self.max_pools)
+        pools = []
+        for p in range(n_pools):
+            if self.chaos:
+                # Single-instance pool for chaos
+                it = trial.suggest_categorical(f"pool{p}_it", INSTANCE_TYPES + TINY_INSTANCE_TYPES)
+                pool = {
+                    "instance_types": [it],
+                    "min_nodes": 1,
+                    "max_nodes": trial.suggest_int(f"pool{p}_max", 5, self.max_nodes),
+                }
+            else:
+                n_types = trial.suggest_int(f"pool{p}_n_types", 1, 6)
+                # Pick instance types by index to keep search space consistent
+                its = []
+                for t in range(n_types):
+                    idx = trial.suggest_int(f"pool{p}_it{t}", 0, len(INSTANCE_TYPES) - 1)
+                    it = INSTANCE_TYPES[idx]
+                    if it not in its:
+                        its.append(it)
+                if not its:
+                    its = [INSTANCE_TYPES[0]]
+                max_n = max(5, self.max_nodes)
+                min_cap = min(10, max_n - 1)
+                pool = {
+                    "instance_types": its,
+                    "min_nodes": trial.suggest_int(f"pool{p}_min", 0, max(0, min_cap)),
+                    "max_nodes": trial.suggest_int(f"pool{p}_max", max(1, min_cap + 1), max_n),
+                }
+            # Optional karpenter config
+            if trial.suggest_categorical(f"pool{p}_karp", [True, False]):
+                pool["karpenter"] = {
+                    "consolidation": {
+                        "policy": trial.suggest_categorical(
+                            f"pool{p}_consol", CONSOLIDATION_POLICIES
+                        ),
+                        "consolidateAfter": f"{trial.suggest_int(f'pool{p}_consol_after_s', 0, 1800)}s",
+                    },
+                    "disruption": {
+                        "budgets": [{
+                            "nodes": trial.suggest_int(f"pool{p}_disruption_nodes", 1, 10),
+                            "percent": trial.suggest_int(f"pool{p}_disruption_pct", 5, 50),
+                        }],
+                    },
+                    "expireAfter": f"{trial.suggest_int(f'pool{p}_expire_h', 1, 720)}h",
+                    "batchIdleDuration": f"{trial.suggest_int(f'pool{p}_batch_idle_s', 1, 30)}s",
+                }
+            pools.append(pool)
+
+        types = self.workload_types or (ALL_WORKLOAD_TYPES if self.chaos else WORKLOAD_TYPES)
+        n_workloads = trial.suggest_int("n_workloads", 2, 6)
+        workloads = []
+        for w in range(n_workloads):
+            wtype = trial.suggest_categorical(f"w{w}_type", types)
+            builder = _WORKLOAD_ARCHETYPES.get(wtype)
+            if builder:
+                workloads.append(builder(trial, w))
+            else:
+                workloads.append({"type": wtype, "count": 1})
+
+        time_mode = "wall_clock"  # logical mode causes consolidation thrash (33M+ events)
+
+        scenario = {
+            "study": {
+                "name": f"optuna-{trial.number}",
+                "runs": 20,  # was 50 — reduce to limit memory; increase after resource monitor lands
+                "time_mode": time_mode,
+                "scheduling_strategy": "reverse_schedule",
+                "cluster": {"node_pools": pools},
+                "workloads": workloads,
+                "variants": [],
+                "metrics": {"compare": []},
+            }
+        }
+
+        # Traffic pattern
+        if self.chaos or trial.suggest_categorical("has_traffic", [True, False]):
+            scenario["study"]["traffic_pattern"] = {
+                "type": trial.suggest_categorical("traffic_type", TRAFFIC_PATTERNS),
+                "peak_multiplier": trial.suggest_float("traffic_peak", 1.5, 10.0),
+                "duration": trial.suggest_categorical("traffic_dur", ["12h", "24h", "48h"]),
+            }
+
+        if self.chaos:
+            scenario["study"]["scale_down_pattern"] = trial.suggest_categorical(
+                "scale_down", SCALE_DOWN_PATTERNS
+            )
+
+        return scenario
+
+    def _evaluate(self, scenario: dict) -> float:
+        """Evaluate a scenario with progressive screening."""
+        from kubesim._native import batch_run
+
+        study = scenario.get("study", scenario)
+
+        if self.variant_pair:
+            study["variants"] = [self.variant_pair.config_a, self.variant_pair.config_b]
+        elif not study.get("variants") or study["variants"] == []:
+            study["variants"] = [
+                {"name": "baseline", "scheduler": {"scoring": "LeastAllocated", "weight": 1}}
+            ]
+
+        study["scheduling_strategy"] = "reverse_schedule"
+        config_yaml = yaml.dump(scenario, default_flow_style=False)
+
+        # Phase 1: Quick screen
+        quick_raw = batch_run(config_yaml, [self.seeds[0]])
+        quick_results = [dict(r) if not isinstance(r, dict) else r for r in quick_raw]
+        quick_score = float(self.objective_fn(quick_results))
+        if abs(quick_score) < self.screen_threshold:
+            return quick_score
+
+        # Phase 2: Full evaluation
+        raw = batch_run(config_yaml, self.seeds)
+        results = [dict(r) if not isinstance(r, dict) else r for r in raw]
+        return float(self.objective_fn(results))
+
+    def run(self) -> list[ScoredScenario]:
+        """Execute Optuna TPE search and return top-k scored scenarios."""
+        import optuna
+
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        study = optuna.create_study(direction="maximize")
+
+        scenarios: dict[int, dict] = {}
+
+        def objective(trial):
+            try:
+                scenario = self._build_scenario(trial)
+            except Exception:
+                return float("-inf")
+            scenarios[trial.number] = scenario
+            try:
+                return self._evaluate(scenario)
+            except Exception:
+                return float("-inf")
+
+        study.optimize(objective, n_trials=self.budget, catch=(Exception,))
+
+        # Collect all completed trials as ScoredScenario
+        scored = []
+        for trial in study.trials:
+            if trial.value is not None and trial.value > float("-inf"):
+                scenario = scenarios.get(trial.number, {})
+                scored.append(ScoredScenario(
+                    scenario=scenario,
+                    score=trial.value,
+                    seed=0,
+                ))
+
+        scored.sort(key=lambda s: s.score, reverse=True)
+        return diverse_top_k(scored, self.top_k)

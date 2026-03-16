@@ -3,6 +3,8 @@
 use kubesim_core::*;
 use kubesim_ec2::Catalog;
 use kubesim_engine::{Event, EventHandler, NodeSpec, ScheduledEvent};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 use crate::nodepool::{NodePool, NodePoolUsage};
 use crate::provisioner;
@@ -26,6 +28,16 @@ pub struct ProvisioningHandler {
     pub reconcile_interval_ns: u64,
     /// Version profile (reserved for future version-specific provisioning behavior).
     pub version_profile: Option<VersionProfile>,
+    /// System overhead subtracted from node allocatable when checking pod fit.
+    pub overhead: Resources,
+    /// Percentage of raw capacity reserved for daemonsets.
+    pub daemonset_pct: u32,
+    /// Pods addressed by in-flight nodes (launched but not yet ready).
+    inflight_pods: usize,
+    /// Jitter range (ns) for batch window delay. Uniform ±jitter added to loop_interval_ns.
+    pub batch_jitter_ns: u64,
+    /// Seeded RNG for jitter. None = no jitter.
+    rng: Option<StdRng>,
 }
 
 impl ProvisioningHandler {
@@ -37,6 +49,11 @@ impl ProvisioningHandler {
             loop_interval_ns: 5_000_000_000, // 5s default
             reconcile_interval_ns: 10_000_000_000, // 10s default
             version_profile: None,
+            overhead: Resources::default(),
+            daemonset_pct: 0,
+            inflight_pods: 0,
+            batch_jitter_ns: 0,
+            rng: None,
         }
     }
 
@@ -44,6 +61,40 @@ impl ProvisioningHandler {
     pub fn with_version(mut self, profile: VersionProfile) -> Self {
         self.version_profile = Some(profile);
         self
+    }
+
+    /// Set system overhead for provisioning decisions.
+    pub fn with_overhead(mut self, overhead: Resources) -> Self {
+        self.overhead = overhead;
+        self
+    }
+
+    /// Set daemonset overhead percentage.
+    pub fn with_daemonset_pct(mut self, pct: u32) -> Self {
+        self.daemonset_pct = pct;
+        self
+    }
+
+    /// Set batch window jitter and seed the RNG.
+    pub fn with_batch_jitter(mut self, jitter_ns: u64, seed: u64) -> Self {
+        self.batch_jitter_ns = jitter_ns;
+        if jitter_ns > 0 {
+            self.rng = Some(StdRng::seed_from_u64(seed.wrapping_add(0xBA7C4)));
+        }
+        self
+    }
+
+    /// Compute the effective loop interval with optional jitter.
+    fn jittered_loop_interval(&mut self) -> u64 {
+        if self.batch_jitter_ns == 0 {
+            return self.loop_interval_ns;
+        }
+        if let Some(ref mut rng) = self.rng {
+            let jitter = rng.gen_range(0..=self.batch_jitter_ns * 2) as i64 - self.batch_jitter_ns as i64;
+            (self.loop_interval_ns as i64 + jitter).max(1) as u64
+        } else {
+            self.loop_interval_ns
+        }
     }
 }
 
@@ -55,11 +106,29 @@ impl EventHandler for ProvisioningHandler {
         state: &mut ClusterState,
     ) -> Vec<ScheduledEvent> {
         let Event::KarpenterProvisioningLoop = event else {
+            // On NodeReady, cap inflight to current pending count.
+            // Pods just got scheduled onto the newly-ready node, so inflight
+            // must not exceed the remaining pending pods.
+            if matches!(event, Event::NodeReady(_)) {
+                self.inflight_pods = self.inflight_pods.min(state.pending_queue.len());
+            }
             return Vec::new();
         };
 
+        // Skip if all pending pods are already addressed by in-flight nodes
+        if state.pending_queue.len() <= self.inflight_pods {
+            // Still re-schedule reconcile in case new pods arrive
+            if !state.pending_queue.is_empty() {
+                return vec![ScheduledEvent {
+                    time: SimTime(time.0 + self.reconcile_interval_ns),
+                    event: Event::KarpenterProvisioningLoop,
+                }];
+            }
+            return Vec::new();
+        }
+
         let decisions = provisioner::provision_versioned(
-            state, &self.catalog, &self.pool, &self.usage, self.version_profile.as_ref(),
+            state, &self.catalog, &self.pool, &self.usage, self.version_profile.as_ref(), &self.overhead, self.daemonset_pct,
         );
         let mut follow_ups = Vec::new();
 
@@ -83,24 +152,28 @@ impl EventHandler for ProvisioningHandler {
             });
         }
 
-        // Re-schedule the periodic reconcile loop unconditionally.
-        // This ensures evicted pods (from consolidation, spot interruptions, etc.)
-        // are always picked up even if no provisioning progress was made this round.
-        // If progress was made and more pending pods remain, also schedule an
+        // If progress was made and more pending pods remain, schedule an
         // immediate follow-up for faster convergence.
         let addressed_pods: usize = decisions.iter().map(|d| d.pod_ids.len()).sum();
+        self.inflight_pods += addressed_pods;
         if !decisions.is_empty() && state.pending_queue.len() > addressed_pods {
+            let interval = self.jittered_loop_interval();
             follow_ups.push(ScheduledEvent {
-                time: SimTime(time.0 + self.loop_interval_ns),
+                time: SimTime(time.0 + interval),
                 event: Event::KarpenterProvisioningLoop,
             });
         }
 
-        // Always schedule the next periodic reconcile
-        follow_ups.push(ScheduledEvent {
-            time: SimTime(time.0 + self.reconcile_interval_ns),
-            event: Event::KarpenterProvisioningLoop,
-        });
+        // Only schedule the next periodic reconcile if progress was made.
+        // When no decisions are produced (e.g. at max_nodes), stop looping
+        // to avoid burning event budget. The loop restarts on-demand when
+        // new pods are submitted or evicted.
+        if !decisions.is_empty() && !state.pending_queue.is_empty() {
+            follow_ups.push(ScheduledEvent {
+                time: SimTime(time.0 + self.reconcile_interval_ns),
+                event: Event::KarpenterProvisioningLoop,
+            });
+        }
 
         follow_ups
     }

@@ -1,6 +1,9 @@
 //! YAML scenario loader — parses scenario files and emits initial DES events.
 
-use kubesim_core::{Resources, SimTime};
+use kubesim_core::{
+    AffinityType, LabelSelector, LabelSet, PodAffinityTerm, Resources, SchedulingConstraints,
+    SimTime, TopologySpreadConstraint, WhenUnsatisfiable, NodeAffinityTerm,
+};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::path::Path;
@@ -157,6 +160,9 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
 
             let duration_ns = workload.duration.as_ref().and_then(|d| sample_duration(d, rng));
 
+            // Build scheduling constraints from workload definition
+            let (constraints, pod_labels) = build_scheduling_constraints(workload, owner_counter - 1);
+
             if replicas > 1 || workload.replicas.is_some() {
                 // Workload with replicas → emit ReplicaSet at staggered time
                 events.push(Event::ReplicaSetSubmitted {
@@ -167,6 +173,8 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     limits: requests,
                     priority,
                     deletion_cost_strategy: DeletionCostStrategy::None,
+                    scheduling_constraints: constraints,
+                    labels: pod_labels,
                 });
             } else {
                 // Bare pod
@@ -179,6 +187,8 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     priority,
                     deletion_cost: None,
                     duration_ns,
+                    scheduling_constraints: constraints,
+                    labels: pod_labels,
                 });
             }
 
@@ -218,6 +228,21 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     }
                 }
             }
+
+            // Emit scale-up events
+            if let Some(ref scale_ups) = workload.scale_up {
+                for su in scale_ups {
+                    if let Some(time_ns) = parse_duration_ns(&su.at) {
+                        if su.increase_to > replicas {
+                            events.push(Event::ReplicaSetScaleUp {
+                                time: SimTime(time_ns),
+                                owner_id: owner_id,
+                                increase_to: su.increase_to,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -237,6 +262,62 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
 
     events.sort_by_key(|e| e.time());
     events
+}
+
+/// Build SchedulingConstraints and LabelSet from a WorkloadDef.
+fn build_scheduling_constraints(workload: &WorkloadDef, owner_id: u32) -> (SchedulingConstraints, LabelSet) {
+    let mut constraints = SchedulingConstraints::default();
+    let mut labels = LabelSet::default();
+
+    // Set workload labels
+    labels.insert("app".into(), format!("workload-{}", owner_id));
+    if let Some(ref user_labels) = workload.labels {
+        for (k, v) in user_labels {
+            labels.insert(k.clone(), v.clone());
+        }
+    }
+
+    // Topology spread constraints
+    if let Some(ref tsc) = workload.topology_spread {
+        constraints.topology_spread.push(TopologySpreadConstraint {
+            max_skew: tsc.max_skew,
+            topology_key: tsc.topology_key.clone(),
+            when_unsatisfiable: WhenUnsatisfiable::DoNotSchedule,
+            label_selector: LabelSelector { match_labels: labels.clone() },
+        });
+    }
+
+    // Pod anti-affinity
+    if let Some(ref paa) = workload.pod_anti_affinity {
+        let affinity_type = if paa.affinity_type == "required" {
+            AffinityType::Required
+        } else {
+            AffinityType::Preferred { weight: paa.weight as i32 }
+        };
+        let selector_key = paa.label_key.clone();
+        let selector_value = paa.target_label_value.clone()
+            .unwrap_or_else(|| labels.get(&selector_key).unwrap_or("").to_string());
+        constraints.pod_affinity.push(PodAffinityTerm {
+            affinity_type,
+            label_selector: LabelSelector {
+                match_labels: LabelSet(vec![(selector_key, selector_value)]),
+            },
+            topology_key: paa.topology_key.clone(),
+            anti: true,
+        });
+    }
+
+    // Node selector → node affinity required terms
+    if let Some(ref ns) = workload.node_selector {
+        for (k, v) in ns {
+            constraints.node_affinity.push(NodeAffinityTerm {
+                affinity_type: AffinityType::Required,
+                match_labels: LabelSet(vec![(k.clone(), v.clone())]),
+            });
+        }
+    }
+
+    (constraints, labels)
 }
 
 /// Sample a concrete count from a ValueOrDist using the RNG.

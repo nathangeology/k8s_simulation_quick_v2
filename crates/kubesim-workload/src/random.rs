@@ -205,6 +205,8 @@ fn emit_web_app(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, start_
             priority: 0,
             deletion_cost: None,
             duration_ns: None,
+                    scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+                    labels: kubesim_core::LabelSet::default(),
         });
     }
     // HPA 15s after last pod
@@ -229,6 +231,8 @@ fn emit_ml_training(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, st
         priority: 100,
         deletion_cost: None,
         duration_ns: None,
+                    scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+                    labels: kubesim_core::LabelSet::default(),
     });
 }
 
@@ -248,6 +252,8 @@ fn emit_batch_job(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u32, star
             priority: -100,
             deletion_cost: None,
             duration_ns: None,
+                    scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+                    labels: kubesim_core::LabelSet::default(),
         });
     }
 }
@@ -268,6 +274,8 @@ fn emit_saas_microservice(rng: &mut StdRng, events: &mut Vec<Event>, owner_id: u
             priority: 0,
             deletion_cost: None,
             duration_ns: None,
+                    scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+                    labels: kubesim_core::LabelSet::default(),
         });
     }
     // HPA 15s after last pod

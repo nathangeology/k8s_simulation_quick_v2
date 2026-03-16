@@ -18,6 +18,7 @@ try:
     from kubesim.adversarial import (
         AdversarialFinder, ScenarioSpace, ScoredScenario,
         VariantPair, MOST_VS_LEAST, KARPENTER_CONSOLIDATION, DELETION_COST_PAIRS,
+        OptunaAdversarialSearch,
     )
 except ImportError:
     pass
@@ -39,6 +40,7 @@ __all__ = [
     "batch_run", "analysis",
     "AdversarialFinder", "ScenarioSpace", "ScoredScenario",
     "VariantPair", "MOST_VS_LEAST", "KARPENTER_CONSOLIDATION", "DELETION_COST_PAIRS",
+    "OptunaAdversarialSearch",
     "__version__",
 ]
 

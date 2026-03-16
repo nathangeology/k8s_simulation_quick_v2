@@ -5,11 +5,11 @@ use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
 
 use kubesim_core::{
-    ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeLifecycle, OwnerId, Pod, PodPhase,
-    PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime,
+    AffinityType, ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeId, NodeLifecycle, OwnerId, Pod, PodId, PodPhase,
+    PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime, WhenUnsatisfiable,
 };
 use kubesim_ec2::Catalog;
-use kubesim_engine::{DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
+use kubesim_engine::{DaemonSetHandler, DaemonSetSpec, DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
 use kubesim_karpenter::{
     ConsolidationHandler, ConsolidationPolicy, DrainHandler, NodePool, NodePoolLimits,
     ProvisioningHandler, SpotInterruptionHandler,
@@ -22,9 +22,11 @@ use kubesim_workload::{
     Event as WorkloadEvent, TimeMode as ScenarioTimeMode,
     generate_random_scenario, RandomScenarioConfig,
     RangeU32, InstanceWeight, ArchetypeWeights,
+    SchedulingStrategy,
 };
 
 use std::path::Path;
+use rand::SeedableRng;
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -89,20 +91,63 @@ fn parse_karpenter_version(s: &str) -> Option<KarpenterVersion> {
     }
 }
 
-fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
-    let (cpu, mem, gpu, cost) = catalog
-        .get(instance_type)
+/// Compute the system overhead Resources from scenario cluster config.
+fn compute_overhead(cluster: &kubesim_workload::ClusterConfig) -> Resources {
+    let (cpu, mem) = match &cluster.system_overhead {
+        Some(oh) => (oh.cpu_millis(), oh.memory_bytes()),
+        None => (0, 0),
+    };
+    Resources { cpu_millis: cpu, memory_bytes: mem, gpu: 0, ephemeral_bytes: 0 }
+}
+
+/// Build a DaemonSetHandler from scenario config.
+/// None → default (logging_daemonset), Some(empty) → no daemonsets, Some(list) → custom.
+fn daemonset_handler_from_scenario(defs: &Option<Vec<kubesim_workload::DaemonSetDef>>) -> DaemonSetHandler {
+    match defs {
+        None => DaemonSetHandler::with_defaults(),
+        Some(list) => DaemonSetHandler::new(
+            list.iter().map(|d| DaemonSetSpec {
+                name: d.name.clone(),
+                cpu_millis: d.cpu_millis(),
+                memory_bytes: d.memory_bytes(),
+            }).collect(),
+        ),
+    }
+}
+
+fn instance_to_node_with_pct(catalog: &Catalog, instance_type: &str, overhead: &Resources, daemonset_pct: u32) -> Node {
+    let it_spec = catalog.get(instance_type);
+    let (cpu, mem, gpu, cost, vcpu) = it_spec
         .map(|it| (
             it.vcpu as u64 * 1000,
             it.memory_gib as u64 * 1024 * 1024 * 1024,
             it.gpu_count,
             it.on_demand_price_per_hour,
+            it.vcpu,
         ))
-        .unwrap_or((4000, 16 * 1024 * 1024 * 1024, 0, 0.192));
+        .unwrap_or((4000, 16 * 1024 * 1024 * 1024, 0, 0.192, 4));
+
+    // Use EKS table overhead when no explicit flat overhead is set, otherwise use flat
+    let (oh_cpu, oh_mem) = if overhead.cpu_millis == 0 && overhead.memory_bytes == 0 {
+        kubesim_ec2::eks_overhead(vcpu)
+    } else {
+        (overhead.cpu_millis, overhead.memory_bytes)
+    };
+    let mut alloc_cpu = cpu.saturating_sub(oh_cpu);
+    let mut alloc_mem = mem.saturating_sub(oh_mem);
+    if daemonset_pct > 0 {
+        alloc_cpu = alloc_cpu.saturating_sub(cpu * daemonset_pct as u64 / 100);
+        alloc_mem = alloc_mem.saturating_sub(mem * daemonset_pct as u64 / 100);
+    }
 
     Node {
         instance_type: instance_type.to_string(),
-        allocatable: Resources { cpu_millis: cpu, memory_bytes: mem, gpu, ephemeral_bytes: 0 },
+        allocatable: Resources {
+            cpu_millis: alloc_cpu,
+            memory_bytes: alloc_mem,
+            gpu,
+            ephemeral_bytes: 0,
+        },
         allocated: Resources::default(),
         pods: Default::default(),
         conditions: NodeConditions { ready: true, ..Default::default() },
@@ -117,12 +162,137 @@ fn instance_to_node(catalog: &Catalog, instance_type: &str) -> Node {
     }
 }
 
+// ── Domain budget for ReverseSchedule ───────────────────────────
+
+/// Tracks per-owner, per-topology-key pod counts across domains for fast constraint checking.
+struct DomainBudget {
+    /// (owner_id, topology_key) -> (max_per_domain, domain_value -> current_count)
+    budgets: std::collections::HashMap<(OwnerId, String), (u32, std::collections::HashMap<String, u32>)>,
+}
+
+impl DomainBudget {
+    fn new() -> Self { Self { budgets: std::collections::HashMap::new() } }
+
+    fn register(&mut self, owner: OwnerId, topology_key: String, max_skew: u32) {
+        self.budgets.entry((owner, topology_key)).or_insert((max_skew, std::collections::HashMap::new()));
+    }
+
+    fn has_room(&self, owner: OwnerId, topology_key: &str, domain_value: &str) -> bool {
+        match self.budgets.get(&(owner, topology_key.to_string())) {
+            Some((max_skew, counts)) => {
+                let current = counts.get(domain_value).copied().unwrap_or(0);
+                // In ReverseSchedule, nodes arrive one at a time. Using global
+                // skew (current+1 - min) allows overpacking when few domains
+                // exist. Instead, enforce a hard cap: at most max_skew pods per
+                // domain. This is equivalent to the skew constraint when all
+                // domains are evenly filled (the steady-state goal).
+                current < *max_skew
+            }
+            None => true,
+        }
+    }
+
+    fn record_placement(&mut self, owner: OwnerId, topology_key: &str, domain_value: &str) {
+        if let Some((_, counts)) = self.budgets.get_mut(&(owner, topology_key.to_string())) {
+            *counts.entry(domain_value.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    fn register_domain(&mut self, topology_key: &str, domain_value: &str) {
+        for ((_, tk), (_, counts)) in &mut self.budgets {
+            if tk == topology_key {
+                counts.entry(domain_value.to_string()).or_insert(0);
+            }
+        }
+    }
+}
+
+// ── Capacity-waiting queue for ReverseSchedule O(1) NodeReady ────
+
+/// Pods waiting for new node capacity, grouped by constraint class.
+/// On NodeReady, pop from the appropriate queue instead of scanning all pending.
+struct CapacityWaitQueue {
+    /// Pods with spread/anti-affinity constraints, keyed by owner.
+    constrained: std::collections::HashMap<OwnerId, std::collections::VecDeque<PodId>>,
+    /// Pods with no placement constraints (can go on any node).
+    unconstrained: std::collections::VecDeque<PodId>,
+    /// Track which pods are in the queue for O(1) staleness checks.
+    in_queue: std::collections::HashSet<PodId>,
+}
+
+impl CapacityWaitQueue {
+    fn new() -> Self {
+        Self {
+            constrained: std::collections::HashMap::new(),
+            unconstrained: std::collections::VecDeque::new(),
+            in_queue: std::collections::HashSet::new(),
+        }
+    }
+
+    fn add_constrained(&mut self, owner: OwnerId, pod_id: PodId) {
+        if self.in_queue.insert(pod_id) {
+            self.constrained.entry(owner).or_default().push_back(pod_id);
+        }
+    }
+
+    fn add_unconstrained(&mut self, pod_id: PodId) {
+        if self.in_queue.insert(pod_id) {
+            self.unconstrained.push_back(pod_id);
+        }
+    }
+
+    fn remove(&mut self, pod_id: PodId) {
+        self.in_queue.remove(&pod_id);
+        // Lazy removal: stale entries are skipped when popped.
+    }
+
+    fn contains(&self, pod_id: PodId) -> bool {
+        self.in_queue.contains(&pod_id)
+    }
+}
+
 // ── Combined event handler ──────────────────────────────────────
 
 struct SimHandler {
     scheduler: Scheduler,
     metrics: MetricsCollector,
     catalog: Catalog,
+    overhead: Resources,
+    daemonset_pct: u32,
+    node_startup_ns: u64,
+    node_startup_jitter_ns: u64,
+    pod_startup_ns: u64,
+    pod_startup_jitter_ns: u64,
+    /// Seeded RNG for delay jitter. None = no jitter.
+    rng: Option<rand::rngs::StdRng>,
+    /// Counter for generating unique node hostnames.
+    node_counter: u32,
+    /// Scheduling strategy (FullScan, HintBased, Partitioned).
+    strategy: SchedulingStrategy,
+    /// HintBased: maps pod to its expected node launch index.
+    pod_node_hints: std::collections::HashMap<PodId, usize>,
+    /// HintBased: NodeIds in launch order.
+    launched_nodes: Vec<NodeId>,
+    /// Budget-based domain tracking for ReverseSchedule constraint enforcement.
+    domain_budget: DomainBudget,
+    /// Capacity-waiting queue for O(1) NodeReady in ReverseSchedule.
+    wait_queue: CapacityWaitQueue,
+}
+
+impl SimHandler {
+    /// Compute a delay with optional uniform jitter.
+    fn jittered_delay(&mut self, base_ns: u64, jitter_ns: u64) -> u64 {
+        if jitter_ns == 0 {
+            return base_ns;
+        }
+        if let Some(ref mut rng) = self.rng {
+            use rand::Rng;
+            let j = rng.gen_range(0..=jitter_ns * 2) as i64 - jitter_ns as i64;
+            (base_ns as i64 + j).max(1) as u64
+        } else {
+            base_ns
+        }
+    }
 }
 
 impl kubesim_engine::EventHandler for SimHandler {
@@ -151,22 +321,69 @@ impl kubesim_engine::EventHandler for SimHandler {
                     labels: spec.labels.clone(),
                     do_not_disrupt: spec.do_not_disrupt,
                     duration_ns,
+                    is_daemonset: false,
                 };
                 let pod_id = state.submit_pod(pod);
 
-                if let kubesim_scheduler::ScheduleResult::Bound(node_id) =
-                    self.scheduler.schedule_one(state, pod_id)
-                {
-                    state.bind_pod(pod_id, node_id);
-                    // Schedule PodCompleted if duration is set
-                    if let Some(dur) = duration_ns {
-                        return vec![kubesim_engine::ScheduledEvent {
-                            time: SimTime(time.0 + dur),
-                            event: EngineEvent::PodCompleted(pod_id),
-                        }];
+                // Register spread/anti-affinity constraints in budget for ReverseSchedule
+                if self.strategy == SchedulingStrategy::ReverseSchedule {
+                    for constraint in &spec.scheduling_constraints.topology_spread {
+                        if constraint.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule {
+                            self.domain_budget.register(
+                                spec.owner,
+                                constraint.topology_key.clone(),
+                                constraint.max_skew,
+                            );
+                        }
                     }
-                } else {
-                    // Pod couldn't be scheduled — trigger provisioning
+                    for term in &spec.scheduling_constraints.pod_affinity {
+                        if term.anti && matches!(term.affinity_type, AffinityType::Required)
+                            && term.topology_key == "kubernetes.io/hostname"
+                        {
+                            if spec.labels.matches(&term.label_selector) {
+                                self.domain_budget.register(
+                                    spec.owner,
+                                    term.topology_key.clone(),
+                                    1,
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Short-circuit: skip scheduling if no ready nodes exist
+                let has_ready_nodes = state.nodes.iter().any(|(_, n)| n.conditions.ready && !n.cordoned);
+                if has_ready_nodes {
+                    if let kubesim_scheduler::ScheduleResult::Bound(node_id) =
+                        self.scheduler.schedule_one(state, pod_id)
+                    {
+                        state.bind_pod(pod_id, node_id);
+                        // Schedule PodCompleted if duration is set
+                        if let Some(dur) = duration_ns {
+                            return vec![kubesim_engine::ScheduledEvent {
+                                time: SimTime(time.0 + dur),
+                                event: EngineEvent::PodCompleted(pod_id),
+                            }];
+                        }
+                        return follow_ups;
+                    }
+                }
+                // Pod unschedulable — handle wait queue and trigger provisioning
+                {
+                    // Pod couldn't be scheduled — add to wait queue for ReverseSchedule
+                    if self.strategy == SchedulingStrategy::ReverseSchedule {
+                        let has_constraints = !spec.scheduling_constraints.topology_spread.is_empty()
+                            || spec.scheduling_constraints.pod_affinity.iter().any(|t| {
+                                t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                    && t.topology_key == "kubernetes.io/hostname"
+                            });
+                        if has_constraints {
+                            self.wait_queue.add_constrained(spec.owner, pod_id);
+                        } else {
+                            self.wait_queue.add_unconstrained(pod_id);
+                        }
+                    }
+                    // Trigger provisioning
                     return vec![kubesim_engine::ScheduledEvent {
                         time: SimTime(time.0 + 1),
                         event: EngineEvent::KarpenterProvisioningLoop,
@@ -175,37 +392,269 @@ impl kubesim_engine::EventHandler for SimHandler {
                 Vec::new()
             }
             EngineEvent::NodeLaunching(spec) => {
-                let mut node = instance_to_node(&self.catalog, &spec.instance_type);
+                let mut node = instance_to_node_with_pct(&self.catalog, &spec.instance_type, &self.overhead, self.daemonset_pct);
                 node.labels = spec.labels.clone();
                 node.taints = spec.taints.iter().cloned().collect();
                 node.pool_name = spec.pool_name.clone();
                 node.do_not_disrupt = spec.do_not_disrupt;
+                node.created_at = time;
+                // Auto-assign kubernetes.io/hostname (unique per node) and zone labels
+                let node_num = self.node_counter;
+                self.node_counter += 1;
+                node.labels.insert("kubernetes.io/hostname".into(), format!("node-{}", node_num));
+                let zones = ["us-east-1a", "us-east-1b", "us-east-1c"];
+                node.labels.insert("topology.kubernetes.io/zone".into(), zones[(node_num as usize) % zones.len()].into());
+                if self.node_startup_ns > 0 {
+                    node.conditions.ready = false; // not ready until NodeReady fires
+                }
                 let node_id = state.add_node(node);
-                // Try to schedule pending pods onto the new node
-                let pending: Vec<_> = state.pending_queue.clone();
-                for pod_id in pending {
-                    if let kubesim_scheduler::ScheduleResult::Bound(nid) =
-                        self.scheduler.schedule_one(state, pod_id)
-                    {
-                        state.bind_pod(pod_id, nid);
+                // HintBased: record launch order and snapshot pending pods as hints
+                if self.strategy == SchedulingStrategy::HintBased {
+                    let launch_idx = self.launched_nodes.len();
+                    self.launched_nodes.push(node_id);
+                    for &pid in &state.pending_queue {
+                        self.pod_node_hints.entry(pid).or_insert(launch_idx);
                     }
                 }
+                // Incrementally update scheduler caches — new topology domain
+                if let Some(n) = state.nodes.get(node_id) {
+                    self.scheduler.on_node_added(n);
+                }
+                // Try to schedule pending pods onto the new node (only if instant startup)
+                // Skip for ReverseSchedule — scheduling happens in NodeReady via budget.
+                if self.node_startup_ns == 0 && self.strategy != SchedulingStrategy::ReverseSchedule {
+                    let pending: Vec<_> = state.pending_queue.clone();
+                    self.scheduler.schedule_pending_from(state, &pending);
+                }
+                let startup_delay = self.jittered_delay(self.node_startup_ns, self.node_startup_jitter_ns);
                 vec![kubesim_engine::ScheduledEvent {
-                    time: SimTime(time.0 + 1),
+                    time: SimTime(time.0 + startup_delay.max(1)),
                     event: EngineEvent::NodeReady(node_id),
                 }]
+            }
+            EngineEvent::NodeReady(node_id) => {
+                // Mark node ready and schedule pending pods onto it
+                if let Some(n) = state.nodes.get_mut(*node_id) {
+                    n.conditions.ready = true;
+                }
+                match self.strategy {
+                    SchedulingStrategy::FullScan => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        self.scheduler.schedule_pending_from(state, &pending);
+                    }
+                    SchedulingStrategy::HintBased => {
+                        // Bind hinted pods for this node first
+                        if let Some(launch_idx) = self.launched_nodes.iter().position(|&nid| nid == *node_id) {
+                            let hinted: Vec<PodId> = self.pod_node_hints.iter()
+                                .filter(|(_, &idx)| idx == launch_idx)
+                                .map(|(&pid, _)| pid)
+                                .collect();
+                            if !hinted.is_empty() {
+                                self.scheduler.schedule_pending_from(state, &hinted);
+                            }
+                            for pid in &hinted {
+                                self.pod_node_hints.remove(pid);
+                            }
+                        }
+                        // Fall back to normal scheduling for remaining pending pods
+                        if !state.pending_queue.is_empty() {
+                            let remaining: Vec<_> = state.pending_queue.clone();
+                            self.scheduler.schedule_pending_from(state, &remaining);
+                        }
+                    }
+                    SchedulingStrategy::Partitioned => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        let (unconstrained, constrained): (Vec<_>, Vec<_>) = pending.iter().partition(|&&pid| {
+                            state.pods.get(pid).map_or(true, |p| {
+                                p.scheduling_constraints.topology_spread.is_empty()
+                                && !p.scheduling_constraints.pod_affinity.iter().any(|t| t.anti && matches!(t.affinity_type, AffinityType::Required))
+                            })
+                        });
+                        if !unconstrained.is_empty() {
+                            let ids: Vec<PodId> = unconstrained.into_iter().copied().collect();
+                            self.scheduler.schedule_pending_from(state, &ids);
+                        }
+                        let mut seen_owners = std::collections::HashSet::new();
+                        let deduped: Vec<PodId> = constrained.into_iter()
+                            .filter(|&&pid| state.pods.get(pid).map_or(false, |p| seen_owners.insert(p.owner)))
+                            .copied()
+                            .collect();
+                        if !deduped.is_empty() {
+                            self.scheduler.schedule_pending_from(state, &deduped);
+                        }
+                    }
+                    SchedulingStrategy::NodePruning => {
+                        let pending: Vec<_> = state.pending_queue.clone();
+                        let before = state.pending_queue.len();
+                        self.scheduler.schedule_pending_from(state, &pending);
+                        // After scheduling, mark nodes that are full
+                        let bound_count = before - state.pending_queue.len();
+                        if bound_count > 0 {
+                            let min_cpu = state.pending_queue.iter()
+                                .filter_map(|&pid| state.pods.get(pid))
+                                .map(|p| p.requests.cpu_millis)
+                                .min()
+                                .unwrap_or(0);
+                            for (nid, node) in state.nodes.iter() {
+                                if !node.conditions.ready || node.cordoned { continue; }
+                                let avail = node.allocatable.saturating_sub(&node.allocated);
+                                if avail.cpu_millis < min_cpu {
+                                    self.scheduler.mark_saturated(nid);
+                                }
+                            }
+                        }
+                    }
+                    SchedulingStrategy::ReverseSchedule => {
+                        let hostname = state.nodes.get(*node_id)
+                            .and_then(|n| n.labels.get("kubernetes.io/hostname").map(|s| s.to_string()))
+                            .unwrap_or_default();
+
+                        // Register new node's domain in all budgets
+                        if !hostname.is_empty() {
+                            self.domain_budget.register_domain("kubernetes.io/hostname", &hostname);
+                        }
+
+                        let mut to_bind: Vec<PodId> = Vec::new();
+                        if let Some(node) = state.nodes.get(*node_id) {
+                            let mut remaining = node.allocatable.saturating_sub(&node.allocated);
+
+                            // Phase 1: Place constrained pods using budget
+                            let owners: Vec<OwnerId> = self.wait_queue.constrained.keys().copied().collect();
+                            for owner in owners {
+                                if remaining.cpu_millis == 0 { break; }
+                                let queue = match self.wait_queue.constrained.get_mut(&owner) {
+                                    Some(q) if !q.is_empty() => q,
+                                    _ => continue,
+                                };
+                                // Pop stale entries from front
+                                while let Some(&pod_id) = queue.front() {
+                                    if !self.wait_queue.in_queue.contains(&pod_id) {
+                                        queue.pop_front();
+                                        continue;
+                                    }
+                                    match state.pods.get(pod_id) {
+                                        Some(p) if p.phase == PodPhase::Pending => break,
+                                        _ => { queue.pop_front(); self.wait_queue.in_queue.remove(&pod_id); continue; }
+                                    }
+                                }
+                                let pod_id = match queue.front().copied() {
+                                    Some(id) => id,
+                                    None => continue,
+                                };
+                                let pod = match state.pods.get(pod_id) {
+                                    Some(p) => p,
+                                    None => { queue.pop_front(); self.wait_queue.in_queue.remove(&pod_id); continue; }
+                                };
+                                if !pod.requests.fits_in(&remaining) { continue; }
+
+                                // Check budget for all constraint keys
+                                let mut budget_ok = true;
+                                for c in &pod.scheduling_constraints.topology_spread {
+                                    if c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule
+                                        && !self.domain_budget.has_room(owner, &c.topology_key, &hostname)
+                                    {
+                                        budget_ok = false;
+                                        break;
+                                    }
+                                }
+                                if budget_ok {
+                                    for t in &pod.scheduling_constraints.pod_affinity {
+                                        if t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                            && t.topology_key == "kubernetes.io/hostname"
+                                            && pod.labels.matches(&t.label_selector)
+                                            && !self.domain_budget.has_room(owner, "kubernetes.io/hostname", &hostname)
+                                        {
+                                            budget_ok = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !budget_ok { continue; }
+
+                                // Record placement
+                                for c in &pod.scheduling_constraints.topology_spread {
+                                    if c.when_unsatisfiable == WhenUnsatisfiable::DoNotSchedule {
+                                        self.domain_budget.record_placement(owner, &c.topology_key, &hostname);
+                                    }
+                                }
+                                for t in &pod.scheduling_constraints.pod_affinity {
+                                    if t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                        && t.topology_key == "kubernetes.io/hostname"
+                                    {
+                                        self.domain_budget.record_placement(owner, "kubernetes.io/hostname", &hostname);
+                                    }
+                                }
+
+                                queue.pop_front();
+                                self.wait_queue.in_queue.remove(&pod_id);
+                                remaining = remaining.saturating_sub(&pod.requests);
+                                to_bind.push(pod_id);
+                            }
+
+                            // Phase 2: Fill remaining capacity with unconstrained pods
+                            while remaining.cpu_millis > 0 {
+                                let pod_id = match self.wait_queue.unconstrained.pop_front() {
+                                    Some(id) => id,
+                                    None => break,
+                                };
+                                if !self.wait_queue.in_queue.remove(&pod_id) { continue; }
+                                let pod = match state.pods.get(pod_id) {
+                                    Some(p) if p.phase == PodPhase::Pending => p,
+                                    _ => continue,
+                                };
+                                if pod.requests.fits_in(&remaining) {
+                                    remaining = remaining.saturating_sub(&pod.requests);
+                                    to_bind.push(pod_id);
+                                } else {
+                                    // Put it back — node is full
+                                    self.wait_queue.unconstrained.push_front(pod_id);
+                                    self.wait_queue.in_queue.insert(pod_id);
+                                    break;
+                                }
+                            }
+                        }
+
+                        for pid in &to_bind {
+                            state.bind_pod(*pid, *node_id);
+                        }
+                    }
+                }
+                // Trigger provisioning if pods are still pending
+                if !state.pending_queue.is_empty() {
+                    return vec![kubesim_engine::ScheduledEvent {
+                        time: SimTime(time.0 + 1),
+                        event: EngineEvent::KarpenterProvisioningLoop,
+                    }];
+                }
+                Vec::new()
             }
             EngineEvent::KarpenterProvisioningLoop => {
                 // Try to schedule pending pods onto existing nodes before the
                 // provisioner launches new ones. This catches evicted pods that
                 // were returned to pending by DrainHandler.
-                let pending: Vec<_> = state.pending_queue.clone();
-                for pod_id in pending {
-                    if let kubesim_scheduler::ScheduleResult::Bound(nid) =
-                        self.scheduler.schedule_one(state, pod_id)
-                    {
-                        state.bind_pod(pod_id, nid);
+                // Skip for ReverseSchedule — scheduling happens in NodeReady via budget.
+                if self.strategy == SchedulingStrategy::ReverseSchedule {
+                    // Re-enqueue evicted pods that landed back in pending_queue
+                    for &pod_id in &state.pending_queue {
+                        if self.wait_queue.contains(pod_id) { continue; }
+                        let pod = match state.pods.get(pod_id) {
+                            Some(p) if p.phase == PodPhase::Pending => p,
+                            _ => continue,
+                        };
+                        let has_constraints = !pod.scheduling_constraints.topology_spread.is_empty()
+                            || pod.scheduling_constraints.pod_affinity.iter().any(|t| {
+                                t.anti && matches!(t.affinity_type, AffinityType::Required)
+                                    && t.topology_key == "kubernetes.io/hostname"
+                            });
+                        if has_constraints {
+                            self.wait_queue.add_constrained(pod.owner, pod_id);
+                        } else {
+                            self.wait_queue.add_unconstrained(pod_id);
+                        }
                     }
+                } else {
+                    let pending: Vec<_> = state.pending_queue.clone();
+                    self.scheduler.schedule_pending_from(state, &pending);
                 }
                 Vec::new()
             }
@@ -221,9 +670,14 @@ impl kubesim_engine::EventHandler for SimHandler {
             }
             EngineEvent::NodeTerminated(node_id) => {
                 state.remove_node(*node_id);
+                // Invalidate scheduler caches — topology domains changed
+                self.scheduler.invalidate_caches();
+                self.scheduler.clear_saturated();
                 Vec::new()
             }
             EngineEvent::PodCompleted(pod_id) => {
+                // Remove from wait queue if present (stale entry)
+                self.wait_queue.remove(*pod_id);
                 if let Some(pod) = state.pods.get_mut(*pod_id) {
                     pod.phase = PodPhase::Succeeded;
                     if let Some(node_id) = pod.node.take() {
@@ -373,6 +827,8 @@ fn run_single(
 ) -> SimRunResult {
     let provider = scenario.study.catalog_provider;
     let catalog = Catalog::for_provider(provider).expect("embedded catalog");
+    let overhead = compute_overhead(&scenario.study.cluster);
+    let daemonset_pct = scenario.study.cluster.daemonset_overhead_percent.unwrap_or(0);
 
     let mut state = ClusterState::new();
     let mut engine = Engine::new(time_mode);
@@ -386,18 +842,19 @@ fn run_single(
     for we in workload_events {
         match we {
             WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
-                let mut node = instance_to_node(&catalog, instance_type);
+                let mut node = instance_to_node_with_pct(&catalog, instance_type, &overhead, daemonset_pct);
                 node.pool_name = resolve_pool_name(&scenario.study.cluster.node_pools, *pool_index);
-                state.add_node(node);
+                let node_id = state.add_node(node);
+                engine.schedule(SimTime(0), EngineEvent::NodeReady(node_id));
             }
-            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
+            WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, scheduling_constraints, labels, .. } => {
                 engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
                     requests: *requests,
                     limits: *limits,
                     owner: OwnerId(*owner_id),
                     priority: *priority,
-                    labels: LabelSet::default(),
-                    scheduling_constraints: SchedulingConstraints::default(),
+                    labels: labels.clone(),
+                    scheduling_constraints: scheduling_constraints.clone(),
                     do_not_disrupt: workload_name == "batch_job",
                     duration_ns: *duration_ns,
                 }));
@@ -421,7 +878,7 @@ fn run_single(
                 engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
             }
             WorkloadEvent::ReplicaSetSubmitted {
-                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy,
+                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, scheduling_constraints, labels,
             } => {
                 let owner = OwnerId(*owner_id);
                 state.add_replica_set(ReplicaSet {
@@ -431,8 +888,8 @@ fn run_single(
                         requests: *requests,
                         limits: *limits,
                         priority: *priority,
-                        labels: LabelSet::default(),
-                        scheduling_constraints: SchedulingConstraints::default(),
+                        labels: labels.clone(),
+                        scheduling_constraints: scheduling_constraints.clone(),
                     },
                     deletion_cost_strategy: *deletion_cost_strategy,
                 });
@@ -444,17 +901,52 @@ fn run_single(
                     EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
                 );
             }
+            WorkloadEvent::ReplicaSetScaleUp { time, owner_id, increase_to } => {
+                // increase_to is absolute target; ScaleUp engine event adds to current.
+                // We pass increase_to and let the RS handler set desired_replicas directly.
+                engine.schedule(
+                    *time,
+                    EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *increase_to),
+                );
+            }
             _ => {}
         }
     }
 
+    let delays = &scenario.study.cluster.delays;
+    let has_jitter = delays.node_startup_jitter_ns() > 0
+        || delays.pod_startup_jitter_ns() > 0
+        || delays.provisioner_batch_jitter_ns() > 0;
     let handler = SimHandler {
-        scheduler: Scheduler::new(SchedulerProfile::with_scoring("default", scoring)),
+        scheduler: if has_jitter || true {
+            // Always use seeded scheduler for reproducible tie-breaking when seed varies
+            Scheduler::with_seed(SchedulerProfile::with_scoring("default", scoring), seed)
+        } else {
+            Scheduler::new(SchedulerProfile::with_scoring("default", scoring))
+        },
         metrics: MetricsCollector::new(RustMetricsConfig::default()),
         catalog: Catalog::for_provider(provider).expect("embedded catalog"),
+        overhead,
+        daemonset_pct,
+        node_startup_ns: delays.node_startup_ns(),
+        node_startup_jitter_ns: delays.node_startup_jitter_ns(),
+        pod_startup_ns: delays.pod_startup_ns(),
+        pod_startup_jitter_ns: delays.pod_startup_jitter_ns(),
+        rng: if has_jitter {
+            Some(rand::rngs::StdRng::seed_from_u64(seed.wrapping_add(0xDE1A0)))
+        } else {
+            None
+        },
+        node_counter: 0,
+        strategy: scenario.study.scheduling_strategy,
+        pod_node_hints: std::collections::HashMap::new(),
+        launched_nodes: Vec::new(),
+        domain_budget: DomainBudget::new(),
+        wait_queue: CapacityWaitQueue::new(),
     };
     engine.add_handler(Box::new(handler));
     engine.add_handler(Box::new(ReplicaSetController));
+    engine.add_handler(Box::new(daemonset_handler_from_scenario(&scenario.study.cluster.daemonsets)));
 
     // Register karpenter handlers for pools that have karpenter config
     let version_profile = variant
@@ -480,7 +972,15 @@ fn run_single(
             let mut prov = ProvisioningHandler::new(
                 Catalog::for_provider(provider).expect("embedded catalog"),
                 pool.clone(),
-            );
+            ).with_overhead(overhead).with_daemonset_pct(daemonset_pct);
+            let batch_ns = delays.provisioner_batch_ns();
+            if batch_ns > 0 {
+                prov.loop_interval_ns = batch_ns;
+            }
+            let batch_jitter_ns = delays.provisioner_batch_jitter_ns();
+            if batch_jitter_ns > 0 {
+                prov = prov.with_batch_jitter(batch_jitter_ns, seed);
+            }
             if let Some(ref vp) = version_profile {
                 prov = prov.with_version(vp.clone());
             }
@@ -497,6 +997,8 @@ fn run_single(
 
             let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
                 .with_catalog(Catalog::for_provider(provider).expect("embedded catalog"));
+            consol.overhead = overhead;
+            consol.daemonset_pct = daemonset_pct;
             if let Some(ref vp) = version_profile {
                 let mut vp = vp.clone();
                 let effective_db = variant.and_then(|v| v.disruption_budget.as_ref()).or(pool_def.disruption_budget.as_ref());
@@ -528,7 +1030,12 @@ fn run_single(
         }
     }
 
-    let events_processed = engine.run_to_completion(&mut state);
+    // Compute sim end time: last workload event + 15 min stabilization
+    let max_event_time_ns = workload_events.iter().map(|e| e.time().0).max().unwrap_or(0);
+    let stabilization_ns = 15 * 60 * 1_000_000_000u64; // 15 minutes
+    let max_sim_time_ns = max_event_time_ns + stabilization_ns;
+
+    let events_processed = engine.run_until(&mut state, SimTime(max_sim_time_ns));
 
     // Extract snapshots from SimHandler for cumulative metrics and timeseries
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0, 0.0, 0.0);
@@ -1053,13 +1560,16 @@ impl StepSimulation {
 
         let mut state = ClusterState::new();
         let mut engine = Engine::new(self.time_mode);
+        let overhead = compute_overhead(&self.scenario.study.cluster);
+        let daemonset_pct = self.scenario.study.cluster.daemonset_overhead_percent.unwrap_or(0);
 
         for we in &self.workload_events {
             match we {
                 WorkloadEvent::NodeLaunching { instance_type, pool_index, .. } => {
-                    let mut node = instance_to_node(&catalog, instance_type);
+                    let mut node = instance_to_node_with_pct(&catalog, instance_type, &overhead, daemonset_pct);
                     node.pool_name = resolve_pool_name(&self.scenario.study.cluster.node_pools, *pool_index);
-                    state.add_node(node);
+                    let node_id = state.add_node(node);
+                    engine.schedule(SimTime(0), EngineEvent::NodeReady(node_id));
                 }
                 WorkloadEvent::PodSubmitted { time, requests, limits, priority, owner_id, workload_name, duration_ns, .. } => {
                     engine.schedule(*time, EngineEvent::PodSubmitted(PodSpec {
@@ -1092,7 +1602,7 @@ impl StepSimulation {
                     engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
                 }
                 WorkloadEvent::ReplicaSetSubmitted {
-                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy,
+                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, scheduling_constraints, labels,
                 } => {
                     let owner = OwnerId(*owner_id);
                     state.add_replica_set(ReplicaSet {
@@ -1102,8 +1612,8 @@ impl StepSimulation {
                             requests: *requests,
                             limits: *limits,
                             priority: *priority,
-                            labels: LabelSet::default(),
-                            scheduling_constraints: SchedulingConstraints::default(),
+                            labels: labels.clone(),
+                            scheduling_constraints: scheduling_constraints.clone(),
                         },
                         deletion_cost_strategy: *deletion_cost_strategy,
                     });
@@ -1115,21 +1625,47 @@ impl StepSimulation {
                         EngineEvent::ScaleDown(kubesim_engine::DeploymentId(*owner_id), *reduce_by),
                     );
                 }
+                WorkloadEvent::ReplicaSetScaleUp { time, owner_id, increase_to } => {
+                    engine.schedule(
+                        *time,
+                        EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *increase_to),
+                    );
+                }
                 _ => {}
             }
         }
 
         // Add the combined handler (scheduler + metrics) to the engine
+        let delays = &self.scenario.study.cluster.delays;
         let handler = SimHandler {
-            scheduler: Scheduler::new(
+            scheduler: Scheduler::with_seed(
                 SchedulerProfile::with_scoring("default", scoring),
+                42, // StepSimulation uses fixed seed
             ),
             metrics: MetricsCollector::new(RustMetricsConfig::default()),
             catalog: Catalog::for_provider(provider)
                 .map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
+            overhead,
+            daemonset_pct,
+            node_startup_ns: delays.node_startup_ns(),
+            node_startup_jitter_ns: delays.node_startup_jitter_ns(),
+            pod_startup_ns: delays.pod_startup_ns(),
+            pod_startup_jitter_ns: delays.pod_startup_jitter_ns(),
+            rng: if delays.node_startup_jitter_ns() > 0 || delays.pod_startup_jitter_ns() > 0 {
+                Some(rand::rngs::StdRng::seed_from_u64(42u64.wrapping_add(0xDE1A0)))
+            } else {
+                None
+            },
+            node_counter: 0,
+            strategy: self.scenario.study.scheduling_strategy,
+            pod_node_hints: std::collections::HashMap::new(),
+            launched_nodes: Vec::new(),
+            domain_budget: DomainBudget::new(),
+            wait_queue: CapacityWaitQueue::new(),
         };
         engine.add_handler(Box::new(handler));
         engine.add_handler(Box::new(ReplicaSetController));
+        engine.add_handler(Box::new(daemonset_handler_from_scenario(&self.scenario.study.cluster.daemonsets)));
 
         // Register karpenter handlers for pools that have karpenter config
         // Sort pools by weight (higher weight = higher priority)
@@ -1151,7 +1687,7 @@ impl StepSimulation {
                     ProvisioningHandler::new(
                         Catalog::for_provider(provider).map_err(|e| PyValueError::new_err(format!("catalog: {e}")))?,
                         pool.clone(),
-                    ),
+                    ).with_overhead(overhead).with_daemonset_pct(daemonset_pct),
                 ));
 
                 let consolidation_policy = karpenter

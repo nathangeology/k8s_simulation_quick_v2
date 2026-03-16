@@ -177,7 +177,7 @@ mod tests {
             priority: 0,
             labels: LabelSet::default(),
             do_not_disrupt: false,
-            duration_ns: None,
+            duration_ns: None, is_daemonset: false,
         }
     }
 
