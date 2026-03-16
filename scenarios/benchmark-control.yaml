@@ -7,7 +7,7 @@ study:
     node_pools:
       - instance_types: [m5.xlarge, m5.2xlarge]
         min_nodes: 0
-        max_nodes: 200
+        max_nodes: 1000
         karpenter:
           consolidation: {policy: WhenUnderutilized}
 
