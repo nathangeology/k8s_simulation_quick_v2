@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freetier-limit-merge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: freetier-limit-merge
+  template:
+    metadata:
+      labels:
+        app: freetier-limit-merge
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: freetier-limit-merge-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 128Mi

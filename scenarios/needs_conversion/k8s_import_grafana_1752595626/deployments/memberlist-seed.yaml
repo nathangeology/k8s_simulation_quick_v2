@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memberlist-seed
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: memberlist-seed
+  template:
+    metadata:
+      labels:
+        app: memberlist-seed
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memberlist-seed-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 256Mi
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            name: memberlist-seed
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway

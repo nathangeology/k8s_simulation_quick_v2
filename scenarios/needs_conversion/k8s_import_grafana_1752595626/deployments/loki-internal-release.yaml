@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-internal-release
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki-internal-release
+  template:
+    metadata:
+      labels:
+        app: loki-internal-release
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: loki-internal-release-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

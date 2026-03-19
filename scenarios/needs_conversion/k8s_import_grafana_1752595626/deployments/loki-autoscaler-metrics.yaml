@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-autoscaler-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki-autoscaler-metrics
+  template:
+    metadata:
+      labels:
+        app: loki-autoscaler-metrics
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: loki-autoscaler-metrics-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

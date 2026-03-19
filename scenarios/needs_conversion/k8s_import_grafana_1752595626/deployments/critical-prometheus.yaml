@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-prometheus
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: critical-prometheus
+  template:
+    metadata:
+      labels:
+        app: critical-prometheus
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: critical-prometheus-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '42.0'
+            memory: 123904Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: critical-prometheus
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: global-subnet
+        operator: Equal
+        value: global-1

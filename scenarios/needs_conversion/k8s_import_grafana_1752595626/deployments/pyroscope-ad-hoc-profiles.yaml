@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-ad-hoc-profiles
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyroscope-ad-hoc-profiles
+  template:
+    metadata:
+      labels:
+        app: pyroscope-ad-hoc-profiles
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-ad-hoc-profiles-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.2'
+            memory: 128Mi

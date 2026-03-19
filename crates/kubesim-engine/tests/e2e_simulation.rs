@@ -140,11 +140,11 @@ fn full_simulation_loop() {
     engine.add_handler(Box::new(ProvisioningHandler::new(
         Catalog::embedded().unwrap(),
         pool.clone(),
-    )));
+    ).with_logical_mode()));
     engine.add_handler(Box::new(ConsolidationHandler::new(
         pool.clone(),
         ConsolidationPolicy::WhenUnderutilized,
-    )));
+    ).with_logical_mode()));
     engine.add_handler(Box::new(DrainHandler));
     engine.add_handler(Box::new(MetricsCollector::new(MetricsConfig::default())));
 
@@ -218,8 +218,9 @@ fn full_simulation_loop() {
     let nodes_before = state.nodes.len();
 
     // ── Phase 4: Trigger consolidation ──────────────────────────
-    // Schedule after consolidate_after_ns (15s = 15_000_000_000ns) so nodes are eligible
-    let consol_time = 15_000_000_000 + 1000;
+    // In logical mode, consolidate_after is 15 ticks (seconds).
+    // Nodes were created at ~t=101, so they're eligible at t=116+.
+    let consol_time = 200;
     state.time = SimTime(consol_time);
     engine.schedule(SimTime(consol_time), Event::KarpenterConsolidationLoop);
     engine.schedule(SimTime(consol_time + 100), Event::MetricsSnapshot);

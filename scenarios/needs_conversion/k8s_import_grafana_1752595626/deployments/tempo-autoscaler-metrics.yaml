@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo-autoscaler-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tempo-autoscaler-metrics
+  template:
+    metadata:
+      labels:
+        app: tempo-autoscaler-metrics
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: tempo-autoscaler-metrics-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

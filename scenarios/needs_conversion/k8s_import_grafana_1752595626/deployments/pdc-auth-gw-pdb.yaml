@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdc-auth-gw-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: pdc-auth-gw

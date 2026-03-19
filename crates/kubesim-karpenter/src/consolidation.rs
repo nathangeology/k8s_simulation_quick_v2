@@ -654,42 +654,54 @@ fn validate_before_execute(
 /// - PLAN phase: evaluate candidates + validate via scheduling simulation
 /// - EXECUTE phase: cordon nodes immediately, schedule `NodeDrained` events
 ///   that perform actual pod eviction (handled by [`DrainHandler`])
+///
+/// Mirrors real Karpenter's `isConsolidated` gating: when no state changes
+/// have occurred since the last evaluation (no nodes added/removed, no pods
+/// bound/evicted), the consolidation loop skips evaluation entirely.
 pub struct ConsolidationHandler {
     pub pool: NodePool,
     pub policy: ConsolidationPolicy,
     /// Base interval (ns) between consolidation loops in WallClock mode.
+    /// In Logical mode, this is interpreted as seconds (ticks).
     pub loop_interval_ns: u64,
-    /// Current backoff interval (ns). Grows when no actions are taken, resets on action.
-    current_interval_ns: u64,
-    /// Maximum backoff interval (ns) — caps exponential growth.
-    max_interval_ns: u64,
+    /// Current backoff interval. Grows when no actions are taken, resets on action.
+    current_interval: u64,
+    /// Maximum backoff interval — caps exponential growth.
+    max_interval: u64,
     /// Version profile controlling consolidation strategy.
     pub version_profile: Option<VersionProfile>,
     /// EC2 catalog for replace-path instance selection.
     pub catalog: Option<Catalog>,
-    /// Minimum node age (ns) before it becomes eligible for consolidation.
-    /// Prevents thrashing: provision → immediately consolidate → provision again.
-    pub consolidate_after_ns: u64,
+    /// Minimum node age before eligible for consolidation.
+    /// In WallClock mode: nanoseconds. In Logical mode: ticks (seconds).
+    pub consolidate_after: u64,
     /// System overhead for replace-path capacity checks.
     pub overhead: Resources,
     /// Daemonset overhead percentage for replace-path capacity checks.
     pub daemonset_pct: u32,
+    /// Snapshot of cluster state hash at last evaluation — used for
+    /// `is_consolidated` gating. When the hash matches, skip evaluation.
+    last_state_hash: u64,
+    /// Whether this handler is operating in logical time mode.
+    logical_mode: bool,
 }
 
 impl ConsolidationHandler {
     pub fn new(pool: NodePool, policy: ConsolidationPolicy) -> Self {
-        let base = 30_000_000_000u64; // 30s default
+        let base = 30_000_000_000u64; // 30s in ns (wall_clock default)
         Self {
             pool,
             policy,
             loop_interval_ns: base,
-            current_interval_ns: base,
-            max_interval_ns: 300_000_000_000, // 5 min cap
+            current_interval: base,
+            max_interval: 300_000_000_000, // 5 min cap in ns
             version_profile: None,
             catalog: None,
-            consolidate_after_ns: 15_000_000_000, // 15s default, matches Karpenter
+            consolidate_after: 15_000_000_000, // 15s in ns
             overhead: Resources::default(),
             daemonset_pct: 0,
+            last_state_hash: 0,
+            logical_mode: false,
         }
     }
 
@@ -704,6 +716,34 @@ impl ConsolidationHandler {
         self.catalog = Some(catalog);
         self
     }
+
+    /// Set logical time mode — intervals are in ticks (seconds) instead of nanoseconds.
+    pub fn with_logical_mode(mut self) -> Self {
+        self.logical_mode = true;
+        // Convert intervals from nanoseconds to seconds (ticks)
+        self.loop_interval_ns = 30;          // 30s
+        self.current_interval = 30;          // 30s
+        self.max_interval = 300;             // 5 min
+        self.consolidate_after = 15;         // 15s
+        self
+    }
+
+    /// Compute a lightweight hash of cluster state for is_consolidated gating.
+    /// Tracks: node count, total allocated CPU, pod count, pending count.
+    fn state_hash(state: &ClusterState) -> u64 {
+        let mut h: u64 = state.nodes.len() as u64;
+        h = h.wrapping_mul(31).wrapping_add(state.pods.len() as u64);
+        h = h.wrapping_mul(31).wrapping_add(state.pending_queue.len() as u64);
+        let mut total_alloc_cpu: u64 = 0;
+        let mut cordoned: u64 = 0;
+        for (_, n) in state.nodes.iter() {
+            total_alloc_cpu = total_alloc_cpu.wrapping_add(n.allocated.cpu_millis);
+            if n.cordoned { cordoned += 1; }
+        }
+        h = h.wrapping_mul(31).wrapping_add(total_alloc_cpu);
+        h = h.wrapping_mul(31).wrapping_add(cordoned);
+        h
+    }
 }
 
 impl EventHandler for ConsolidationHandler {
@@ -717,10 +757,23 @@ impl EventHandler for ConsolidationHandler {
             return Vec::new();
         };
 
+        // is_consolidated gating: skip evaluation if cluster state hasn't changed
+        // since last run. Mirrors real Karpenter's isConsolidated flag.
+        let current_hash = Self::state_hash(state);
+        if current_hash == self.last_state_hash {
+            // State unchanged — skip evaluation, reschedule with backoff
+            self.current_interval = (self.current_interval * 2).min(self.max_interval);
+            return vec![ScheduledEvent {
+                time: SimTime(time.0 + self.current_interval),
+                event: Event::KarpenterConsolidationLoop,
+            }];
+        }
+        self.last_state_hash = current_hash;
+
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after_ns, &self.overhead, self.daemonset_pct);
+        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after, &self.overhead, self.daemonset_pct);
 
         // PLAN phase: validate via scheduling simulation — shrink candidate set
         // until all displaced pods can be placed on remaining nodes.
@@ -809,14 +862,16 @@ impl EventHandler for ConsolidationHandler {
         // Backoff: if no actions were taken, double the interval (up to max).
         // If actions were taken, reset to base interval for responsive follow-up.
         if has_actions {
-            self.current_interval_ns = self.loop_interval_ns;
+            self.current_interval = self.loop_interval_ns;
+            // Actions changed state — reset the hash so next run re-evaluates
+            self.last_state_hash = 0;
         } else {
-            self.current_interval_ns = (self.current_interval_ns * 2).min(self.max_interval_ns);
+            self.current_interval = (self.current_interval * 2).min(self.max_interval);
         }
 
         // Re-schedule next consolidation loop with current (possibly backed-off) interval
         follow_ups.push(ScheduledEvent {
-            time: SimTime(time.0 + self.current_interval_ns),
+            time: SimTime(time.0 + self.current_interval),
             event: Event::KarpenterConsolidationLoop,
         });
 
@@ -1034,8 +1089,8 @@ mod tests {
         state.add_node(test_node(4000, 8_000_000_000)); // empty node
 
         let mut handler = ConsolidationHandler::new(test_pool(), ConsolidationPolicy::WhenEmpty);
-        // Run after consolidate_after_ns (15s) so the node is eligible
-        let t = SimTime(handler.consolidate_after_ns + 1000);
+        // Run after consolidate_after (15s) so the node is eligible
+        let t = SimTime(handler.consolidate_after + 1000);
         state.time = t;
         let events = handler.handle(
             &kubesim_engine::Event::KarpenterConsolidationLoop,

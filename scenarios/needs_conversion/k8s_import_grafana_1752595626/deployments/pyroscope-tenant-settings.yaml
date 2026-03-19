@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-tenant-settings
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyroscope-tenant-settings
+  template:
+    metadata:
+      labels:
+        app: pyroscope-tenant-settings
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-tenant-settings-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 256Mi

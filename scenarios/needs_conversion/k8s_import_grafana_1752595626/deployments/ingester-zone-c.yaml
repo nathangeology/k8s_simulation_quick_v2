@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingester-zone-c
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingester-zone-c
+  template:
+    metadata:
+      labels:
+        app: ingester-zone-c
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: ingester-zone-c-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 6144Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: rollout-group
+                operator: In
+                values:
+                - ingester
+              - key: name
+                operator: NotIn
+                values:
+                - ingester-zone-c
+            topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            name: ingester-zone-c
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway

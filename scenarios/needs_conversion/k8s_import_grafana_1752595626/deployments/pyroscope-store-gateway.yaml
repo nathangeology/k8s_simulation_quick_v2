@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-store-gateway
+spec:
+  replicas: 128
+  selector:
+    matchLabels:
+      app: pyroscope-store-gateway
+  template:
+    metadata:
+      labels:
+        app: pyroscope-store-gateway
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-store-gateway-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '4.0'
+            memory: 8192Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: store-gateway
+            topologyKey: kubernetes.io/hostname

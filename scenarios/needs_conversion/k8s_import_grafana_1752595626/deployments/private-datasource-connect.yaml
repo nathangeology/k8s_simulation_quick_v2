@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: private-datasource-connect
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: private-datasource-connect
+  template:
+    metadata:
+      labels:
+        app: private-datasource-connect
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: private-datasource-connect-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '4.0'
+            memory: 4096Mi

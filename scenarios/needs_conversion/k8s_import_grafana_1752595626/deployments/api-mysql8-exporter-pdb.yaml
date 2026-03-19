@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-mysql8-exporter-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: api-mysql8-exporter

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-logs-archiver
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cloud-logs-archiver
+  template:
+    metadata:
+      labels:
+        app: cloud-logs-archiver
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: cloud-logs-archiver-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 500Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: cloud-logs-archiver
+            topologyKey: kubernetes.io/hostname

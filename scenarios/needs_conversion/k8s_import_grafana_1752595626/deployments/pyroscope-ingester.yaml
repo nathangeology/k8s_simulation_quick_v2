@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-ingester
+spec:
+  replicas: 64
+  selector:
+    matchLabels:
+      app: pyroscope-ingester
+  template:
+    metadata:
+      labels:
+        app: pyroscope-ingester
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-ingester-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '4.0'
+            memory: 12288Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: ingester
+            topologyKey: kubernetes.io/hostname

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-live-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-live-3
+  template:
+    metadata:
+      labels:
+        app: redis-live-3
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: redis-live-3-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '3.1'
+            memory: 8292Mi
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: data-node

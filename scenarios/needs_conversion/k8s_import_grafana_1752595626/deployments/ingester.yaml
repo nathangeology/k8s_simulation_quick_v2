@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingester
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: ingester
+  template:
+    metadata:
+      labels:
+        app: ingester
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: ingester-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '3.0'
+            memory: 2048Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: ingester
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

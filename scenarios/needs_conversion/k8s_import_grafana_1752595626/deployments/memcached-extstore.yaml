@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-extstore
+spec:
+  replicas: 13
+  selector:
+    matchLabels:
+      app: memcached-extstore
+  template:
+    metadata:
+      labels:
+        app: memcached-extstore
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-extstore-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 12288Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-extstore
+            topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            name: memcached-extstore
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: local-ssd

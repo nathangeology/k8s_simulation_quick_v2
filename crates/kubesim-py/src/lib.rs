@@ -824,6 +824,7 @@ fn run_single(
     scenario: &ScenarioFile,
     time_mode: TimeMode,
     seed: u64,
+    event_budget: u64,
 ) -> SimRunResult {
     let provider = scenario.study.catalog_provider;
     let catalog = Catalog::for_provider(provider).expect("embedded catalog");
@@ -973,6 +974,9 @@ fn run_single(
                 Catalog::for_provider(provider).expect("embedded catalog"),
                 pool.clone(),
             ).with_overhead(overhead).with_daemonset_pct(daemonset_pct);
+            if time_mode == TimeMode::Logical {
+                prov = prov.with_logical_mode();
+            }
             let batch_ns = delays.provisioner_batch_ns();
             if batch_ns > 0 {
                 prov.loop_interval_ns = batch_ns;
@@ -997,6 +1001,9 @@ fn run_single(
 
             let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
                 .with_catalog(Catalog::for_provider(provider).expect("embedded catalog"));
+            if time_mode == TimeMode::Logical {
+                consol = consol.with_logical_mode();
+            }
             consol.overhead = overhead;
             consol.daemonset_pct = daemonset_pct;
             if let Some(ref vp) = version_profile {
@@ -1030,12 +1037,17 @@ fn run_single(
         }
     }
 
-    // Compute sim end time: last workload event + 15 min stabilization
-    let max_event_time_ns = workload_events.iter().map(|e| e.time().0).max().unwrap_or(0);
-    let stabilization_ns = 15 * 60 * 1_000_000_000u64; // 15 minutes
-    let max_sim_time_ns = max_event_time_ns + stabilization_ns;
+    // Compute sim end time: last workload event + stabilization window.
+    // In Logical mode, SimTime ticks represent ~1 second each, so use
+    // 900 ticks (15 min). In WallClock mode, SimTime is nanoseconds.
+    let max_event_time = workload_events.iter().map(|e| e.time().0).max().unwrap_or(0);
+    let stabilization = match time_mode {
+        TimeMode::Logical => 15 * 60,                    // 900 ticks ≈ 15 min
+        TimeMode::WallClock => 15 * 60 * 1_000_000_000,  // 15 min in ns
+    };
+    let max_sim_time_ns = max_event_time + stabilization;
 
-    let events_processed = engine.run_until(&mut state, SimTime(max_sim_time_ns));
+    let events_processed = engine.run_until_with_budget(&mut state, SimTime(max_sim_time_ns), event_budget);
 
     // Extract snapshots from SimHandler for cumulative metrics and timeseries
     let mut cumulative = (0.0, 0.0, 0.0, 0.0, 0u64, 0.0, 0u32, 0.0, 0.0, 0.0);
@@ -1241,13 +1253,14 @@ struct Simulation {
     workload_events: Vec<WorkloadEvent>,
     time_mode: TimeMode,
     seed: u64,
+    event_budget: u64,
 }
 
 #[pymethods]
 impl Simulation {
     #[new]
-    #[pyo3(signature = (config, time_mode=None, seed=None))]
-    fn new(config: &str, time_mode: Option<&str>, seed: Option<u64>) -> PyResult<Self> {
+    #[pyo3(signature = (config, time_mode=None, seed=None, event_budget=None))]
+    fn new(config: &str, time_mode: Option<&str>, seed: Option<u64>, event_budget: Option<u64>) -> PyResult<Self> {
         let yaml = if Path::new(config).exists() {
             std::fs::read_to_string(config)
                 .map_err(|e| PyValueError::new_err(format!("failed to read config: {e}")))?
@@ -1269,6 +1282,7 @@ impl Simulation {
             workload_events,
             time_mode: tm,
             seed: s,
+            event_budget: event_budget.unwrap_or(10_000_000),
         })
     }
 
@@ -1283,7 +1297,7 @@ impl Simulation {
                 .ok_or_else(|| PyValueError::new_err("no variants defined in scenario"))?,
         };
 
-        let r = run_single(&self.workload_events, Some(v), &self.scenario, self.time_mode, self.seed);
+        let r = run_single(&self.workload_events, Some(v), &self.scenario, self.time_mode, self.seed, self.event_budget);
 
         Ok(SimResult {
             events_processed: r.events_processed,
@@ -1320,7 +1334,7 @@ impl Simulation {
         }
 
         Ok(self.scenario.study.variants.iter().map(|v| {
-            let r = run_single(&self.workload_events, Some(v), &self.scenario, self.time_mode, self.seed);
+            let r = run_single(&self.workload_events, Some(v), &self.scenario, self.time_mode, self.seed, self.event_budget);
             SimResult {
                 events_processed: r.events_processed,
                 total_cost_per_hour: r.total_cost_per_hour,
@@ -1355,12 +1369,13 @@ impl Simulation {
 ///
 /// Returns a list of dicts suitable for `polars.DataFrame(batch_run(...))`.
 #[pyfunction]
-#[pyo3(signature = (config, seeds, parallelism=None))]
+#[pyo3(signature = (config, seeds, parallelism=None, event_budget=None))]
 fn batch_run<'py>(
     py: Python<'py>,
     config: &str,
     seeds: Vec<u64>,
     parallelism: Option<usize>,
+    event_budget: Option<u64>,
 ) -> PyResult<Bound<'py, pyo3::types::PyList>> {
     let yaml = if Path::new(config).exists() {
         std::fs::read_to_string(config)
@@ -1389,6 +1404,8 @@ fn batch_run<'py>(
         .flat_map(|&s| (0..scenario.study.variants.len()).map(move |vi| (s, vi)))
         .collect();
 
+    let budget = event_budget.unwrap_or(10_000_000);
+
     // Run in parallel, releasing the GIL
     // Each seed generates its own workload events from the distributions
     let results: Vec<(u64, String, SimRunResult)> = py.allow_threads(|| {
@@ -1398,7 +1415,7 @@ fn batch_run<'py>(
                 let events = load_scenario_from_str_seeded(&yaml, seed)
                     .expect("scenario already validated")
                     .1;
-                let r = run_single(&events, Some(v), &scenario, time_mode, seed);
+                let r = run_single(&events, Some(v), &scenario, time_mode, seed, budget);
                 (seed, v.name.clone(), r)
             }).collect()
         })

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-freetier-limiter-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki-freetier-limiter-metrics
+  template:
+    metadata:
+      labels:
+        app: loki-freetier-limiter-metrics
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: loki-freetier-limiter-metrics-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

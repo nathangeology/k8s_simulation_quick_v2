@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregator-zone-a
+spec:
+  replicas: 26
+  selector:
+    matchLabels:
+      app: aggregator-zone-a
+  template:
+    metadata:
+      labels:
+        app: aggregator-zone-a
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: aggregator-zone-a-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '3.0'
+            memory: 19200Mi
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+            weight: 1
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: NotIn
+                values:
+                - m5a.12xlarge
+                - r5a.12xlarge
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

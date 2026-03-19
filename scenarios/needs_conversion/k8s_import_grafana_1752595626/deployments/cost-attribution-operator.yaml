@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cost-attribution-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cost-attribution-operator
+  template:
+    metadata:
+      labels:
+        app: cost-attribution-operator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: cost-attribution-operator-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.25'
+            memory: 128Mi

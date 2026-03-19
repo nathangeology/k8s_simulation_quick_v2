@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: query-frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: query-frontend
+  template:
+    metadata:
+      labels:
+        app: query-frontend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: query-frontend-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 2048Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: query-frontend
+            topologyKey: kubernetes.io/hostname

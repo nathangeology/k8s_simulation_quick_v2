@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-parquet-page-01
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: memcached-parquet-page-01
+  template:
+    metadata:
+      labels:
+        app: memcached-parquet-page-01
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-parquet-page-01-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 1329Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-parquet-page-01
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

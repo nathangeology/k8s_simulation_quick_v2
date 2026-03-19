@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spec-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spec-exporter
+  template:
+    metadata:
+      labels:
+        app: spec-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: spec-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metrics-server
+  template:
+    metadata:
+      labels:
+        app: metrics-server
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: metrics-server-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 1024Mi

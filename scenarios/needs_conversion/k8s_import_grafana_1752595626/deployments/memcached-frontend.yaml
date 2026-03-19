@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memcached-frontend
+  template:
+    metadata:
+      labels:
+        app: memcached-frontend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-frontend-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 1329Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-frontend
+            topologyKey: kubernetes.io/hostname

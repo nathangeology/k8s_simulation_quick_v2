@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-instance-mapper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metrics-instance-mapper
+  template:
+    metadata:
+      labels:
+        app: metrics-instance-mapper
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: metrics-instance-mapper-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 8192Mi

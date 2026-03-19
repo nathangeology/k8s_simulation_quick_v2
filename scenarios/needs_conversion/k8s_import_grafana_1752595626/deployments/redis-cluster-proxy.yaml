@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cluster-proxy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-cluster-proxy
+  template:
+    metadata:
+      labels:
+        app: redis-cluster-proxy
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: redis-cluster-proxy-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 1024Mi

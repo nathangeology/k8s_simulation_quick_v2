@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-l2
+spec:
+  replicas: 20
+  selector:
+    matchLabels:
+      app: memcached-l2
+  template:
+    metadata:
+      labels:
+        app: memcached-l2
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-l2-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 6132Mi
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: l2-cache

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bloom-planner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bloom-planner
+  template:
+    metadata:
+      labels:
+        app: bloom-planner
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: bloom-planner-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 12288Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mysql-exporter-prod-us-east-0-hosted-grafana-shared-6-mysql8-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-6-mysql8

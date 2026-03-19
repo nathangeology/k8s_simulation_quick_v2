@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphite-querier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graphite-querier
+  template:
+    metadata:
+      labels:
+        app: graphite-querier
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: graphite-querier-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 12288Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: graphite-querier
+            topologyKey: kubernetes.io/hostname

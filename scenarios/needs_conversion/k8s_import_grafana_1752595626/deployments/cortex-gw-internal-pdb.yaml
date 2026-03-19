@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cortex-gw-internal-pdb
+spec:
+  maxUnavailable: '1'
+  selector:
+    matchLabels:
+      app: cortex-gw-internal

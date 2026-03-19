@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-alerting-3-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: redis-alerting-3

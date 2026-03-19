@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-alerting-5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-alerting-5
+  template:
+    metadata:
+      labels:
+        app: redis-alerting-5
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: redis-alerting-5-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.1'
+            memory: 2148Mi
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: data-node

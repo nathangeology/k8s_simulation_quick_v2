@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdc-agent-stack-781953
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pdc-agent-stack-781953
+  template:
+    metadata:
+      labels:
+        app: pdc-agent-stack-781953
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pdc-agent-stack-781953-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 512Mi

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archiver-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: archiver-operator
+  template:
+    metadata:
+      labels:
+        app: archiver-operator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: archiver-operator-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 500Mi

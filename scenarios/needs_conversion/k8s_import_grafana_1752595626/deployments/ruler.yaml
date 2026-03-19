@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ruler
+  template:
+    metadata:
+      labels:
+        app: ruler
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: ruler-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.2'
+            memory: 1024Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: ruler
+            topologyKey: kubernetes.io/hostname

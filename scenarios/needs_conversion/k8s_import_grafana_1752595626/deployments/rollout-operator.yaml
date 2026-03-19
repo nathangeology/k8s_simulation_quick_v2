@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollout-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rollout-operator
+  template:
+    metadata:
+      labels:
+        app: rollout-operator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: rollout-operator-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

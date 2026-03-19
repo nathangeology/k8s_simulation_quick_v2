@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: template-miner
+spec:
+  replicas: 25
+  selector:
+    matchLabels:
+      app: template-miner
+  template:
+    metadata:
+      labels:
+        app: template-miner
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: template-miner-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 2048Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: template-miner
+            topologyKey: kubernetes.io/hostname

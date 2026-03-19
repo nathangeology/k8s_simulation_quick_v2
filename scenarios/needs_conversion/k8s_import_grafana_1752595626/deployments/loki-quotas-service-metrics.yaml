@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-quotas-service-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki-quotas-service-metrics
+  template:
+    metadata:
+      labels:
+        app: loki-quotas-service-metrics
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: loki-quotas-service-metrics-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

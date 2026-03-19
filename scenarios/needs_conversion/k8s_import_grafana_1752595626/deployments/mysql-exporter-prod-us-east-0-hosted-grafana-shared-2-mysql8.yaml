@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-exporter-prod-us-east-0-hosted-grafana-shared-2-mysql8
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-2-mysql8
+  template:
+    metadata:
+      labels:
+        app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-2-mysql8
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: mysql-exporter-prod-us-east-0-hosted-grafana-shared-2-mysql8-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

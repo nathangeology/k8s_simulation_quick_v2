@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cortex-gw
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cortex-gw
+  template:
+    metadata:
+      labels:
+        app: cortex-gw
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: cortex-gw-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 512Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: cortex-gw
+            topologyKey: kubernetes.io/hostname

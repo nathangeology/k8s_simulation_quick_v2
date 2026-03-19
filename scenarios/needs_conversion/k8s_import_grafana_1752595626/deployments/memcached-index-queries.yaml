@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-index-queries
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: memcached-index-queries
+  template:
+    metadata:
+      labels:
+        app: memcached-index-queries
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-index-queries-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 1329Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-index-queries
+            topologyKey: kubernetes.io/hostname

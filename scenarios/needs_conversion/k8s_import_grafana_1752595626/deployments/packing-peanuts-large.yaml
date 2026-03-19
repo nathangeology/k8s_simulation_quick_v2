@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: packing-peanuts-large
+spec:
+  replicas: 30
+  selector:
+    matchLabels:
+      app: packing-peanuts-large
+  template:
+    metadata:
+      labels:
+        app: packing-peanuts-large
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: packing-peanuts-large-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                - m5.2xlarge
+                - m5a.2xlarge
+                - m5ad.2xlarge
+                - m5d.2xlarge
+                - r5.4xlarge
+                - r5a.4xlarge
+                - r6a.4xlarge
+                - r7a.4xlarge
+      tolerations:
+      - key: type
+        operator: Equal
+        value: hg-node

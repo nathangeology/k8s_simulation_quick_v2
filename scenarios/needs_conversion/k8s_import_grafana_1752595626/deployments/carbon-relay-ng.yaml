@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carbon-relay-ng
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: carbon-relay-ng
+  template:
+    metadata:
+      labels:
+        app: carbon-relay-ng
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: carbon-relay-ng-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.2'
+            memory: 500Mi

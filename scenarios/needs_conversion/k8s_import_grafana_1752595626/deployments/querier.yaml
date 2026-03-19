@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: querier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: querier
+  template:
+    metadata:
+      labels:
+        app: querier
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: querier-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.5'
+            memory: 3072Mi

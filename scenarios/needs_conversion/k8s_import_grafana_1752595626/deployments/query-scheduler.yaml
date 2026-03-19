@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: query-scheduler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: query-scheduler
+  template:
+    metadata:
+      labels:
+        app: query-scheduler
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: query-scheduler-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 600Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: query-scheduler
+            topologyKey: kubernetes.io/hostname

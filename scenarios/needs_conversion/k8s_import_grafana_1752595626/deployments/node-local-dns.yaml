@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-local-dns
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: node-local-dns
+  template:
+    metadata:
+      labels:
+        app: node-local-dns
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: node-local-dns-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      - effect: NoSchedule
+        operator: Exists

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-feature-flag
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: go-feature-flag
+  template:
+    metadata:
+      labels:
+        app: go-feature-flag
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: go-feature-flag-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

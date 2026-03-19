@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: shared-10-exporter-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: shared-10-exporter

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bloom-builder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bloom-builder
+  template:
+    metadata:
+      labels:
+        app: bloom-builder
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: bloom-builder-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 2048Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: grafana.com/platform-spot-solo
+                operator: Exists
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: spot-node

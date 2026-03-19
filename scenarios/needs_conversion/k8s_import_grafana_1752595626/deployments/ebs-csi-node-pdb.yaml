@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ebs-csi-node-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: ebs-csi-node

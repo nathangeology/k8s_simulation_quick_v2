@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shared-10-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shared-10-exporter
+  template:
+    metadata:
+      labels:
+        app: shared-10-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: shared-10-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

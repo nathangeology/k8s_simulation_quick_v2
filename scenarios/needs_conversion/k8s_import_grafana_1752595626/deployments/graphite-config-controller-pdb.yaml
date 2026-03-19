@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graphite-config-controller-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: graphite-config-controller

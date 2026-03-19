@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-aggregation-dpm-overrider
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mimir-aggregation-dpm-overrider
+  template:
+    metadata:
+      labels:
+        app: mimir-aggregation-dpm-overrider
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: mimir-aggregation-dpm-overrider-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

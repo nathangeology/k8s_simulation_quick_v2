@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influx-proxy-writes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influx-proxy-writes
+  template:
+    metadata:
+      labels:
+        app: influx-proxy-writes
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: influx-proxy-writes-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 512Mi

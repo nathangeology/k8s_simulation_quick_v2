@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-mysql8-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-mysql8-exporter
+  template:
+    metadata:
+      labels:
+        app: api-mysql8-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: api-mysql8-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hosted-grafana-gateway-pdb
+spec:
+  maxUnavailable: '1'
+  selector:
+    matchLabels:
+      app: hosted-grafana-gateway

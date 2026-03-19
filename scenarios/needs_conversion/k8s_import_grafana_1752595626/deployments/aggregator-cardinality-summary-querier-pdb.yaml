@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aggregator-cardinality-summary-querier-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: aggregator-cardinality-summary-querier

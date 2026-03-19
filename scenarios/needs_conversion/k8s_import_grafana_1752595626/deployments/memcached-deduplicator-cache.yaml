@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-deduplicator-cache
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: memcached-deduplicator-cache
+  template:
+    metadata:
+      labels:
+        app: memcached-deduplicator-cache
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-deduplicator-cache-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 254Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-deduplicator-cache
+            topologyKey: kubernetes.io/hostname

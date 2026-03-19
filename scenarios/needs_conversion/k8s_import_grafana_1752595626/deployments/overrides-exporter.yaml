@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: overrides-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: overrides-exporter
+  template:
+    metadata:
+      labels:
+        app: overrides-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: overrides-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: overrides-exporter
+            topologyKey: kubernetes.io/hostname

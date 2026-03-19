@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-compactor
+spec:
+  replicas: 12
+  selector:
+    matchLabels:
+      app: pyroscope-compactor
+  template:
+    metadata:
+      labels:
+        app: pyroscope-compactor
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-compactor-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 24576Mi

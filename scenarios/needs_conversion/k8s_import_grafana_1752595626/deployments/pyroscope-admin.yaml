@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyroscope-admin
+  template:
+    metadata:
+      labels:
+        app: pyroscope-admin
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-admin-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.2'
+            memory: 128Mi

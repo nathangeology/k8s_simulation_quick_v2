@@ -200,10 +200,26 @@ impl Engine {
 
     /// Run until the queue is empty or `until` time is reached.
     /// Returns the number of events processed.
+    /// Stops after `max_events` as a safety valve to prevent runaway simulations.
+    /// Default limit is 10 million events; use `run_until_with_budget` for custom limits.
     pub fn run_until(&mut self, state: &mut ClusterState, until: SimTime) -> u64 {
+        self.run_until_with_budget(state, until, 10_000_000)
+    }
+
+    /// Run until the queue is empty, `until` time is reached, or `max_events` processed.
+    /// Returns the number of events processed.
+    pub fn run_until_with_budget(&mut self, state: &mut ClusterState, until: SimTime, max_events: u64) -> u64 {
+        let wall_start = std::time::Instant::now();
+        // Hard wall-clock timeout: 30 seconds per run. Prevents any single
+        // simulation from blocking indefinitely regardless of event budget.
+        let wall_timeout = std::time::Duration::from_secs(30);
         let mut count = 0u64;
         while let Some(Reverse(next)) = self.queue.peek() {
-            if next.time > until {
+            if next.time > until || count >= max_events {
+                break;
+            }
+            // Check wall-clock timeout every 1000 events to avoid syscall overhead
+            if count % 1000 == 0 && count > 0 && wall_start.elapsed() > wall_timeout {
                 break;
             }
             self.step(state);

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pv-deleter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pv-deleter
+  template:
+    metadata:
+      labels:
+        app: pv-deleter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pv-deleter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 1024Mi

@@ -86,16 +86,58 @@ python -m kubesim run-adversarial [OPTIONS]
 Variant pairs:
 - `scoring` — MostAllocated vs LeastAllocated scheduling
 - `karpenter` — WhenEmpty vs WhenUnderutilized consolidation
-- `deletion_cost` — No deletion cost vs cost-aware draining
+- `deletion_cost` — No deletion cost vs prefer-emptying-nodes draining
 
-Example:
+#### Scheduling strategy divergence (MostAllocated vs LeastAllocated)
+
+Finds cluster configurations where bin-packing vs spreading produces the
+largest cost or utilization difference.
+
 ```bash
-# Find scenarios where scheduling strategies diverge most
-python -m kubesim run-adversarial --budget 500 --variants scoring --chaos --track-features
+# Quick exploration (a few minutes)
+python -m kubesim run-adversarial --budget 200 --variants scoring --top-k 10
 
-# Find worst cases for deletion cost strategies
-python -m kubesim run-adversarial --budget 300 --variants deletion_cost --objectives availability disruption_rate
+# Deep search with feature importance tracking
+python -m kubesim run-adversarial --budget 1000 --variants scoring --track-features
+
+# Chaos mode — single-instance pools, overcommit, extreme replicas
+python -m kubesim run-adversarial --budget 500 --variants scoring --chaos
 ```
+
+#### Karpenter consolidation policy (WhenEmpty vs WhenUnderutilized)
+
+Finds scenarios where the two consolidation policies diverge — useful for
+understanding when WhenUnderutilized's aggressive node removal helps or hurts.
+
+```bash
+# Standard search
+python -m kubesim run-adversarial --budget 500 --variants karpenter
+
+# With disruption and availability tracking
+python -m kubesim run-adversarial --budget 500 --variants karpenter \
+    --objectives disruption_rate availability consolidation_waste
+```
+
+#### Pod deletion cost strategy (none vs prefer-emptying-nodes)
+
+Finds scenarios where deletion cost annotations change which pods get evicted
+during scale-down, affecting availability and disruption patterns.
+
+```bash
+# Standard search
+python -m kubesim run-adversarial --budget 300 --variants deletion_cost
+
+# Focus on availability and disruption impact
+python -m kubesim run-adversarial --budget 500 --variants deletion_cost \
+    --objectives availability disruption_rate
+```
+
+#### Instance type selection
+
+By default, ~80% of generated scenarios use all available EC2 instance types
+(the realistic case), while ~20% use a restricted subset to explore
+constrained bin-packing scenarios. Chaos mode always uses single-instance
+pools for maximum stress.
 
 ### Standalone Adversarial Scripts
 
@@ -226,17 +268,42 @@ sim = kubesim.Simulation(config="scenarios/scheduling-comparison.yaml",
 result = sim.run()
 print(result.total_cost_per_hour, result.node_count, result.pending_pods)
 
+# Large-scale run with higher event budget (default 10M)
+sim = kubesim.Simulation(config="scenarios/large-cluster.yaml",
+                         time_mode="logical", seed=42,
+                         event_budget=50_000_000)
+result = sim.run()
+
 # Parallel batch run across seeds
 results = kubesim.batch_run(config_yaml, seeds=[0, 1, 2, 3, 4])
 
-# Adversarial search (Optuna)
-from kubesim import OptunaAdversarialSearch, MOST_VS_LEAST
-search = OptunaAdversarialSearch(
-    objective_fn=lambda results: abs(
+# Batch run with custom event budget for large scenarios
+results = kubesim.batch_run(config_yaml, seeds=[0, 1, 2],
+                            event_budget=100_000_000)
+
+# Adversarial search (Hypothesis-based)
+from kubesim import AdversarialFinder, ScenarioSpace, MOST_VS_LEAST
+finder = AdversarialFinder(
+    objective="maximize",
+    metric=lambda results: abs(
         sum(r["total_cost_per_hour"] for r in results if r["variant"] == "most_allocated") -
         sum(r["total_cost_per_hour"] for r in results if r["variant"] == "least_allocated")
     ),
+    space=ScenarioSpace(nodes=(10, 500)),
     variant_pair=MOST_VS_LEAST,
+    budget=200,
+    seeds=[42, 100, 200],
+)
+worst_cases = finder.run()
+
+# Adversarial search (Optuna TPE)
+from kubesim import OptunaAdversarialSearch, KARPENTER_CONSOLIDATION
+search = OptunaAdversarialSearch(
+    objective_fn=lambda results: abs(
+        sum(r["total_cost_per_hour"] for r in results if r["variant"] == "when_empty") -
+        sum(r["total_cost_per_hour"] for r in results if r["variant"] == "when_underutilized")
+    ),
+    variant_pair=KARPENTER_CONSOLIDATION,
     budget=200,
     seeds=[42, 100, 200],
 )
@@ -248,6 +315,27 @@ df = results_to_df(results)
 print(compare_variants(df))
 print(mann_whitney(df, "most_allocated", "least_allocated", "cumulative_cost"))
 ```
+
+### Event Budget
+
+Each simulation run has an event budget (default 10 million) that caps the
+maximum number of discrete events processed. This prevents runaway scenarios
+from hanging indefinitely — particularly useful during adversarial search
+where randomly generated scenarios can produce pathological event counts.
+
+For large-scale deliberate runs (10K+ nodes, 100K+ pods), increase the budget:
+
+```python
+# Via Simulation
+sim = kubesim.Simulation(yaml, event_budget=100_000_000)
+
+# Via batch_run
+results = kubesim.batch_run(yaml, seeds, event_budget=100_000_000)
+```
+
+When a run hits the budget, it stops early and returns partial results. You
+can detect this by checking `events_processed` — if it's close to the budget
+value, the simulation was truncated.
 
 ## Pre-built Scenarios
 

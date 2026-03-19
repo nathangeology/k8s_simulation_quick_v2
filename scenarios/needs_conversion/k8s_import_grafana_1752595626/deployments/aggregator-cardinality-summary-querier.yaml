@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregator-cardinality-summary-querier
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: aggregator-cardinality-summary-querier
+  template:
+    metadata:
+      labels:
+        app: aggregator-cardinality-summary-querier
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: aggregator-cardinality-summary-querier-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.7'
+            memory: 49152Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: go-feature-flag-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: go-feature-flag

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphite-write-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graphite-write-proxy
+  template:
+    metadata:
+      labels:
+        app: graphite-write-proxy
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: graphite-write-proxy-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 3072Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: graphite-write-proxy
+            topologyKey: kubernetes.io/hostname

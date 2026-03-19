@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kafka-zone-b-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: kafka-zone-b

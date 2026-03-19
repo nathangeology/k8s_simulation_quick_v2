@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-aggregation-cache
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: memcached-aggregation-cache
+  template:
+    metadata:
+      labels:
+        app: memcached-aggregation-cache
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-aggregation-cache-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 9931Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-aggregation-cache
+            topologyKey: kubernetes.io/hostname

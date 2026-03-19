@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adaptive-metrics-canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adaptive-metrics-canary
+  template:
+    metadata:
+      labels:
+        app: adaptive-metrics-canary
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: adaptive-metrics-canary-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 500Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tempo-bucket-info-exporter-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: tempo-bucket-info-exporter

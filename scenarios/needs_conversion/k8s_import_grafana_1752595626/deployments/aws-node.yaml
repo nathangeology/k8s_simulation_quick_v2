@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-node
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aws-node
+  template:
+    metadata:
+      labels:
+        app: aws-node
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: aws-node-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 1024Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - amd64
+                - arm64
+              - key: eks.amazonaws.com/compute-type
+                operator: NotIn
+                values:
+                - fargate
+      tolerations:
+      - operator: Exists

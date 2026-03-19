@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: index-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: index-gateway
+  template:
+    metadata:
+      labels:
+        app: index-gateway
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: index-gateway-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 2048Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-live-5-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: redis-live-5

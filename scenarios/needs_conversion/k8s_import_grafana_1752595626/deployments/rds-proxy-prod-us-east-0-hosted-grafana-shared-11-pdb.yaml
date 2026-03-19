@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rds-proxy-prod-us-east-0-hosted-grafana-shared-11-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: rds-proxy-prod-us-east-0-hosted-grafana-shared-11

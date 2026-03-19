@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parallel-query-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: parallel-query-frontend
+  template:
+    metadata:
+      labels:
+        app: parallel-query-frontend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: parallel-query-frontend-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 2048Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: parallel-query-frontend
+            topologyKey: kubernetes.io/hostname

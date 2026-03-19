@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: distributor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: distributor
+  template:
+    metadata:
+      labels:
+        app: distributor
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: distributor-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 500Mi
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            name: distributor
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-load-balancer-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aws-load-balancer-controller
+  template:
+    metadata:
+      labels:
+        app: aws-load-balancer-controller
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: aws-load-balancer-controller-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 1024Mi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - aws-load-balancer-controller
+              topologyKey: kubernetes.io/hostname
+            weight: 100
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists

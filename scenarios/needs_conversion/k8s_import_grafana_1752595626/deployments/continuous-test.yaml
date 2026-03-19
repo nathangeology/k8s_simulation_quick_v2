@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: continuous-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: continuous-test
+  template:
+    metadata:
+      labels:
+        app: continuous-test
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: continuous-test-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 512Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

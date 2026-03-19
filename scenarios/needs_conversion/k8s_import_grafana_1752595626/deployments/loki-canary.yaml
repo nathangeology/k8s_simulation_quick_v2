@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki-canary
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: loki-canary
+  template:
+    metadata:
+      labels:
+        app: loki-canary
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: loki-canary-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: loki-canary
+            topologyKey: kubernetes.io/hostname

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cluster
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: redis-cluster-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.1'
+            memory: 10340Mi
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: data-node

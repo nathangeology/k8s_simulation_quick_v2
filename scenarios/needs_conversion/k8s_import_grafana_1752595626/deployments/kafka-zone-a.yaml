@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-zone-a
+spec:
+  replicas: 13
+  selector:
+    matchLabels:
+      app: kafka-zone-a
+  template:
+    metadata:
+      labels:
+        app: kafka-zone-a
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: kafka-zone-a-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 12288Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: mimir-kafka
+                operator: In
+                values:
+                - 'true'
+        podAffinity: null
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: kafka
+                  app.kubernetes.io/instance: kafka-zone-a
+                  app.kubernetes.io/name: kafka
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: kafka
+                app.kubernetes.io/instance: kafka
+                app.kubernetes.io/name: kafka
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: mimir-kafka

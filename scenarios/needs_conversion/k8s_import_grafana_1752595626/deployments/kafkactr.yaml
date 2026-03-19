@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafkactr
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafkactr
+  template:
+    metadata:
+      labels:
+        app: kafkactr
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: kafkactr-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.25'
+            memory: 2048Mi
+      affinity:
+        nodeAffinity: null
+        podAffinity: null
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: kafka
+                app.kubernetes.io/instance: kafkactr
+                app.kubernetes.io/name: kafka
+            topologyKey: kubernetes.io/hostname

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quotas-service-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quotas-service-api
+  template:
+    metadata:
+      labels:
+        app: quotas-service-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: quotas-service-api-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: grafana.com/platform-spot-combo
+                operator: Exists
+            weight: 1
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: spot-node

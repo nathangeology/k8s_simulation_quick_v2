@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregator-partitioner-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aggregator-partitioner-metrics
+  template:
+    metadata:
+      labels:
+        app: aggregator-partitioner-metrics
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: aggregator-partitioner-metrics-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

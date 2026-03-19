@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hosted-grafana-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hosted-grafana-controller
+  template:
+    metadata:
+      labels:
+        app: hosted-grafana-controller
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: hosted-grafana-controller-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 6144Mi

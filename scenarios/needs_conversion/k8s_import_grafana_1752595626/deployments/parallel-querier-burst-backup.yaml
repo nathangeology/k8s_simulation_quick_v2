@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parallel-querier-burst-backup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: parallel-querier-burst-backup
+  template:
+    metadata:
+      labels:
+        app: parallel-querier-burst-backup
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: parallel-querier-burst-backup-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 2048Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: memcached-extstore-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: memcached-extstore

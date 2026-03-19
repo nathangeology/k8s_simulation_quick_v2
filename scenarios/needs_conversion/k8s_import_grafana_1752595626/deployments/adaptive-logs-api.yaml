@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adaptive-logs-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: adaptive-logs-api
+  template:
+    metadata:
+      labels:
+        app: adaptive-logs-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: adaptive-logs-api-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 2048Mi

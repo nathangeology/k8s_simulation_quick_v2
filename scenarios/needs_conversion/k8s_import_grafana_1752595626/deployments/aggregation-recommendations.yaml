@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregation-recommendations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aggregation-recommendations
+  template:
+    metadata:
+      labels:
+        app: aggregation-recommendations
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: aggregation-recommendations-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '13.0'
+            memory: 10240Mi

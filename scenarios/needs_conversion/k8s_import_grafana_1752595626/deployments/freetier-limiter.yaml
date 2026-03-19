@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freetier-limiter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: freetier-limiter
+  template:
+    metadata:
+      labels:
+        app: freetier-limiter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: freetier-limiter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

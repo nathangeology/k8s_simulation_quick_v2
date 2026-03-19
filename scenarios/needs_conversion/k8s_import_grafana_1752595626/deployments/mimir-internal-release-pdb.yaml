@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mimir-internal-release-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: mimir-internal-release

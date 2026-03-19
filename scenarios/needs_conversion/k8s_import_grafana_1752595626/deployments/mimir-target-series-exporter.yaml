@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-target-series-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mimir-target-series-exporter
+  template:
+    metadata:
+      labels:
+        app: mimir-target-series-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: mimir-target-series-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

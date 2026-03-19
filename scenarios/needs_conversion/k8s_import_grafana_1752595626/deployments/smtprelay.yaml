@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smtprelay
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: smtprelay
+  template:
+    metadata:
+      labels:
+        app: smtprelay
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: smtprelay-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.2'
+            memory: 200Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: smtprelay
+            topologyKey: kubernetes.io/hostname

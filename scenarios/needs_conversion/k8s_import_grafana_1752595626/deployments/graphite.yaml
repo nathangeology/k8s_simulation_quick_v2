@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graphite
+  template:
+    metadata:
+      labels:
+        app: graphite
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: graphite-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.25'
+            memory: 500Mi

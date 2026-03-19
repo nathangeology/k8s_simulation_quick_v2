@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ruler-querier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ruler-querier
+  template:
+    metadata:
+      labels:
+        app: ruler-querier
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: ruler-querier-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 6144Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            name: ruler-querier
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

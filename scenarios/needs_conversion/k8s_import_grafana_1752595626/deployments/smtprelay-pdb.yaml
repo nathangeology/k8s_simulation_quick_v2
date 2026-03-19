@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: smtprelay-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: smtprelay

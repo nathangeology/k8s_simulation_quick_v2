@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quotas-service-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quotas-service-operator
+  template:
+    metadata:
+      labels:
+        app: quotas-service-operator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: quotas-service-operator-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

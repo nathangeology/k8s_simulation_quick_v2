@@ -75,6 +75,13 @@ impl ProvisioningHandler {
         self
     }
 
+    /// Set logical time mode — intervals are in ticks (seconds) instead of nanoseconds.
+    pub fn with_logical_mode(mut self) -> Self {
+        self.loop_interval_ns = 5;   // 5s
+        self.reconcile_interval_ns = 10; // 10s
+        self
+    }
+
     /// Set batch window jitter and seed the RNG.
     pub fn with_batch_jitter(mut self, jitter_ns: u64, seed: u64) -> Self {
         self.batch_jitter_ns = jitter_ns;

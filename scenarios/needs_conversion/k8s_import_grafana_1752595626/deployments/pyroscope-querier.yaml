@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-querier
+spec:
+  replicas: 16
+  selector:
+    matchLabels:
+      app: pyroscope-querier
+  template:
+    metadata:
+      labels:
+        app: pyroscope-querier
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-querier-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 4096Mi

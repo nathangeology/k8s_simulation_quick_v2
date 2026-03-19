@@ -67,34 +67,24 @@ SEARCH_RUNS = 50  # Fixed during adversarial search; report phase uses higher co
 # ── Leaf strategies ──────────────────────────────────────────────
 
 def _cpu_dist() -> SearchStrategy[dict]:
-    """Strategy for a CPU request distribution."""
-    return st.one_of(
-        st.builds(
-            lambda lo, hi: {"dist": "uniform", "min": f"{lo}m", "max": f"{hi}m"},
-            lo=st.integers(50, 2000),
-            hi=st.integers(2001, 32000),
-        ),
-        st.builds(
-            lambda mean, std: {"dist": "normal", "mean": f"{mean}m", "std": f"{std}m"},
-            mean=st.integers(100, 8000),
-            std=st.integers(50, 2000),
-        ),
+    """Strategy for a CPU request — fixed value per deployment.
+
+    Real deployments have a specific CPU request (e.g. 250m, 500m, 2000m),
+    not a distribution. Different deployments (count > 1) get different
+    values sampled from this strategy, but all replicas within a deployment
+    share the same request via the pod template.
+    """
+    return st.builds(
+        lambda m: {"dist": "uniform", "min": f"{m}m", "max": f"{m}m"},
+        m=st.sampled_from([100, 250, 500, 750, 1000, 1500, 2000, 4000, 8000]),
     )
 
 
 def _memory_dist() -> SearchStrategy[dict]:
-    """Strategy for a memory request distribution."""
-    return st.one_of(
-        st.builds(
-            lambda lo, hi: {"dist": "uniform", "min": f"{lo}Mi", "max": f"{hi}Mi"},
-            lo=st.integers(64, 4096),
-            hi=st.integers(4097, 131072),
-        ),
-        st.builds(
-            lambda mean, std: {"dist": "normal", "mean": f"{mean}Mi", "std": f"{std}Mi"},
-            mean=st.integers(128, 32768),
-            std=st.integers(32, 8192),
-        ),
+    """Strategy for a memory request — fixed value per deployment."""
+    return st.builds(
+        lambda m: {"dist": "uniform", "min": f"{m}Mi", "max": f"{m}Mi"},
+        m=st.sampled_from([128, 256, 512, 1024, 2048, 4096, 8192, 16384]),
     )
 
 
@@ -306,8 +296,14 @@ def _overcommit_workload() -> SearchStrategy[dict]:
         "type": st.just("batch_job"),
         "count": st.integers(20, 100),
         "priority": st.sampled_from(["low", "medium", "high"]),
-        "cpu_request": st.just({"dist": "uniform", "min": "4000m", "max": "8000m"}),
-        "memory_request": st.just({"dist": "uniform", "min": "16384Mi", "max": "65536Mi"}),
+        "cpu_request": st.builds(
+            lambda m: {"dist": "uniform", "min": f"{m}m", "max": f"{m}m"},
+            m=st.sampled_from([4000, 6000, 8000, 12000, 16000]),
+        ),
+        "memory_request": st.builds(
+            lambda m: {"dist": "uniform", "min": f"{m}Mi", "max": f"{m}Mi"},
+            m=st.sampled_from([16384, 32768, 65536]),
+        ),
         "duration": _duration_dist(),
     })
 
@@ -389,11 +385,22 @@ def node_pool(
     max_nodes: SearchStrategy[int] | None = None,
     karpenter: SearchStrategy[dict | None] | None = None,
 ) -> SearchStrategy[dict]:
-    """Strategy for a single node pool definition."""
+    """Strategy for a single node pool definition.
+
+    By default, ~80% of pools use all available instance types (realistic),
+    and ~20% use a restricted subset (to explore constrained scenarios).
+    """
+    if instance_types is None:
+        # Use an integer draw to control the branch: 0-3 → all types, 4 → restricted
+        @st.composite
+        def _instance_types(draw):
+            branch = draw(st.integers(0, 4))
+            if branch < 4:
+                return list(INSTANCE_TYPES)
+            return draw(st.lists(st.sampled_from(INSTANCE_TYPES), min_size=1, max_size=6, unique=True))
+        instance_types = _instance_types()
     return st.fixed_dictionaries({
-        "instance_types": instance_types if instance_types is not None else st.lists(
-            st.sampled_from(INSTANCE_TYPES), min_size=1, max_size=6, unique=True,
-        ),
+        "instance_types": instance_types,
         "min_nodes": min_nodes if min_nodes is not None else st.integers(1, 10),
         "max_nodes": max_nodes if max_nodes is not None else st.integers(11, 200),
     }, optional={

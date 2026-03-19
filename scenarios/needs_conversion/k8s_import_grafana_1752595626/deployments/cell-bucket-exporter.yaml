@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cell-bucket-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cell-bucket-exporter
+  template:
+    metadata:
+      labels:
+        app: cell-bucket-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: cell-bucket-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

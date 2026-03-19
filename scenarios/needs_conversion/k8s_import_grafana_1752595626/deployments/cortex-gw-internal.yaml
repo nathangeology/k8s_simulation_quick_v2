@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cortex-gw-internal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cortex-gw-internal
+  template:
+    metadata:
+      labels:
+        app: cortex-gw-internal
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: cortex-gw-internal-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 512Mi
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            name: cortex-gw-internal
+        maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphite-config-controller
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: graphite-config-controller
+  template:
+    metadata:
+      labels:
+        app: graphite-config-controller
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: graphite-config-controller-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.25'
+            memory: 128Mi

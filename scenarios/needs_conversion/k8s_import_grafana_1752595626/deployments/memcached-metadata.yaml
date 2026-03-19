@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memcached-metadata
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memcached-metadata
+  template:
+    metadata:
+      labels:
+        app: memcached-metadata
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: memcached-metadata-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 638Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+              - key: karpenter.k8s.aws/instance-network-bandwidth
+                operator: Gt
+                values:
+                - '9999'
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: memcached-metadata
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

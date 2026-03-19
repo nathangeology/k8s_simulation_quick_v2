@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: limits-operator-redpanda-console
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: limits-operator-redpanda-console
+  template:
+    metadata:
+      labels:
+        app: limits-operator-redpanda-console
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: limits-operator-redpanda-console-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi

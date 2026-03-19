@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: limitskafka-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: limitskafka-exporter
+  template:
+    metadata:
+      labels:
+        app: limitskafka-exporter
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: limitskafka-exporter-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 128Mi
+      affinity:
+        nodeAffinity: null
+        podAffinity: null
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: metrics
+                  app.kubernetes.io/instance: limitskafka
+                  app.kubernetes.io/name: kafka
+              topologyKey: kubernetes.io/hostname
+            weight: 1

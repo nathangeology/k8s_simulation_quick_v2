@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: limits-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: limits-operator
+  template:
+    metadata:
+      labels:
+        app: limits-operator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: limits-operator-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.25'
+            memory: 256Mi

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aggregator-warpstream-partitioner-metrics-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: aggregator-warpstream-partitioner-metrics

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: store-gateway-zone-b-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: store-gateway-zone-b

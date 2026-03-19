@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: adaptive-metrics-canary-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: adaptive-metrics-canary

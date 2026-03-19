@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: node-local-dns-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: node-local-dns

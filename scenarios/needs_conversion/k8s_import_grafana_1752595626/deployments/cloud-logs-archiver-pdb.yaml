@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloud-logs-archiver-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: cloud-logs-archiver

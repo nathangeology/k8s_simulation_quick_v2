@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hosted-grafana-api
+spec:
+  replicas: 12
+  selector:
+    matchLabels:
+      app: hosted-grafana-api
+  template:
+    metadata:
+      labels:
+        app: hosted-grafana-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: hosted-grafana-api-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 256Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: hosted-grafana-api
+            topologyKey: kubernetes.io/hostname

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdc-agent-stack-675576-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: pdc-agent-stack-675576

@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdc-auth-gw
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pdc-auth-gw
+  template:
+    metadata:
+      labels:
+        app: pdc-auth-gw
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pdc-auth-gw-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.0'
+            memory: 2048Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: pdc-auth-gw
+            topologyKey: kubernetes.io/hostname

@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: memcached-parquet-page-01-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: memcached-parquet-page-01

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyroscope-distributor
+spec:
+  replicas: 16
+  selector:
+    matchLabels:
+      app: pyroscope-distributor
+  template:
+    metadata:
+      labels:
+        app: pyroscope-distributor
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pyroscope-distributor-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 1024Mi

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: querier-burst-backup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: querier-burst-backup
+  template:
+    metadata:
+      labels:
+        app: querier-burst-backup
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: querier-burst-backup-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '1.5'
+            memory: 3072Mi

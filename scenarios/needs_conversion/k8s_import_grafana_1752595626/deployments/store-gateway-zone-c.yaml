@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: store-gateway-zone-c
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: store-gateway-zone-c
+  template:
+    metadata:
+      labels:
+        app: store-gateway-zone-c
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: store-gateway-zone-c-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 13312Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: grafana.com/platform-spot-solo
+                operator: Exists
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+              - key: karpenter.k8s.aws/instance-network-bandwidth
+                operator: Gt
+                values:
+                - '9999'
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: rollout-group
+                operator: In
+                values:
+                - store-gateway
+              - key: name
+                operator: NotIn
+                values:
+                - store-gateway-zone-c
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: type
+        operator: Equal
+        value: spot-node
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

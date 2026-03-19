@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aws-node-pdb
+spec:
+  minAvailable: 50%
+  selector:
+    matchLabels:
+      app: aws-node

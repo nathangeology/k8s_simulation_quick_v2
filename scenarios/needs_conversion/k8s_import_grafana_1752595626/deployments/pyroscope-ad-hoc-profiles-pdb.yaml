@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pyroscope-ad-hoc-profiles-pdb
+spec:
+  maxUnavailable: '1'
+  selector:
+    matchLabels:
+      app: pyroscope-ad-hoc-profiles

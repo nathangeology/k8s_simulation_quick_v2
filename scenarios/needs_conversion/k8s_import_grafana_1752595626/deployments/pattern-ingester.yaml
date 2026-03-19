@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pattern-ingester
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: pattern-ingester
+  template:
+    metadata:
+      labels:
+        app: pattern-ingester
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: pattern-ingester-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '2.0'
+            memory: 24576Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: pattern-ingester
+            topologyKey: kubernetes.io/hostname

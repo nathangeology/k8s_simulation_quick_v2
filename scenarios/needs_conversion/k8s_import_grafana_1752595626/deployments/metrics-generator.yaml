@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-generator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: metrics-generator
+  template:
+    metadata:
+      labels:
+        app: metrics-generator
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: metrics-generator-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.5'
+            memory: 2048Mi
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                name: metrics-generator
+            topologyKey: kubernetes.io/hostname
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

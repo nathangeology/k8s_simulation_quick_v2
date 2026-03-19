@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aggregations-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aggregations-api
+  template:
+    metadata:
+      labels:
+        app: aggregations-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: aggregations-api-container
+        image: nginx:latest
+        resources:
+          requests:
+            cpu: '0.1'
+            memory: 1024Mi
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+      - effect: NoSchedule
+        key: arch
+        operator: Equal
+        value: arm64

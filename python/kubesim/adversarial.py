@@ -101,8 +101,8 @@ KARPENTER_CONSOLIDATION = VariantPair(
 DELETION_COST_PAIRS = VariantPair(
     name_a="no_deletion_cost",
     config_a={"name": "no_deletion_cost", "deletion_cost_strategy": "none"},
-    name_b="cost_aware",
-    config_b={"name": "cost_aware", "deletion_cost_strategy": "cost_aware"},
+    name_b="prefer_emptying_nodes",
+    config_b={"name": "prefer_emptying_nodes", "deletion_cost_strategy": "prefer_emptying_nodes"},
 )
 
 
@@ -219,11 +219,14 @@ class AdversarialFinder:
     variant_pair: VariantPair | None = None
     track_features: bool = False
     screen_threshold: float = 0.01
+    progress: bool = True
 
     # ── public API ───────────────────────────────────────────────
 
     def run(self) -> list[ScoredScenario]:
         """Execute the search and return ranked extreme scenarios."""
+        import sys
+        import time as _time
         from hypothesis import given, settings, HealthCheck
 
         rng = random.Random(self.seed)
@@ -231,6 +234,10 @@ class AdversarialFinder:
 
         found: list[ScoredScenario] = []
         counter = {"n": 0}
+        best_score = {"val": float("-inf") if self.objective == "maximize" else float("inf")}
+        t_start = _time.perf_counter()
+        t_last = {"val": t_start}
+        recent_times: list[float] = []
         feature_scores: dict[str, list[float]] = defaultdict(list) if self.track_features else {}
 
         @settings(
@@ -257,11 +264,50 @@ class AdversarialFinder:
                 objective_scores=obj_scores, feature_contributions=feat_contrib,
             ))
 
+            # Update best score
+            is_max = self.objective == "maximize"
+            if (is_max and score > best_score["val"]) or (not is_max and score < best_score["val"]):
+                best_score["val"] = score
+
+            # Progress output
+            if self.progress:
+                now = _time.perf_counter()
+                dt = now - t_last["val"]
+                t_last["val"] = now
+                recent_times.append(dt)
+                if len(recent_times) > 10:
+                    recent_times.pop(0)
+
+                elapsed = now - t_start
+                n = counter["n"]
+                avg_recent = sum(recent_times) / len(recent_times)
+                remaining = self.budget - n
+                eta = remaining * avg_recent
+
+                bar_width = 30
+                filled = int(bar_width * n / self.budget)
+                bar = "█" * filled + "░" * (bar_width - filled)
+                pct = n * 100 // self.budget
+                best_str = f"{best_score['val']:.4f}" if abs(best_score["val"]) < float("inf") else "—"
+                print(f"\r  {bar} {pct:>3}% ({n}/{self.budget})  "
+                      f"best={best_str}  "
+                      f"elapsed={elapsed:.0f}s  "
+                      f"ETA ~{eta:.0f}s  "
+                      f"last={dt:.2f}s  ",
+                      end="", flush=True, file=sys.stderr)
+
         self._last_results: list[dict] = []
         try:
             _search()
         except AssertionError:
             pass
+
+        if self.progress:
+            elapsed = _time.perf_counter() - t_start
+            print(f"\r  Done: {counter['n']} scenarios in {elapsed:.1f}s "
+                  f"({counter['n']/elapsed:.1f}/s)  "
+                  f"best={best_score['val']:.4f}          ",
+                  file=sys.stderr)
 
         reverse = self.objective == "maximize"
         found.sort(key=lambda s: s.score, reverse=reverse)
@@ -395,8 +441,8 @@ _WORKLOAD_ARCHETYPES = {
         "type": "batch_job",
         "count": trial.suggest_int(f"w{i}_count", 20, 100),
         "priority": trial.suggest_categorical(f"w{i}_prio", ["low", "medium", "high"]),
-        "cpu_request": {"dist": "uniform", "min": "4000m", "max": "8000m"},
-        "memory_request": {"dist": "uniform", "min": "16384Mi", "max": "65536Mi"},
+        "cpu_request": {"dist": "uniform", "min": "8000m", "max": "8000m"},
+        "memory_request": {"dist": "uniform", "min": "32768Mi", "max": "32768Mi"},
     },
     "anti_affinity": lambda trial, i: {
         "type": "web_app",
@@ -481,16 +527,21 @@ class OptunaAdversarialSearch:
                     "max_nodes": trial.suggest_int(f"pool{p}_max", 5, self.max_nodes),
                 }
             else:
-                n_types = trial.suggest_int(f"pool{p}_n_types", 1, 6)
-                # Pick instance types by index to keep search space consistent
-                its = []
-                for t in range(n_types):
-                    idx = trial.suggest_int(f"pool{p}_it{t}", 0, len(INSTANCE_TYPES) - 1)
-                    it = INSTANCE_TYPES[idx]
-                    if it not in its:
-                        its.append(it)
-                if not its:
-                    its = [INSTANCE_TYPES[0]]
+                # 80% chance: use all instance types (realistic default)
+                # 20% chance: restricted subset (explore constrained scenarios)
+                restrict = trial.suggest_categorical(f"pool{p}_restrict", [False, False, False, False, True])
+                if restrict:
+                    n_types = trial.suggest_int(f"pool{p}_n_types", 1, 6)
+                    its = []
+                    for t in range(n_types):
+                        idx = trial.suggest_int(f"pool{p}_it{t}", 0, len(INSTANCE_TYPES) - 1)
+                        it = INSTANCE_TYPES[idx]
+                        if it not in its:
+                            its.append(it)
+                    if not its:
+                        its = [INSTANCE_TYPES[0]]
+                else:
+                    its = list(INSTANCE_TYPES)
                 max_n = max(5, self.max_nodes)
                 min_cap = min(10, max_n - 1)
                 pool = {
