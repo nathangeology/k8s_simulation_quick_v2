@@ -1,0 +1,103 @@
+# ConsolidateWhen policy comparison — diurnal traffic with scale-down
+# Tests all 3 policies under realistic day/night traffic patterns.
+# Off-peak troughs create consolidation opportunities where policies should diverge.
+#
+# NOTE: Requires simulator support for ConsolidateWhen field and decision_ratio_threshold.
+# Until implemented, use consolidation.policy: WhenEmpty / WhenUnderutilized as proxy.
+study:
+  name: consolidate-when-diurnal
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - c-4x-amd64-linux
+          - c-8x-amd64-linux
+          - c-16x-amd64-linux
+          - c-32x-amd64-linux
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+          - m-16x-amd64-linux
+          - m-32x-amd64-linux
+        min_nodes: 0
+        max_nodes: 100
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    - type: web_app
+      count: 8
+      replicas:
+        fixed: 10
+      scaling:
+        type: hpa
+        metric: cpu
+        target: "70%"
+      cpu_request:
+        dist: uniform
+        min: "250m"
+        max: "500m"
+      memory_request:
+        dist: uniform
+        min: "256Mi"
+        max: "512Mi"
+      priority: high
+      traffic: diurnal
+      pdb:
+        min_available: "50%"
+      scale_down:
+        - {at: "12h", reduce_by: 7}
+
+    - type: saas_microservice
+      count: 10
+      replicas:
+        fixed: 6
+      cpu_request:
+        dist: uniform
+        min: "100m"
+        max: "300m"
+      memory_request:
+        dist: uniform
+        min: "128Mi"
+        max: "384Mi"
+      priority: medium
+      traffic: diurnal
+      scale_down:
+        - {at: "12h", reduce_by: 4}
+
+  traffic_pattern:
+    type: diurnal
+    peak_multiplier: 4.0
+    duration: "24h"
+
+  # Variant structure for when ConsolidateWhen is implemented.
+  # For now, these serve as documentation of the intended comparison.
+  # consolidate_when variants:
+  #   when-empty:           { policy: WhenEmpty }
+  #   when-underutilized:   { policy: WhenEmptyOrUnderutilized }
+  #   cost-justified:       { policy: WhenCostJustifiesDisruption, threshold: 1.0 }
+  variants:
+    - name: when-empty
+      karpenter_version: "v1"
+    - name: when-underutilized
+      karpenter_version: "v1"
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted
