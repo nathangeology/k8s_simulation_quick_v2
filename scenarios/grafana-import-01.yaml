@@ -1,0 +1,4829 @@
+# Grafana production cluster scenario (imported from external simulator format)
+# Source: scenarios/needs_conversion/k8s_import_grafana_1752595626/
+# 164 deployments, 60-minute scaling timeline, ~5500 peak pods
+
+study:
+  name: grafana-import-01
+  runs: 50
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types: [c-4x-amd64-linux, c-8x-amd64-linux, c-16x-amd64-linux, c-32x-amd64-linux, c-48x-amd64-linux, c-64x-amd64-linux, c-96x-amd64-linux, c-128x-amd64-linux, m-4x-amd64-linux, m-8x-amd64-linux, m-16x-amd64-linux, m-32x-amd64-linux, m-48x-amd64-linux, m-64x-amd64-linux, m-96x-amd64-linux, m-128x-amd64-linux, s-4x-amd64-linux, s-8x-amd64-linux, s-16x-amd64-linux, s-32x-amd64-linux, s-48x-amd64-linux, s-64x-amd64-linux, s-96x-amd64-linux, s-128x-amd64-linux]
+        min_nodes: 0
+        max_nodes: 500
+        karpenter:
+          consolidation: {policy: WhenUnderutilized}
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+      - name: node-agent
+        cpu_request: "50m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+      provisioner_batch_jitter: "5s"
+      pod_startup: "2s"
+
+  workloads:
+    # adaptive-logs-api
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: adaptive-logs-api}
+      scale_up:
+        - {at: "5m", increase_to: 13}
+        - {at: "10m", increase_to: 14}
+        - {at: "32m", increase_to: 22}
+        - {at: "41m", increase_to: 20}
+        - {at: "52m", increase_to: 10}
+        - {at: "58m", increase_to: 11}
+        - {at: "60m", increase_to: 12}
+      scale_down:
+        - {at: "23m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "33m", reduce_by: 3}
+        - {at: "34m", reduce_by: 2}
+        - {at: "36m", reduce_by: 5}
+        - {at: "37m", reduce_by: 2}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 3}
+        - {at: "43m", reduce_by: 3}
+        - {at: "45m", reduce_by: 5}
+    # adaptive-metrics-canary
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: adaptive-metrics-canary}
+      scale_up:
+        - {at: "5m", increase_to: 2}
+        - {at: "27m", increase_to: 2}
+      scale_down:
+        - {at: "6m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+    # aggregation-recommendations
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "13000m", max: "13000m"}
+      memory_request: {dist: uniform, min: "10240Mi", max: "10240Mi"}
+      labels: {app: aggregation-recommendations}
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "5m", increase_to: 23}
+        - {at: "7m", increase_to: 24}
+        - {at: "9m", increase_to: 25}
+        - {at: "11m", increase_to: 26}
+        - {at: "14m", increase_to: 33}
+        - {at: "40m", increase_to: 51}
+        - {at: "48m", increase_to: 32}
+        - {at: "51m", increase_to: 14}
+        - {at: "55m", increase_to: 16}
+        - {at: "57m", increase_to: 17}
+        - {at: "60m", increase_to: 19}
+      scale_down:
+        - {at: "15m", reduce_by: 2}
+        - {at: "16m", reduce_by: 2}
+        - {at: "20m", reduce_by: 3}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 2}
+        - {at: "32m", reduce_by: 3}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 10}
+        - {at: "43m", reduce_by: 20}
+        - {at: "44m", reduce_by: 9}
+        - {at: "49m", reduce_by: 10}
+        - {at: "50m", reduce_by: 9}
+    # aggregations-api
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: aggregations-api}
+      scale_up:
+        - {at: "5m", increase_to: 25}
+        - {at: "7m", increase_to: 26}
+        - {at: "11m", increase_to: 27}
+        - {at: "31m", increase_to: 35}
+        - {at: "51m", increase_to: 21}
+        - {at: "55m", increase_to: 22}
+        - {at: "58m", increase_to: 23}
+        - {at: "60m", increase_to: 24}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "34m", reduce_by: 6}
+        - {at: "36m", reduce_by: 5}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+    # aggregator-cardinality-summary-querier
+    - type: web_app
+      count: 1
+      replicas: {fixed: 5}
+      cpu_request: {dist: uniform, min: "1700m", max: "1700m"}
+      memory_request: {dist: uniform, min: "49152Mi", max: "49152Mi"}
+      labels: {app: aggregator-cardinality-summary-querier}
+      scale_up:
+        - {at: "6m", increase_to: 6}
+        - {at: "9m", increase_to: 8}
+        - {at: "18m", increase_to: 12}
+        - {at: "33m", increase_to: 10}
+        - {at: "56m", increase_to: 4}
+      scale_down:
+        - {at: "10m", reduce_by: 1}
+        - {at: "12m", reduce_by: 1}
+        - {at: "19m", reduce_by: 1}
+        - {at: "20m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "23m", reduce_by: 2}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 4}
+        - {at: "37m", reduce_by: 3}
+    # aggregator-partitioner-metrics
+    - type: web_app
+      count: 1
+      replicas: {fixed: 18}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: aggregator-partitioner-metrics}
+      scale_up:
+        - {at: "4m", increase_to: 31}
+        - {at: "10m", increase_to: 23}
+        - {at: "15m", increase_to: 32}
+        - {at: "49m", increase_to: 12}
+        - {at: "52m", increase_to: 29}
+        - {at: "53m", increase_to: 43}
+        - {at: "57m", increase_to: 16}
+        - {at: "59m", increase_to: 17}
+        - {at: "60m", increase_to: 18}
+      scale_down:
+        - {at: "5m", reduce_by: 3}
+        - {at: "6m", reduce_by: 2}
+        - {at: "7m", reduce_by: 3}
+        - {at: "8m", reduce_by: 1}
+        - {at: "16m", reduce_by: 8}
+        - {at: "19m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "54m", reduce_by: 10}
+        - {at: "56m", reduce_by: 18}
+    # aggregator-warpstream-partitioner-metrics
+    - type: web_app
+      count: 1
+      replicas: {fixed: 27}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: aggregator-warpstream-partitioner-metrics}
+      scale_up:
+        - {at: "5m", increase_to: 30}
+        - {at: "6m", increase_to: 31}
+        - {at: "8m", increase_to: 32}
+        - {at: "10m", increase_to: 33}
+        - {at: "12m", increase_to: 34}
+        - {at: "13m", increase_to: 40}
+        - {at: "47m", increase_to: 40}
+        - {at: "56m", increase_to: 23}
+        - {at: "57m", increase_to: 24}
+        - {at: "58m", increase_to: 25}
+        - {at: "59m", increase_to: 48}
+      scale_down:
+        - {at: "15m", reduce_by: 2}
+        - {at: "16m", reduce_by: 1}
+        - {at: "17m", reduce_by: 1}
+        - {at: "18m", reduce_by: 1}
+        - {at: "19m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 2}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 2}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "48m", reduce_by: 5}
+        - {at: "49m", reduce_by: 4}
+        - {at: "50m", reduce_by: 4}
+        - {at: "51m", reduce_by: 3}
+        - {at: "55m", reduce_by: 2}
+    # aggregator-zone-a
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "3000m", max: "3000m"}
+      memory_request: {dist: uniform, min: "19200Mi", max: "19200Mi"}
+      labels: {app: aggregator-zone-a}
+      scale_up:
+        - {at: "5m", increase_to: 11}
+        - {at: "12m", increase_to: 12}
+        - {at: "19m", increase_to: 19}
+        - {at: "38m", increase_to: 15}
+        - {at: "49m", increase_to: 19}
+        - {at: "53m", increase_to: 8}
+        - {at: "58m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "20m", reduce_by: 2}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 2}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 2}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 2}
+        - {at: "40m", reduce_by: 2}
+        - {at: "42m", reduce_by: 4}
+        - {at: "51m", reduce_by: 8}
+        - {at: "52m", reduce_by: 4}
+    # api-mysql8-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: api-mysql8-exporter}
+      scale_up:
+        - {at: "4m", increase_to: 19}
+        - {at: "6m", increase_to: 20}
+        - {at: "8m", increase_to: 21}
+        - {at: "11m", increase_to: 22}
+        - {at: "15m", increase_to: 30}
+        - {at: "20m", increase_to: 31}
+        - {at: "51m", increase_to: 14}
+        - {at: "54m", increase_to: 15}
+        - {at: "56m", increase_to: 16}
+        - {at: "58m", increase_to: 17}
+        - {at: "60m", increase_to: 18}
+      scale_down:
+        - {at: "2m", reduce_by: 11}
+        - {at: "3m", reduce_by: 11}
+        - {at: "16m", reduce_by: 2}
+        - {at: "18m", reduce_by: 4}
+        - {at: "19m", reduce_by: 2}
+        - {at: "22m", reduce_by: 4}
+        - {at: "23m", reduce_by: 2}
+        - {at: "24m", reduce_by: 3}
+        - {at: "25m", reduce_by: 2}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+    # archiver-operator
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: archiver-operator}
+      scale_up:
+        - {at: "5m", increase_to: 11}
+        - {at: "9m", increase_to: 12}
+        - {at: "40m", increase_to: 12}
+        - {at: "52m", increase_to: 17}
+      scale_down:
+        - {at: "23m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "45m", reduce_by: 3}
+        - {at: "54m", reduce_by: 1}
+        - {at: "55m", reduce_by: 2}
+        - {at: "56m", reduce_by: 1}
+        - {at: "57m", reduce_by: 1}
+        - {at: "60m", reduce_by: 2}
+    # aws-load-balancer-controller
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: aws-load-balancer-controller}
+      scale_up:
+        - {at: "2m", increase_to: 29}
+        - {at: "8m", increase_to: 18}
+        - {at: "28m", increase_to: 28}
+        - {at: "47m", increase_to: 13}
+        - {at: "54m", increase_to: 14}
+        - {at: "58m", increase_to: 15}
+      scale_down:
+        - {at: "3m", reduce_by: 4}
+        - {at: "4m", reduce_by: 3}
+        - {at: "6m", reduce_by: 5}
+        - {at: "25m", reduce_by: 1}
+        - {at: "30m", reduce_by: 12}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+    # aws-node
+    - type: web_app
+      count: 1
+      replicas: {fixed: 14}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: aws-node}
+      scale_up:
+        - {at: "3m", increase_to: 17}
+        - {at: "8m", increase_to: 16}
+        - {at: "9m", increase_to: 17}
+        - {at: "15m", increase_to: 18}
+        - {at: "29m", increase_to: 29}
+        - {at: "46m", increase_to: 34}
+        - {at: "53m", increase_to: 11}
+        - {at: "56m", increase_to: 12}
+        - {at: "58m", increase_to: 13}
+      scale_down:
+        - {at: "4m", reduce_by: 1}
+        - {at: "5m", reduce_by: 1}
+        - {at: "19m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "30m", reduce_by: 3}
+        - {at: "31m", reduce_by: 4}
+        - {at: "32m", reduce_by: 3}
+        - {at: "33m", reduce_by: 4}
+        - {at: "36m", reduce_by: 4}
+        - {at: "40m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "47m", reduce_by: 12}
+        - {at: "48m", reduce_by: 12}
+    # bloom-builder
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: bloom-builder}
+      scale_up:
+        - {at: "5m", increase_to: 12}
+        - {at: "12m", increase_to: 12}
+        - {at: "29m", increase_to: 12}
+        - {at: "50m", increase_to: 8}
+        - {at: "56m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "11m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "37m", reduce_by: 2}
+        - {at: "41m", reduce_by: 1}
+    # bloom-gateway
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "1500m", max: "1500m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: bloom-gateway}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 16}
+        - {at: "5m", increase_to: 17}
+        - {at: "8m", increase_to: 20}
+        - {at: "44m", increase_to: 36}
+        - {at: "52m", increase_to: 10}
+        - {at: "54m", increase_to: 11}
+        - {at: "56m", increase_to: 12}
+        - {at: "57m", increase_to: 13}
+        - {at: "58m", increase_to: 39}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 2}
+        - {at: "45m", reduce_by: 9}
+        - {at: "46m", reduce_by: 7}
+        - {at: "47m", reduce_by: 11}
+        - {at: "59m", reduce_by: 7}
+    # bloom-planner
+    - type: web_app
+      count: 1
+      replicas: {fixed: 70}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "12288Mi", max: "12288Mi"}
+      labels: {app: bloom-planner}
+      scale_up:
+        - {at: "6m", increase_to: 40}
+        - {at: "7m", increase_to: 41}
+        - {at: "8m", increase_to: 42}
+        - {at: "9m", increase_to: 43}
+        - {at: "11m", increase_to: 44}
+        - {at: "16m", increase_to: 45}
+        - {at: "34m", increase_to: 52}
+        - {at: "49m", increase_to: 27}
+        - {at: "51m", increase_to: 28}
+        - {at: "53m", increase_to: 29}
+        - {at: "54m", increase_to: 30}
+        - {at: "56m", increase_to: 32}
+        - {at: "59m", increase_to: 34}
+        - {at: "60m", increase_to: 36}
+      scale_down:
+        - {at: "5m", reduce_by: 31}
+        - {at: "20m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "36m", reduce_by: 22}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+    # canary-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: canary-exporter}
+    # carbon-relay-ng
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "200m", max: "200m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: carbon-relay-ng}
+      scale_up:
+        - {at: "2m", increase_to: 20}
+        - {at: "9m", increase_to: 14}
+        - {at: "11m", increase_to: 15}
+        - {at: "29m", increase_to: 26}
+        - {at: "53m", increase_to: 9}
+        - {at: "55m", increase_to: 29}
+        - {at: "58m", increase_to: 11}
+      scale_down:
+        - {at: "3m", reduce_by: 4}
+        - {at: "5m", reduce_by: 3}
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "30m", reduce_by: 4}
+        - {at: "31m", reduce_by: 4}
+        - {at: "32m", reduce_by: 4}
+        - {at: "34m", reduce_by: 4}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "57m", reduce_by: 19}
+    # cell-bucket-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: cell-bucket-exporter}
+      scale_up:
+        - {at: "5m", increase_to: 21}
+        - {at: "10m", increase_to: 22}
+        - {at: "18m", increase_to: 25}
+        - {at: "53m", increase_to: 18}
+        - {at: "59m", increase_to: 19}
+        - {at: "60m", increase_to: 20}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "22m", reduce_by: 2}
+        - {at: "24m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+    # cloud-logs-archiver
+    - type: web_app
+      count: 1
+      replicas: {fixed: 9}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: cloud-logs-archiver}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "7m", increase_to: 10}
+        - {at: "12m", increase_to: 11}
+        - {at: "53m", increase_to: 13}
+        - {at: "60m", increase_to: 9}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "54m", reduce_by: 1}
+        - {at: "55m", reduce_by: 1}
+        - {at: "57m", reduce_by: 2}
+        - {at: "59m", reduce_by: 1}
+    # compactor
+    - type: web_app
+      count: 1
+      replicas: {fixed: 25}
+      cpu_request: {dist: uniform, min: "12000m", max: "12000m"}
+      memory_request: {dist: uniform, min: "20480Mi", max: "20480Mi"}
+      labels: {app: compactor}
+      scale_up:
+        - {at: "4m", increase_to: 26}
+        - {at: "7m", increase_to: 28}
+        - {at: "10m", increase_to: 29}
+        - {at: "13m", increase_to: 30}
+        - {at: "28m", increase_to: 32}
+        - {at: "49m", increase_to: 20}
+        - {at: "52m", increase_to: 21}
+        - {at: "56m", increase_to: 22}
+        - {at: "58m", increase_to: 45}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "30m", reduce_by: 4}
+        - {at: "31m", reduce_by: 2}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "60m", reduce_by: 14}
+    # config-api
+    - type: web_app
+      count: 1
+      replicas: {fixed: 21}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: config-api}
+      scale_up:
+        - {at: "4m", increase_to: 23}
+        - {at: "6m", increase_to: 24}
+        - {at: "10m", increase_to: 26}
+        - {at: "13m", increase_to: 27}
+        - {at: "28m", increase_to: 44}
+        - {at: "49m", increase_to: 15}
+        - {at: "53m", increase_to: 27}
+        - {at: "58m", increase_to: 19}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 3}
+        - {at: "30m", reduce_by: 4}
+        - {at: "31m", reduce_by: 7}
+        - {at: "36m", reduce_by: 13}
+        - {at: "37m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "54m", reduce_by: 2}
+        - {at: "55m", reduce_by: 3}
+        - {at: "57m", reduce_by: 4}
+    # continuous-test
+    - type: web_app
+      count: 1
+      replicas: {fixed: 34}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels: {app: continuous-test}
+      scale_up:
+        - {at: "11m", increase_to: 18}
+        - {at: "17m", increase_to: 19}
+        - {at: "39m", increase_to: 20}
+        - {at: "45m", increase_to: 33}
+        - {at: "50m", increase_to: 22}
+        - {at: "57m", increase_to: 12}
+        - {at: "60m", increase_to: 13}
+      scale_down:
+        - {at: "4m", reduce_by: 10}
+        - {at: "9m", reduce_by: 7}
+        - {at: "19m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 5}
+        - {at: "42m", reduce_by: 2}
+        - {at: "44m", reduce_by: 5}
+        - {at: "47m", reduce_by: 13}
+        - {at: "51m", reduce_by: 4}
+        - {at: "52m", reduce_by: 4}
+        - {at: "53m", reduce_by: 4}
+    # coredns
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "170Mi", max: "170Mi"}
+      labels: {app: coredns}
+      scale_up:
+        - {at: "6m", increase_to: 4}
+        - {at: "45m", increase_to: 4}
+        - {at: "60m", increase_to: 3}
+      scale_down:
+        - {at: "8m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+        - {at: "49m", reduce_by: 1}
+    # cortex-gw
+    - type: web_app
+      count: 1
+      replicas: {fixed: 6}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels: {app: cortex-gw}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "7m", increase_to: 7}
+        - {at: "23m", increase_to: 12}
+        - {at: "48m", increase_to: 10}
+        - {at: "55m", increase_to: 5}
+        - {at: "60m", increase_to: 6}
+      scale_down:
+        - {at: "24m", reduce_by: 2}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 3}
+        - {at: "31m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "50m", reduce_by: 3}
+        - {at: "51m", reduce_by: 1}
+        - {at: "52m", reduce_by: 1}
+        - {at: "53m", reduce_by: 1}
+    # cortex-gw-internal
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels: {app: cortex-gw-internal}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "5m", increase_to: 22}
+        - {at: "7m", increase_to: 23}
+        - {at: "8m", increase_to: 24}
+        - {at: "11m", increase_to: 25}
+        - {at: "14m", increase_to: 38}
+        - {at: "26m", increase_to: 42}
+        - {at: "49m", increase_to: 14}
+        - {at: "51m", increase_to: 15}
+        - {at: "55m", increase_to: 35}
+      scale_down:
+        - {at: "15m", reduce_by: 12}
+        - {at: "18m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 4}
+        - {at: "28m", reduce_by: 5}
+        - {at: "29m", reduce_by: 5}
+        - {at: "30m", reduce_by: 4}
+        - {at: "31m", reduce_by: 5}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "40m", reduce_by: 2}
+        - {at: "44m", reduce_by: 1}
+        - {at: "56m", reduce_by: 6}
+        - {at: "59m", reduce_by: 10}
+    # cost-attribution-operator
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: cost-attribution-operator}
+      scale_up:
+        - {at: "6m", increase_to: 17}
+        - {at: "7m", increase_to: 18}
+        - {at: "9m", increase_to: 19}
+        - {at: "11m", increase_to: 20}
+        - {at: "36m", increase_to: 27}
+        - {at: "38m", increase_to: 30}
+        - {at: "42m", increase_to: 36}
+        - {at: "52m", increase_to: 10}
+        - {at: "53m", increase_to: 11}
+        - {at: "56m", increase_to: 12}
+        - {at: "58m", increase_to: 21}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "40m", reduce_by: 14}
+        - {at: "41m", reduce_by: 7}
+        - {at: "44m", reduce_by: 14}
+        - {at: "47m", reduce_by: 13}
+        - {at: "60m", reduce_by: 3}
+    # critical-prometheus
+    - type: web_app
+      count: 1
+      replicas: {fixed: 7}
+      cpu_request: {dist: uniform, min: "42000m", max: "42000m"}
+      memory_request: {dist: uniform, min: "123904Mi", max: "123904Mi"}
+      labels: {app: critical-prometheus}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "5m", increase_to: 14}
+        - {at: "10m", increase_to: 8}
+        - {at: "14m", increase_to: 12}
+        - {at: "54m", increase_to: 6}
+        - {at: "60m", increase_to: 7}
+      scale_down:
+        - {at: "6m", reduce_by: 4}
+        - {at: "7m", reduce_by: 3}
+        - {at: "15m", reduce_by: 4}
+        - {at: "25m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+    # distributor
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: distributor}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      scale_up:
+        - {at: "4m", increase_to: 18}
+        - {at: "9m", increase_to: 14}
+        - {at: "53m", increase_to: 10}
+        - {at: "58m", increase_to: 11}
+        - {at: "60m", increase_to: 12}
+      scale_down:
+        - {at: "5m", reduce_by: 2}
+        - {at: "6m", reduce_by: 1}
+        - {at: "7m", reduce_by: 1}
+        - {at: "8m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+    # ebs-csi-controller
+    - type: web_app
+      count: 1
+      replicas: {fixed: 6}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "200Mi", max: "200Mi"}
+      labels: {app: ebs-csi-controller}
+      scale_up:
+        - {at: "27m", increase_to: 7}
+        - {at: "60m", increase_to: 6}
+      scale_down:
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+    # ebs-csi-node
+    - type: web_app
+      count: 1
+      replicas: {fixed: 5}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: ebs-csi-node}
+      scale_up:
+        - {at: "8m", increase_to: 6}
+        - {at: "45m", increase_to: 10}
+        - {at: "52m", increase_to: 10}
+        - {at: "60m", increase_to: 5}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "46m", reduce_by: 2}
+        - {at: "47m", reduce_by: 2}
+        - {at: "48m", reduce_by: 2}
+        - {at: "49m", reduce_by: 1}
+        - {at: "53m", reduce_by: 3}
+        - {at: "54m", reduce_by: 1}
+        - {at: "56m", reduce_by: 2}
+    # freetier-limit-merge
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: freetier-limit-merge}
+      scale_up:
+        - {at: "7m", increase_to: 9}
+        - {at: "23m", increase_to: 10}
+        - {at: "40m", increase_to: 8}
+        - {at: "42m", increase_to: 9}
+        - {at: "54m", increase_to: 3}
+      scale_down:
+        - {at: "9m", reduce_by: 2}
+        - {at: "10m", reduce_by: 1}
+        - {at: "12m", reduce_by: 1}
+        - {at: "24m", reduce_by: 2}
+        - {at: "27m", reduce_by: 4}
+        - {at: "31m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 2}
+        - {at: "44m", reduce_by: 5}
+        - {at: "45m", reduce_by: 2}
+    # freetier-limiter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 21}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: freetier-limiter}
+      scale_up:
+        - {at: "3m", increase_to: 22}
+        - {at: "5m", increase_to: 24}
+        - {at: "6m", increase_to: 25}
+        - {at: "8m", increase_to: 26}
+        - {at: "9m", increase_to: 27}
+        - {at: "11m", increase_to: 28}
+        - {at: "15m", increase_to: 29}
+        - {at: "17m", increase_to: 37}
+        - {at: "38m", increase_to: 47}
+        - {at: "51m", increase_to: 14}
+        - {at: "54m", increase_to: 16}
+        - {at: "56m", increase_to: 17}
+        - {at: "57m", increase_to: 18}
+        - {at: "59m", increase_to: 49}
+      scale_down:
+        - {at: "19m", reduce_by: 6}
+        - {at: "21m", reduce_by: 3}
+        - {at: "22m", reduce_by: 1}
+        - {at: "25m", reduce_by: 2}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 2}
+        - {at: "39m", reduce_by: 2}
+        - {at: "41m", reduce_by: 6}
+        - {at: "42m", reduce_by: 6}
+        - {at: "44m", reduce_by: 17}
+        - {at: "50m", reduce_by: 3}
+        - {at: "60m", reduce_by: 5}
+    # go-feature-flag
+    - type: web_app
+      count: 1
+      replicas: {fixed: 18}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: go-feature-flag}
+      scale_up:
+        - {at: "4m", increase_to: 19}
+        - {at: "7m", increase_to: 20}
+        - {at: "12m", increase_to: 21}
+        - {at: "40m", increase_to: 26}
+        - {at: "49m", increase_to: 28}
+        - {at: "55m", increase_to: 16}
+        - {at: "60m", increase_to: 18}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "41m", reduce_by: 3}
+        - {at: "43m", reduce_by: 6}
+        - {at: "46m", reduce_by: 3}
+        - {at: "50m", reduce_by: 4}
+        - {at: "53m", reduce_by: 9}
+    # graphite
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "500Mi", max: "500Mi"}
+      labels: {app: graphite}
+      scale_up:
+        - {at: "5m", increase_to: 16}
+        - {at: "9m", increase_to: 17}
+        - {at: "35m", increase_to: 26}
+        - {at: "42m", increase_to: 23}
+        - {at: "53m", increase_to: 13}
+        - {at: "57m", increase_to: 14}
+        - {at: "60m", increase_to: 15}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 13}
+        - {at: "38m", reduce_by: 1}
+        - {at: "44m", reduce_by: 8}
+        - {at: "46m", reduce_by: 3}
+    # graphite-config-controller
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: graphite-config-controller}
+      scale_up:
+        - {at: "10m", increase_to: 5}
+        - {at: "48m", increase_to: 8}
+        - {at: "55m", increase_to: 4}
+        - {at: "57m", increase_to: 7}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "49m", reduce_by: 2}
+        - {at: "50m", reduce_by: 1}
+        - {at: "51m", reduce_by: 2}
+        - {at: "58m", reduce_by: 4}
+    # graphite-querier
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "12288Mi", max: "12288Mi"}
+      labels: {app: graphite-querier}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "5m", increase_to: 11}
+        - {at: "10m", increase_to: 12}
+        - {at: "17m", increase_to: 20}
+        - {at: "23m", increase_to: 13}
+        - {at: "30m", increase_to: 18}
+        - {at: "53m", increase_to: 8}
+        - {at: "58m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "19m", reduce_by: 8}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "33m", reduce_by: 7}
+        - {at: "36m", reduce_by: 3}
+        - {at: "39m", reduce_by: 1}
+    # graphite-write-proxy
+    - type: web_app
+      count: 1
+      replicas: {fixed: 6}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "3072Mi", max: "3072Mi"}
+      labels: {app: graphite-write-proxy}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "9m", increase_to: 7}
+        - {at: "16m", increase_to: 9}
+        - {at: "46m", increase_to: 12}
+        - {at: "53m", increase_to: 7}
+        - {at: "60m", increase_to: 6}
+      scale_down:
+        - {at: "17m", reduce_by: 1}
+        - {at: "19m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "47m", reduce_by: 8}
+        - {at: "54m", reduce_by: 1}
+        - {at: "55m", reduce_by: 1}
+    # hosted-grafana-api
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "256Mi"}
+      labels: {app: hosted-grafana-api}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 14}
+        - {at: "10m", increase_to: 10}
+        - {at: "24m", increase_to: 21}
+        - {at: "46m", increase_to: 12}
+        - {at: "53m", increase_to: 6}
+        - {at: "56m", increase_to: 19}
+      scale_down:
+        - {at: "5m", reduce_by: 5}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 4}
+        - {at: "28m", reduce_by: 9}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "47m", reduce_by: 7}
+        - {at: "57m", reduce_by: 3}
+        - {at: "59m", reduce_by: 5}
+        - {at: "60m", reduce_by: 2}
+    # hosted-grafana-controller
+    - type: web_app
+      count: 1
+      replicas: {fixed: 9}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "6144Mi", max: "6144Mi"}
+      labels: {app: hosted-grafana-controller}
+      scale_up:
+        - {at: "43m", increase_to: 13}
+        - {at: "60m", increase_to: 9}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+        - {at: "47m", reduce_by: 1}
+        - {at: "49m", reduce_by: 1}
+    # hosted-grafana-gateway
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "2200m", max: "2200m"}
+      memory_request: {dist: uniform, min: "2304Mi", max: "2304Mi"}
+      labels: {app: hosted-grafana-gateway}
+      scale_up:
+        - {at: "5m", increase_to: 22}
+        - {at: "6m", increase_to: 23}
+        - {at: "7m", increase_to: 45}
+        - {at: "12m", increase_to: 25}
+        - {at: "13m", increase_to: 28}
+        - {at: "50m", increase_to: 31}
+        - {at: "54m", increase_to: 16}
+        - {at: "56m", increase_to: 17}
+        - {at: "57m", increase_to: 18}
+        - {at: "60m", increase_to: 20}
+      scale_down:
+        - {at: "8m", reduce_by: 11}
+        - {at: "9m", reduce_by: 10}
+        - {at: "14m", reduce_by: 1}
+        - {at: "16m", reduce_by: 1}
+        - {at: "18m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "51m", reduce_by: 16}
+    # index-gateway
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: index-gateway}
+      scale_up:
+        - {at: "6m", increase_to: 13}
+        - {at: "9m", increase_to: 14}
+        - {at: "26m", increase_to: 25}
+        - {at: "35m", increase_to: 15}
+        - {at: "53m", increase_to: 10}
+        - {at: "58m", increase_to: 11}
+        - {at: "60m", increase_to: 12}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 4}
+        - {at: "29m", reduce_by: 9}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "37m", reduce_by: 2}
+        - {at: "38m", reduce_by: 2}
+    # influx-proxy-writes
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels: {app: influx-proxy-writes}
+    # ingester
+    - type: web_app
+      count: 1
+      replicas: {fixed: 32}
+      cpu_request: {dist: uniform, min: "3000m", max: "3000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: ingester}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 33}
+        - {at: "4m", increase_to: 34}
+        - {at: "6m", increase_to: 35}
+        - {at: "7m", increase_to: 36}
+        - {at: "10m", increase_to: 38}
+        - {at: "12m", increase_to: 39}
+        - {at: "50m", increase_to: 25}
+        - {at: "52m", increase_to: 58}
+        - {at: "57m", increase_to: 42}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 3}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "53m", reduce_by: 8}
+        - {at: "54m", reduce_by: 8}
+        - {at: "55m", reduce_by: 7}
+    # ingester-zone-a
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "6144Mi", max: "6144Mi"}
+      labels: {app: ingester-zone-a}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+        target_label_value: ingester
+      scale_up:
+        - {at: "4m", increase_to: 21}
+        - {at: "6m", increase_to: 22}
+        - {at: "9m", increase_to: 23}
+        - {at: "12m", increase_to: 27}
+        - {at: "49m", increase_to: 26}
+        - {at: "53m", increase_to: 17}
+        - {at: "57m", increase_to: 18}
+        - {at: "58m", increase_to: 19}
+      scale_down:
+        - {at: "14m", reduce_by: 3}
+        - {at: "19m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "50m", reduce_by: 4}
+        - {at: "51m", reduce_by: 3}
+        - {at: "52m", reduce_by: 3}
+    # ingester-zone-b
+    - type: web_app
+      count: 1
+      replicas: {fixed: 5}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "6144Mi", max: "6144Mi"}
+      labels: {app: ingester-zone-b}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+        target_label_value: ingester
+      scale_up:
+        - {at: "2m", increase_to: 11}
+        - {at: "41m", increase_to: 8}
+        - {at: "54m", increase_to: 4}
+      scale_down:
+        - {at: "3m", reduce_by: 1}
+        - {at: "4m", reduce_by: 1}
+        - {at: "5m", reduce_by: 1}
+        - {at: "6m", reduce_by: 1}
+        - {at: "9m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+    # ingester-zone-c
+    - type: web_app
+      count: 1
+      replicas: {fixed: 21}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "6144Mi", max: "6144Mi"}
+      labels: {app: ingester-zone-c}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+        target_label_value: ingester
+      scale_up:
+        - {at: "6m", increase_to: 22}
+        - {at: "8m", increase_to: 23}
+        - {at: "16m", increase_to: 24}
+        - {at: "54m", increase_to: 19}
+        - {at: "56m", increase_to: 27}
+      scale_down:
+        - {at: "17m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "57m", reduce_by: 2}
+        - {at: "59m", reduce_by: 2}
+    # kafka-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: kafka-exporter}
+      scale_up:
+        - {at: "4m", increase_to: 11}
+        - {at: "7m", increase_to: 14}
+        - {at: "20m", increase_to: 28}
+        - {at: "53m", increase_to: 7}
+        - {at: "57m", increase_to: 21}
+      scale_down:
+        - {at: "8m", reduce_by: 1}
+        - {at: "21m", reduce_by: 4}
+        - {at: "23m", reduce_by: 8}
+        - {at: "25m", reduce_by: 4}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "58m", reduce_by: 5}
+        - {at: "59m", reduce_by: 2}
+    # kafka-zone-a
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "12288Mi", max: "12288Mi"}
+      labels: {app: kafka-zone-a}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "8m", increase_to: 11}
+        - {at: "40m", increase_to: 16}
+        - {at: "55m", increase_to: 9}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 3}
+        - {at: "43m", reduce_by: 5}
+    # kafka-zone-b
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "12288Mi", max: "12288Mi"}
+      labels: {app: kafka-zone-b}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 41}
+        - {at: "4m", increase_to: 42}
+        - {at: "7m", increase_to: 44}
+        - {at: "9m", increase_to: 45}
+        - {at: "12m", increase_to: 61}
+        - {at: "18m", increase_to: 57}
+        - {at: "50m", increase_to: 34}
+        - {at: "53m", increase_to: 35}
+        - {at: "55m", increase_to: 36}
+        - {at: "57m", increase_to: 37}
+        - {at: "58m", increase_to: 38}
+        - {at: "59m", increase_to: 39}
+        - {at: "60m", increase_to: 40}
+      scale_down:
+        - {at: "14m", reduce_by: 5}
+        - {at: "15m", reduce_by: 3}
+        - {at: "16m", reduce_by: 2}
+        - {at: "17m", reduce_by: 3}
+        - {at: "19m", reduce_by: 3}
+        - {at: "20m", reduce_by: 2}
+        - {at: "21m", reduce_by: 3}
+        - {at: "22m", reduce_by: 2}
+        - {at: "23m", reduce_by: 3}
+        - {at: "25m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "35m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 2}
+    # kafkactr
+    - type: web_app
+      count: 1
+      replicas: {fixed: 6}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: kafkactr}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "6m", increase_to: 7}
+        - {at: "11m", increase_to: 8}
+        - {at: "13m", increase_to: 11}
+        - {at: "17m", increase_to: 12}
+        - {at: "51m", increase_to: 17}
+      scale_down:
+        - {at: "14m", reduce_by: 1}
+        - {at: "20m", reduce_by: 2}
+        - {at: "21m", reduce_by: 1}
+        - {at: "25m", reduce_by: 2}
+        - {at: "27m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "55m", reduce_by: 9}
+        - {at: "56m", reduce_by: 1}
+        - {at: "57m", reduce_by: 2}
+    # limits-operator
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "256Mi"}
+      labels: {app: limits-operator}
+      scale_up:
+        - {at: "4m", increase_to: 11}
+        - {at: "8m", increase_to: 12}
+        - {at: "11m", increase_to: 13}
+        - {at: "14m", increase_to: 20}
+        - {at: "28m", increase_to: 13}
+        - {at: "50m", increase_to: 26}
+        - {at: "55m", increase_to: 8}
+        - {at: "58m", increase_to: 9}
+      scale_down:
+        - {at: "17m", reduce_by: 7}
+        - {at: "22m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "29m", reduce_by: 3}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "53m", reduce_by: 15}
+        - {at: "54m", reduce_by: 4}
+    # limits-operator-redpanda-console
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: limits-operator-redpanda-console}
+      scale_up:
+        - {at: "2m", increase_to: 17}
+        - {at: "8m", increase_to: 13}
+        - {at: "10m", increase_to: 10}
+        - {at: "53m", increase_to: 18}
+        - {at: "57m", increase_to: 7}
+      scale_down:
+        - {at: "3m", reduce_by: 5}
+        - {at: "5m", reduce_by: 3}
+        - {at: "9m", reduce_by: 4}
+        - {at: "23m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "54m", reduce_by: 4}
+        - {at: "56m", reduce_by: 8}
+    # limitskafka
+    - type: web_app
+      count: 1
+      replicas: {fixed: 32}
+      cpu_request: {dist: uniform, min: "350m", max: "350m"}
+      memory_request: {dist: uniform, min: "1124Mi", max: "1124Mi"}
+      labels: {app: limitskafka}
+      scale_up:
+        - {at: "4m", increase_to: 33}
+        - {at: "7m", increase_to: 39}
+        - {at: "52m", increase_to: 29}
+        - {at: "55m", increase_to: 30}
+        - {at: "59m", increase_to: 31}
+        - {at: "60m", increase_to: 32}
+      scale_down:
+        - {at: "8m", reduce_by: 2}
+        - {at: "9m", reduce_by: 1}
+        - {at: "11m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "31m", reduce_by: 2}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+    # limitskafka-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: limitskafka-exporter}
+      scale_up:
+        - {at: "3m", increase_to: 41}
+        - {at: "6m", increase_to: 43}
+        - {at: "9m", increase_to: 44}
+        - {at: "10m", increase_to: 45}
+        - {at: "13m", increase_to: 46}
+        - {at: "49m", increase_to: 34}
+        - {at: "53m", increase_to: 35}
+        - {at: "54m", increase_to: 36}
+        - {at: "57m", increase_to: 38}
+        - {at: "58m", increase_to: 52}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 2}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "60m", reduce_by: 6}
+    # loki-autoscaler-metrics
+    - type: web_app
+      count: 1
+      replicas: {fixed: 45}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: loki-autoscaler-metrics}
+      scale_up:
+        - {at: "3m", increase_to: 46}
+        - {at: "4m", increase_to: 47}
+        - {at: "8m", increase_to: 49}
+        - {at: "9m", increase_to: 50}
+        - {at: "12m", increase_to: 51}
+        - {at: "50m", increase_to: 39}
+        - {at: "53m", increase_to: 40}
+        - {at: "55m", increase_to: 41}
+        - {at: "56m", increase_to: 42}
+        - {at: "58m", increase_to: 43}
+        - {at: "59m", increase_to: 44}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 2}
+        - {at: "31m", reduce_by: 2}
+        - {at: "35m", reduce_by: 3}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+    # loki-canary
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: loki-canary}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "5m", increase_to: 9}
+        - {at: "13m", increase_to: 10}
+        - {at: "17m", increase_to: 15}
+        - {at: "20m", increase_to: 15}
+        - {at: "52m", increase_to: 6}
+        - {at: "60m", increase_to: 7}
+      scale_down:
+        - {at: "18m", reduce_by: 3}
+        - {at: "19m", reduce_by: 2}
+        - {at: "21m", reduce_by: 4}
+        - {at: "22m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+    # loki-freetier-limiter-metrics
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: loki-freetier-limiter-metrics}
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "5m", increase_to: 22}
+        - {at: "8m", increase_to: 42}
+        - {at: "11m", increase_to: 24}
+        - {at: "16m", increase_to: 31}
+        - {at: "30m", increase_to: 28}
+        - {at: "48m", increase_to: 15}
+        - {at: "53m", increase_to: 16}
+        - {at: "54m", increase_to: 17}
+        - {at: "58m", increase_to: 18}
+        - {at: "59m", increase_to: 19}
+        - {at: "60m", increase_to: 20}
+      scale_down:
+        - {at: "9m", reduce_by: 19}
+        - {at: "17m", reduce_by: 3}
+        - {at: "18m", reduce_by: 2}
+        - {at: "19m", reduce_by: 2}
+        - {at: "22m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 3}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 3}
+        - {at: "34m", reduce_by: 2}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+    # loki-internal-release
+    - type: web_app
+      count: 1
+      replicas: {fixed: 36}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: loki-internal-release}
+      scale_up:
+        - {at: "3m", increase_to: 37}
+        - {at: "6m", increase_to: 38}
+        - {at: "7m", increase_to: 39}
+        - {at: "10m", increase_to: 40}
+        - {at: "11m", increase_to: 41}
+        - {at: "46m", increase_to: 50}
+        - {at: "51m", increase_to: 31}
+        - {at: "53m", increase_to: 32}
+        - {at: "55m", increase_to: 33}
+        - {at: "58m", increase_to: 34}
+        - {at: "59m", increase_to: 35}
+        - {at: "60m", increase_to: 36}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "26m", reduce_by: 2}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 3}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "48m", reduce_by: 20}
+    # loki-quotas-service-metrics
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: loki-quotas-service-metrics}
+      scale_up:
+        - {at: "3m", increase_to: 16}
+        - {at: "5m", increase_to: 17}
+        - {at: "7m", increase_to: 36}
+        - {at: "28m", increase_to: 34}
+        - {at: "34m", increase_to: 42}
+        - {at: "50m", increase_to: 28}
+        - {at: "59m", increase_to: 14}
+      scale_down:
+        - {at: "8m", reduce_by: 6}
+        - {at: "11m", reduce_by: 10}
+        - {at: "22m", reduce_by: 1}
+        - {at: "26m", reduce_by: 2}
+        - {at: "29m", reduce_by: 5}
+        - {at: "30m", reduce_by: 5}
+        - {at: "35m", reduce_by: 10}
+        - {at: "36m", reduce_by: 11}
+        - {at: "38m", reduce_by: 11}
+        - {at: "46m", reduce_by: 1}
+        - {at: "51m", reduce_by: 4}
+        - {at: "52m", reduce_by: 4}
+        - {at: "53m", reduce_by: 3}
+        - {at: "54m", reduce_by: 3}
+        - {at: "55m", reduce_by: 2}
+    # memberlist-seed
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "256Mi"}
+      labels: {app: memberlist-seed}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      scale_up:
+        - {at: "19m", increase_to: 4}
+        - {at: "56m", increase_to: 4}
+        - {at: "60m", increase_to: 3}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "58m", reduce_by: 2}
+    # memcached
+    - type: web_app
+      count: 1
+      replicas: {fixed: 36}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "6344Mi", max: "6344Mi"}
+      labels: {app: memcached}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      scale_up:
+        - {at: "4m", increase_to: 38}
+        - {at: "5m", increase_to: 39}
+        - {at: "7m", increase_to: 40}
+        - {at: "8m", increase_to: 41}
+        - {at: "10m", increase_to: 42}
+        - {at: "12m", increase_to: 43}
+        - {at: "22m", increase_to: 60}
+        - {at: "25m", increase_to: 65}
+        - {at: "50m", increase_to: 29}
+        - {at: "54m", increase_to: 31}
+        - {at: "55m", increase_to: 32}
+        - {at: "57m", increase_to: 33}
+        - {at: "58m", increase_to: 34}
+        - {at: "59m", increase_to: 35}
+        - {at: "60m", increase_to: 36}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 6}
+        - {at: "24m", reduce_by: 8}
+        - {at: "26m", reduce_by: 7}
+        - {at: "27m", reduce_by: 7}
+        - {at: "29m", reduce_by: 14}
+        - {at: "31m", reduce_by: 2}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 2}
+        - {at: "42m", reduce_by: 1}
+    # memcached-01
+    - type: web_app
+      count: 1
+      replicas: {fixed: 30}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "1329Mi", max: "1329Mi"}
+      labels: {app: memcached-01}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 31}
+        - {at: "6m", increase_to: 32}
+        - {at: "8m", increase_to: 33}
+        - {at: "10m", increase_to: 34}
+        - {at: "12m", increase_to: 35}
+        - {at: "35m", increase_to: 34}
+        - {at: "38m", increase_to: 37}
+        - {at: "50m", increase_to: 25}
+        - {at: "53m", increase_to: 26}
+        - {at: "55m", increase_to: 27}
+        - {at: "58m", increase_to: 28}
+        - {at: "59m", increase_to: 29}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "26m", reduce_by: 2}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 8}
+        - {at: "40m", reduce_by: 6}
+        - {at: "41m", reduce_by: 4}
+        - {at: "42m", reduce_by: 3}
+    # memcached-aggregation-cache
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "9931Mi", max: "9931Mi"}
+      labels: {app: memcached-aggregation-cache}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 25}
+        - {at: "5m", increase_to: 26}
+        - {at: "7m", increase_to: 27}
+        - {at: "9m", increase_to: 28}
+        - {at: "13m", increase_to: 29}
+        - {at: "24m", increase_to: 33}
+        - {at: "49m", increase_to: 19}
+        - {at: "51m", increase_to: 42}
+        - {at: "57m", increase_to: 22}
+        - {at: "59m", increase_to: 23}
+        - {at: "60m", increase_to: 24}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 2}
+        - {at: "27m", reduce_by: 3}
+        - {at: "28m", reduce_by: 2}
+        - {at: "29m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "52m", reduce_by: 6}
+        - {at: "53m", reduce_by: 5}
+        - {at: "54m", reduce_by: 6}
+        - {at: "55m", reduce_by: 4}
+    # memcached-cc-deduplicator-cache
+    - type: web_app
+      count: 1
+      replicas: {fixed: 18}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "254Mi", max: "254Mi"}
+      labels: {app: memcached-cc-deduplicator-cache}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 19}
+        - {at: "7m", increase_to: 20}
+        - {at: "11m", increase_to: 21}
+        - {at: "48m", increase_to: 25}
+        - {at: "53m", increase_to: 15}
+        - {at: "55m", increase_to: 16}
+        - {at: "58m", increase_to: 17}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "49m", reduce_by: 4}
+        - {at: "50m", reduce_by: 4}
+        - {at: "51m", reduce_by: 3}
+    # memcached-deduplicator-cache
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "254Mi", max: "254Mi"}
+      labels: {app: memcached-deduplicator-cache}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 17}
+        - {at: "7m", increase_to: 18}
+        - {at: "10m", increase_to: 19}
+        - {at: "29m", increase_to: 19}
+        - {at: "52m", increase_to: 13}
+        - {at: "55m", increase_to: 23}
+      scale_down:
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "32m", reduce_by: 4}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "56m", reduce_by: 3}
+        - {at: "57m", reduce_by: 2}
+        - {at: "58m", reduce_by: 1}
+    # memcached-extstore
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "12288Mi", max: "12288Mi"}
+      labels: {app: memcached-extstore}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "5m", increase_to: 9}
+        - {at: "10m", increase_to: 10}
+        - {at: "22m", increase_to: 20}
+        - {at: "50m", increase_to: 18}
+        - {at: "52m", increase_to: 6}
+        - {at: "58m", increase_to: 7}
+        - {at: "59m", increase_to: 16}
+      scale_down:
+        - {at: "23m", reduce_by: 6}
+        - {at: "24m", reduce_by: 5}
+        - {at: "27m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "51m", reduce_by: 13}
+        - {at: "60m", reduce_by: 5}
+    # memcached-frontend
+    - type: web_app
+      count: 1
+      replicas: {fixed: 2}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "1329Mi", max: "1329Mi"}
+      labels: {app: memcached-frontend}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "40m", increase_to: 2}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+    # memcached-frontend-search-01
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "1329Mi", max: "1329Mi"}
+      labels: {app: memcached-frontend-search-01}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "4m", increase_to: 22}
+        - {at: "5m", increase_to: 23}
+        - {at: "8m", increase_to: 24}
+        - {at: "9m", increase_to: 25}
+        - {at: "11m", increase_to: 26}
+        - {at: "14m", increase_to: 27}
+        - {at: "24m", increase_to: 38}
+        - {at: "43m", increase_to: 44}
+        - {at: "48m", increase_to: 46}
+        - {at: "53m", increase_to: 15}
+        - {at: "55m", increase_to: 16}
+        - {at: "58m", increase_to: 18}
+        - {at: "59m", increase_to: 19}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "26m", reduce_by: 6}
+        - {at: "27m", reduce_by: 4}
+        - {at: "28m", reduce_by: 4}
+        - {at: "29m", reduce_by: 3}
+        - {at: "30m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "44m", reduce_by: 8}
+        - {at: "46m", reduce_by: 16}
+        - {at: "50m", reduce_by: 17}
+        - {at: "51m", reduce_by: 7}
+        - {at: "52m", reduce_by: 8}
+    # memcached-index-queries
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "1329Mi", max: "1329Mi"}
+      labels: {app: memcached-index-queries}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 26}
+        - {at: "5m", increase_to: 27}
+        - {at: "7m", increase_to: 56}
+        - {at: "10m", increase_to: 31}
+        - {at: "12m", increase_to: 32}
+        - {at: "16m", increase_to: 33}
+        - {at: "21m", increase_to: 64}
+        - {at: "28m", increase_to: 33}
+        - {at: "46m", increase_to: 15}
+        - {at: "50m", increase_to: 39}
+        - {at: "55m", increase_to: 19}
+        - {at: "56m", increase_to: 20}
+        - {at: "60m", increase_to: 23}
+      scale_down:
+        - {at: "8m", reduce_by: 26}
+        - {at: "17m", reduce_by: 1}
+        - {at: "25m", reduce_by: 36}
+        - {at: "29m", reduce_by: 2}
+        - {at: "31m", reduce_by: 4}
+        - {at: "33m", reduce_by: 6}
+        - {at: "35m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "51m", reduce_by: 8}
+        - {at: "53m", reduce_by: 14}
+    # memcached-l2
+    - type: web_app
+      count: 1
+      replicas: {fixed: 25}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "6132Mi", max: "6132Mi"}
+      labels: {app: memcached-l2}
+      scale_up:
+        - {at: "6m", increase_to: 26}
+        - {at: "8m", increase_to: 27}
+        - {at: "12m", increase_to: 28}
+        - {at: "46m", increase_to: 30}
+        - {at: "50m", increase_to: 22}
+        - {at: "55m", increase_to: 23}
+        - {at: "58m", increase_to: 24}
+        - {at: "60m", increase_to: 25}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "48m", reduce_by: 6}
+        - {at: "49m", reduce_by: 3}
+    # memcached-metadata
+    - type: web_app
+      count: 1
+      replicas: {fixed: 50}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "638Mi", max: "638Mi"}
+      labels: {app: memcached-metadata}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "2m", increase_to: 51}
+        - {at: "4m", increase_to: 54}
+        - {at: "5m", increase_to: 56}
+        - {at: "6m", increase_to: 57}
+        - {at: "7m", increase_to: 58}
+        - {at: "8m", increase_to: 60}
+        - {at: "9m", increase_to: 61}
+        - {at: "10m", increase_to: 62}
+        - {at: "11m", increase_to: 63}
+        - {at: "13m", increase_to: 64}
+        - {at: "20m", increase_to: 95}
+        - {at: "25m", increase_to: 77}
+        - {at: "48m", increase_to: 99}
+        - {at: "54m", increase_to: 41}
+        - {at: "55m", increase_to: 42}
+        - {at: "56m", increase_to: 43}
+        - {at: "57m", increase_to: 45}
+        - {at: "58m", increase_to: 46}
+        - {at: "59m", increase_to: 48}
+      scale_down:
+        - {at: "21m", reduce_by: 6}
+        - {at: "24m", reduce_by: 18}
+        - {at: "26m", reduce_by: 5}
+        - {at: "27m", reduce_by: 4}
+        - {at: "28m", reduce_by: 6}
+        - {at: "29m", reduce_by: 5}
+        - {at: "30m", reduce_by: 7}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 2}
+        - {at: "37m", reduce_by: 4}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 2}
+        - {at: "41m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "49m", reduce_by: 13}
+        - {at: "50m", reduce_by: 13}
+        - {at: "51m", reduce_by: 12}
+        - {at: "53m", reduce_by: 22}
+    # memcached-metric-name-cache
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "9931Mi", max: "9931Mi"}
+      labels: {app: memcached-metric-name-cache}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "4m", increase_to: 22}
+        - {at: "5m", increase_to: 23}
+        - {at: "7m", increase_to: 24}
+        - {at: "8m", increase_to: 25}
+        - {at: "11m", increase_to: 26}
+        - {at: "12m", increase_to: 27}
+        - {at: "13m", increase_to: 30}
+        - {at: "20m", increase_to: 28}
+        - {at: "35m", increase_to: 52}
+        - {at: "40m", increase_to: 40}
+        - {at: "50m", increase_to: 13}
+        - {at: "54m", increase_to: 15}
+        - {at: "55m", increase_to: 16}
+        - {at: "57m", increase_to: 17}
+        - {at: "58m", increase_to: 18}
+        - {at: "59m", increase_to: 19}
+      scale_down:
+        - {at: "14m", reduce_by: 1}
+        - {at: "16m", reduce_by: 2}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 2}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 2}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 3}
+        - {at: "33m", reduce_by: 1}
+        - {at: "37m", reduce_by: 37}
+        - {at: "38m", reduce_by: 1}
+        - {at: "42m", reduce_by: 28}
+    # memcached-parquet-page-01
+    - type: web_app
+      count: 1
+      replicas: {fixed: 30}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "1329Mi", max: "1329Mi"}
+      labels: {app: memcached-parquet-page-01}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 32}
+        - {at: "4m", increase_to: 33}
+        - {at: "5m", increase_to: 34}
+        - {at: "7m", increase_to: 37}
+        - {at: "9m", increase_to: 38}
+        - {at: "11m", increase_to: 40}
+        - {at: "13m", increase_to: 41}
+        - {at: "17m", increase_to: 71}
+        - {at: "37m", increase_to: 72}
+        - {at: "52m", increase_to: 21}
+        - {at: "53m", increase_to: 22}
+        - {at: "57m", increase_to: 26}
+        - {at: "58m", increase_to: 27}
+        - {at: "59m", increase_to: 28}
+        - {at: "60m", increase_to: 29}
+      scale_down:
+        - {at: "18m", reduce_by: 8}
+        - {at: "19m", reduce_by: 7}
+        - {at: "20m", reduce_by: 9}
+        - {at: "22m", reduce_by: 8}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 2}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 2}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 2}
+        - {at: "34m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "38m", reduce_by: 13}
+        - {at: "39m", reduce_by: 9}
+        - {at: "44m", reduce_by: 32}
+    # metrics-generator
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: metrics-generator}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 21}
+        - {at: "7m", increase_to: 22}
+        - {at: "11m", increase_to: 23}
+        - {at: "22m", increase_to: 24}
+        - {at: "42m", increase_to: 24}
+        - {at: "53m", increase_to: 17}
+        - {at: "55m", increase_to: 18}
+      scale_down:
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "43m", reduce_by: 2}
+        - {at: "44m", reduce_by: 2}
+        - {at: "45m", reduce_by: 1}
+        - {at: "46m", reduce_by: 2}
+        - {at: "47m", reduce_by: 1}
+    # metrics-instance-mapper
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "8192Mi", max: "8192Mi"}
+      labels: {app: metrics-instance-mapper}
+      scale_up:
+        - {at: "5m", increase_to: 11}
+        - {at: "7m", increase_to: 12}
+        - {at: "12m", increase_to: 13}
+        - {at: "16m", increase_to: 18}
+        - {at: "34m", increase_to: 15}
+        - {at: "47m", increase_to: 21}
+        - {at: "50m", increase_to: 7}
+        - {at: "55m", increase_to: 8}
+        - {at: "58m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "17m", reduce_by: 3}
+        - {at: "18m", reduce_by: 2}
+        - {at: "21m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 7}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "48m", reduce_by: 15}
+    # metrics-server
+    - type: web_app
+      count: 1
+      replicas: {fixed: 36}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: metrics-server}
+      scale_up:
+        - {at: "2m", increase_to: 37}
+        - {at: "6m", increase_to: 42}
+        - {at: "7m", increase_to: 43}
+        - {at: "8m", increase_to: 44}
+        - {at: "10m", increase_to: 46}
+        - {at: "12m", increase_to: 80}
+        - {at: "14m", increase_to: 48}
+        - {at: "23m", increase_to: 63}
+        - {at: "47m", increase_to: 90}
+        - {at: "52m", increase_to: 77}
+        - {at: "59m", increase_to: 34}
+        - {at: "60m", increase_to: 36}
+      scale_down:
+        - {at: "13m", reduce_by: 33}
+        - {at: "19m", reduce_by: 1}
+        - {at: "25m", reduce_by: 21}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 3}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 3}
+        - {at: "34m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 2}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "48m", reduce_by: 22}
+        - {at: "51m", reduce_by: 43}
+        - {at: "53m", reduce_by: 10}
+        - {at: "54m", reduce_by: 10}
+        - {at: "55m", reduce_by: 9}
+        - {at: "56m", reduce_by: 9}
+        - {at: "57m", reduce_by: 7}
+    # mimir-aggregation-dpm-overrider
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mimir-aggregation-dpm-overrider}
+      scale_up:
+        - {at: "14m", increase_to: 4}
+        - {at: "19m", increase_to: 5}
+        - {at: "26m", increase_to: 5}
+        - {at: "31m", increase_to: 6}
+        - {at: "42m", increase_to: 7}
+        - {at: "48m", increase_to: 2}
+      scale_down:
+        - {at: "23m", reduce_by: 2}
+        - {at: "28m", reduce_by: 1}
+        - {at: "33m", reduce_by: 2}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "47m", reduce_by: 5}
+    # mimir-bucket-info-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mimir-bucket-info-exporter}
+      scale_up:
+        - {at: "53m", increase_to: 8}
+        - {at: "60m", increase_to: 8}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+        - {at: "56m", reduce_by: 1}
+    # mimir-config-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mimir-config-exporter}
+      scale_up:
+        - {at: "4m", increase_to: 25}
+        - {at: "8m", increase_to: 26}
+        - {at: "13m", increase_to: 27}
+        - {at: "49m", increase_to: 21}
+        - {at: "54m", increase_to: 22}
+        - {at: "56m", increase_to: 32}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+    # mimir-internal-release
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mimir-internal-release}
+      scale_up:
+        - {at: "2m", increase_to: 10}
+        - {at: "9m", increase_to: 5}
+        - {at: "29m", increase_to: 5}
+        - {at: "45m", increase_to: 8}
+        - {at: "53m", increase_to: 3}
+      scale_down:
+        - {at: "3m", reduce_by: 1}
+        - {at: "6m", reduce_by: 4}
+        - {at: "8m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "31m", reduce_by: 2}
+        - {at: "39m", reduce_by: 1}
+        - {at: "46m", reduce_by: 2}
+        - {at: "47m", reduce_by: 1}
+        - {at: "49m", reduce_by: 2}
+        - {at: "50m", reduce_by: 1}
+    # mimir-target-series-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 32}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mimir-target-series-exporter}
+      scale_up:
+        - {at: "2m", increase_to: 33}
+        - {at: "3m", increase_to: 66}
+        - {at: "5m", increase_to: 65}
+        - {at: "11m", increase_to: 41}
+        - {at: "12m", increase_to: 42}
+        - {at: "15m", increase_to: 43}
+        - {at: "42m", increase_to: 82}
+        - {at: "48m", increase_to: 21}
+        - {at: "50m", increase_to: 22}
+        - {at: "52m", increase_to: 23}
+        - {at: "53m", increase_to: 24}
+        - {at: "54m", increase_to: 25}
+        - {at: "55m", increase_to: 26}
+        - {at: "56m", increase_to: 27}
+        - {at: "57m", increase_to: 28}
+        - {at: "58m", increase_to: 29}
+      scale_down:
+        - {at: "4m", reduce_by: 16}
+        - {at: "9m", reduce_by: 25}
+        - {at: "20m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "25m", reduce_by: 3}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 3}
+        - {at: "32m", reduce_by: 3}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 2}
+        - {at: "35m", reduce_by: 1}
+        - {at: "37m", reduce_by: 2}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 2}
+        - {at: "43m", reduce_by: 62}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-1-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 25}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-1-mysql8}
+      scale_up:
+        - {at: "4m", increase_to: 26}
+        - {at: "5m", increase_to: 27}
+        - {at: "6m", increase_to: 56}
+        - {at: "10m", increase_to: 30}
+        - {at: "13m", increase_to: 31}
+        - {at: "23m", increase_to: 37}
+        - {at: "29m", increase_to: 30}
+        - {at: "51m", increase_to: 19}
+        - {at: "52m", increase_to: 20}
+        - {at: "55m", increase_to: 21}
+        - {at: "57m", increase_to: 23}
+        - {at: "59m", increase_to: 24}
+        - {at: "60m", increase_to: 25}
+      scale_down:
+        - {at: "8m", reduce_by: 27}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "25m", reduce_by: 6}
+        - {at: "26m", reduce_by: 4}
+        - {at: "30m", reduce_by: 3}
+        - {at: "32m", reduce_by: 4}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-2-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 30}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-2-mysql8}
+      scale_up:
+        - {at: "3m", increase_to: 31}
+        - {at: "4m", increase_to: 32}
+        - {at: "6m", increase_to: 33}
+        - {at: "7m", increase_to: 34}
+        - {at: "9m", increase_to: 35}
+        - {at: "11m", increase_to: 36}
+        - {at: "13m", increase_to: 37}
+        - {at: "44m", increase_to: 31}
+        - {at: "49m", increase_to: 23}
+        - {at: "53m", increase_to: 25}
+        - {at: "55m", increase_to: 51}
+        - {at: "59m", increase_to: 29}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "34m", reduce_by: 4}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "45m", reduce_by: 3}
+        - {at: "47m", reduce_by: 6}
+        - {at: "56m", reduce_by: 9}
+        - {at: "58m", reduce_by: 14}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-3-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 50}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-3-mysql8}
+      scale_up:
+        - {at: "3m", increase_to: 53}
+        - {at: "5m", increase_to: 57}
+        - {at: "6m", increase_to: 58}
+        - {at: "7m", increase_to: 60}
+        - {at: "8m", increase_to: 61}
+        - {at: "9m", increase_to: 62}
+        - {at: "10m", increase_to: 64}
+        - {at: "14m", increase_to: 66}
+        - {at: "15m", increase_to: 67}
+        - {at: "47m", increase_to: 33}
+        - {at: "51m", increase_to: 83}
+        - {at: "54m", increase_to: 86}
+        - {at: "55m", increase_to: 123}
+        - {at: "60m", increase_to: 49}
+      scale_down:
+        - {at: "17m", reduce_by: 1}
+        - {at: "20m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 2}
+        - {at: "26m", reduce_by: 3}
+        - {at: "28m", reduce_by: 3}
+        - {at: "29m", reduce_by: 2}
+        - {at: "30m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 2}
+        - {at: "35m", reduce_by: 3}
+        - {at: "36m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 3}
+        - {at: "40m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "52m", reduce_by: 15}
+        - {at: "56m", reduce_by: 21}
+        - {at: "57m", reduce_by: 19}
+        - {at: "58m", reduce_by: 18}
+        - {at: "59m", reduce_by: 17}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-4-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-4-mysql8}
+      scale_up:
+        - {at: "4m", increase_to: 13}
+        - {at: "11m", increase_to: 14}
+        - {at: "13m", increase_to: 15}
+        - {at: "14m", increase_to: 19}
+        - {at: "19m", increase_to: 20}
+        - {at: "50m", increase_to: 9}
+        - {at: "56m", increase_to: 20}
+      scale_down:
+        - {at: "15m", reduce_by: 4}
+        - {at: "20m", reduce_by: 3}
+        - {at: "21m", reduce_by: 3}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-5-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-5-mysql8}
+      scale_up:
+        - {at: "9m", increase_to: 11}
+        - {at: "39m", increase_to: 16}
+        - {at: "54m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "26m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 8}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-6-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-6-mysql8}
+      scale_up:
+        - {at: "5m", increase_to: 25}
+        - {at: "7m", increase_to: 26}
+        - {at: "11m", increase_to: 27}
+        - {at: "53m", increase_to: 21}
+        - {at: "55m", increase_to: 22}
+        - {at: "58m", increase_to: 23}
+        - {at: "60m", increase_to: 24}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "41m", reduce_by: 1}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-7-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-7-mysql8}
+      scale_up:
+        - {at: "5m", increase_to: 16}
+        - {at: "8m", increase_to: 17}
+        - {at: "13m", increase_to: 18}
+        - {at: "34m", increase_to: 27}
+        - {at: "38m", increase_to: 19}
+        - {at: "49m", increase_to: 12}
+        - {at: "55m", increase_to: 13}
+        - {at: "58m", increase_to: 14}
+        - {at: "60m", increase_to: 15}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 6}
+        - {at: "37m", reduce_by: 3}
+        - {at: "40m", reduce_by: 7}
+        - {at: "43m", reduce_by: 1}
+    # mysql-exporter-prod-us-east-0-hosted-grafana-shared-8-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: mysql-exporter-prod-us-east-0-hosted-grafana-shared-8-mysql8}
+      scale_up:
+        - {at: "11m", increase_to: 11}
+        - {at: "36m", increase_to: 14}
+        - {at: "51m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "37m", reduce_by: 3}
+        - {at: "38m", reduce_by: 2}
+        - {at: "40m", reduce_by: 1}
+    # node-local-dns
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: node-local-dns}
+      scale_up:
+        - {at: "52m", increase_to: 2}
+      scale_down:
+        - {at: "54m", reduce_by: 1}
+    # overrides-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 50}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: overrides-exporter}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "2m", increase_to: 51}
+        - {at: "3m", increase_to: 53}
+        - {at: "5m", increase_to: 56}
+        - {at: "6m", increase_to: 58}
+        - {at: "8m", increase_to: 114}
+        - {at: "12m", increase_to: 65}
+        - {at: "13m", increase_to: 66}
+        - {at: "14m", increase_to: 116}
+        - {at: "24m", increase_to: 87}
+        - {at: "49m", increase_to: 34}
+        - {at: "50m", increase_to: 35}
+        - {at: "53m", increase_to: 38}
+        - {at: "55m", increase_to: 41}
+        - {at: "57m", increase_to: 44}
+        - {at: "59m", increase_to: 109}
+      scale_down:
+        - {at: "9m", reduce_by: 26}
+        - {at: "10m", reduce_by: 25}
+        - {at: "15m", reduce_by: 9}
+        - {at: "20m", reduce_by: 42}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 15}
+        - {at: "27m", reduce_by: 9}
+        - {at: "28m", reduce_by: 9}
+        - {at: "29m", reduce_by: 2}
+        - {at: "30m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 6}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "38m", reduce_by: 3}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 2}
+        - {at: "45m", reduce_by: 1}
+        - {at: "60m", reduce_by: 15}
+    # packing-peanuts-large
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: packing-peanuts-large}
+      scale_up:
+        - {at: "5m", increase_to: 16}
+        - {at: "10m", increase_to: 17}
+        - {at: "47m", increase_to: 18}
+        - {at: "53m", increase_to: 13}
+        - {at: "56m", increase_to: 19}
+      scale_down:
+        - {at: "23m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "49m", reduce_by: 4}
+        - {at: "50m", reduce_by: 2}
+        - {at: "57m", reduce_by: 1}
+        - {at: "58m", reduce_by: 1}
+        - {at: "59m", reduce_by: 1}
+    # parallel-querier
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: parallel-querier}
+      scale_up:
+        - {at: "60m", increase_to: 8}
+      scale_down:
+        - {at: "32m", reduce_by: 1}
+    # parallel-querier-burst
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: parallel-querier-burst}
+      scale_up:
+        - {at: "57m", increase_to: 3}
+      scale_down:
+        - {at: "2m", reduce_by: 1}
+        - {at: "4m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "58m", reduce_by: 1}
+        - {at: "60m", reduce_by: 1}
+    # parallel-querier-burst-backup
+    - type: web_app
+      count: 1
+      replicas: {fixed: 27}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: parallel-querier-burst-backup}
+      scale_up:
+        - {at: "8m", increase_to: 29}
+        - {at: "10m", increase_to: 30}
+        - {at: "15m", increase_to: 31}
+        - {at: "21m", increase_to: 47}
+        - {at: "49m", increase_to: 23}
+        - {at: "53m", increase_to: 24}
+        - {at: "56m", increase_to: 25}
+        - {at: "58m", increase_to: 26}
+        - {at: "60m", increase_to: 27}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "24m", reduce_by: 18}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+    # parallel-query-frontend
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: parallel-query-frontend}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 17}
+        - {at: "5m", increase_to: 18}
+        - {at: "6m", increase_to: 19}
+        - {at: "9m", increase_to: 20}
+        - {at: "10m", increase_to: 24}
+        - {at: "28m", increase_to: 43}
+        - {at: "47m", increase_to: 26}
+        - {at: "51m", increase_to: 11}
+        - {at: "54m", increase_to: 12}
+        - {at: "56m", increase_to: 13}
+        - {at: "58m", increase_to: 14}
+        - {at: "60m", increase_to: 15}
+      scale_down:
+        - {at: "12m", reduce_by: 2}
+        - {at: "16m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 4}
+        - {at: "30m", reduce_by: 4}
+        - {at: "31m", reduce_by: 4}
+        - {at: "33m", reduce_by: 10}
+        - {at: "34m", reduce_by: 7}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "40m", reduce_by: 2}
+        - {at: "48m", reduce_by: 16}
+    # parallel-query-scheduler
+    - type: web_app
+      count: 1
+      replicas: {fixed: 9}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "600Mi", max: "600Mi"}
+      labels: {app: parallel-query-scheduler}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "11m", increase_to: 10}
+        - {at: "52m", increase_to: 10}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "54m", reduce_by: 1}
+        - {at: "55m", reduce_by: 1}
+    # pattern-ingester
+    - type: web_app
+      count: 1
+      replicas: {fixed: 32}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "24576Mi", max: "24576Mi"}
+      labels: {app: pattern-ingester}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 33}
+        - {at: "5m", increase_to: 34}
+        - {at: "11m", increase_to: 36}
+        - {at: "16m", increase_to: 37}
+        - {at: "46m", increase_to: 27}
+        - {at: "48m", increase_to: 49}
+        - {at: "57m", increase_to: 30}
+      scale_down:
+        - {at: "17m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "31m", reduce_by: 3}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "50m", reduce_by: 8}
+        - {at: "51m", reduce_by: 3}
+        - {at: "53m", reduce_by: 7}
+        - {at: "54m", reduce_by: 2}
+    # pdc-agent-stack-675576
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels: {app: pdc-agent-stack-675576}
+      scale_up:
+        - {at: "5m", increase_to: 9}
+        - {at: "10m", increase_to: 10}
+        - {at: "13m", increase_to: 20}
+        - {at: "22m", increase_to: 17}
+        - {at: "34m", increase_to: 15}
+        - {at: "53m", increase_to: 6}
+        - {at: "57m", increase_to: 12}
+      scale_down:
+        - {at: "15m", reduce_by: 5}
+        - {at: "16m", reduce_by: 3}
+        - {at: "17m", reduce_by: 2}
+        - {at: "24m", reduce_by: 8}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "37m", reduce_by: 6}
+        - {at: "38m", reduce_by: 2}
+        - {at: "40m", reduce_by: 2}
+        - {at: "58m", reduce_by: 1}
+        - {at: "60m", reduce_by: 2}
+    # pdc-agent-stack-781953
+    - type: web_app
+      count: 1
+      replicas: {fixed: 9}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "512Mi", max: "512Mi"}
+      labels: {app: pdc-agent-stack-781953}
+      scale_up:
+        - {at: "6m", increase_to: 10}
+        - {at: "9m", increase_to: 11}
+        - {at: "29m", increase_to: 22}
+        - {at: "37m", increase_to: 13}
+        - {at: "57m", increase_to: 8}
+      scale_down:
+        - {at: "23m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 3}
+        - {at: "34m", reduce_by: 2}
+        - {at: "35m", reduce_by: 3}
+        - {at: "36m", reduce_by: 3}
+        - {at: "39m", reduce_by: 3}
+        - {at: "41m", reduce_by: 3}
+        - {at: "44m", reduce_by: 1}
+    # pdc-auth-gw
+    - type: web_app
+      count: 1
+      replicas: {fixed: 50}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: pdc-auth-gw}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "2m", increase_to: 51}
+        - {at: "3m", increase_to: 53}
+        - {at: "5m", increase_to: 56}
+        - {at: "8m", increase_to: 60}
+        - {at: "9m", increase_to: 61}
+        - {at: "12m", increase_to: 63}
+        - {at: "14m", increase_to: 64}
+        - {at: "15m", increase_to: 109}
+        - {at: "26m", increase_to: 67}
+        - {at: "49m", increase_to: 122}
+        - {at: "58m", increase_to: 46}
+        - {at: "60m", increase_to: 49}
+      scale_down:
+        - {at: "16m", reduce_by: 8}
+        - {at: "17m", reduce_by: 7}
+        - {at: "18m", reduce_by: 8}
+        - {at: "19m", reduce_by: 8}
+        - {at: "21m", reduce_by: 16}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "27m", reduce_by: 12}
+        - {at: "28m", reduce_by: 2}
+        - {at: "30m", reduce_by: 3}
+        - {at: "32m", reduce_by: 3}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 2}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 2}
+        - {at: "41m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "50m", reduce_by: 15}
+        - {at: "51m", reduce_by: 14}
+        - {at: "52m", reduce_by: 13}
+        - {at: "54m", reduce_by: 26}
+        - {at: "56m", reduce_by: 11}
+    # private-datasource-connect
+    - type: web_app
+      count: 1
+      replicas: {fixed: 9}
+      cpu_request: {dist: uniform, min: "4000m", max: "4000m"}
+      memory_request: {dist: uniform, min: "4096Mi", max: "4096Mi"}
+      labels: {app: private-datasource-connect}
+      scale_up:
+        - {at: "8m", increase_to: 10}
+        - {at: "14m", increase_to: 12}
+        - {at: "48m", increase_to: 15}
+        - {at: "55m", increase_to: 8}
+      scale_down:
+        - {at: "15m", reduce_by: 1}
+        - {at: "17m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "49m", reduce_by: 2}
+        - {at: "51m", reduce_by: 4}
+        - {at: "53m", reduce_by: 2}
+    # pv-deleter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 45}
+      cpu_request: {dist: uniform, min: "500m", max: "500m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: pv-deleter}
+      scale_up:
+        - {at: "2m", increase_to: 46}
+        - {at: "4m", increase_to: 50}
+        - {at: "5m", increase_to: 51}
+        - {at: "6m", increase_to: 53}
+        - {at: "7m", increase_to: 54}
+        - {at: "8m", increase_to: 56}
+        - {at: "9m", increase_to: 57}
+        - {at: "10m", increase_to: 72}
+        - {at: "11m", increase_to: 110}
+        - {at: "48m", increase_to: 29}
+        - {at: "50m", increase_to: 125}
+        - {at: "58m", increase_to: 41}
+        - {at: "59m", increase_to: 43}
+      scale_down:
+        - {at: "15m", reduce_by: 31}
+        - {at: "16m", reduce_by: 5}
+        - {at: "17m", reduce_by: 9}
+        - {at: "18m", reduce_by: 5}
+        - {at: "21m", reduce_by: 2}
+        - {at: "23m", reduce_by: 2}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 2}
+        - {at: "27m", reduce_by: 2}
+        - {at: "30m", reduce_by: 5}
+        - {at: "32m", reduce_by: 3}
+        - {at: "33m", reduce_by: 2}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 5}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "44m", reduce_by: 2}
+        - {at: "53m", reduce_by: 56}
+        - {at: "54m", reduce_by: 16}
+        - {at: "56m", reduce_by: 15}
+    # pyroscope-ad-hoc-profiles
+    - type: web_app
+      count: 1
+      replicas: {fixed: 35}
+      cpu_request: {dist: uniform, min: "200m", max: "200m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: pyroscope-ad-hoc-profiles}
+      scale_up:
+        - {at: "2m", increase_to: 36}
+        - {at: "3m", increase_to: 37}
+        - {at: "4m", increase_to: 38}
+        - {at: "5m", increase_to: 39}
+        - {at: "7m", increase_to: 41}
+        - {at: "8m", increase_to: 85}
+        - {at: "17m", increase_to: 45}
+        - {at: "45m", increase_to: 56}
+        - {at: "51m", increase_to: 26}
+        - {at: "53m", increase_to: 74}
+      scale_down:
+        - {at: "9m", reduce_by: 8}
+        - {at: "10m", reduce_by: 6}
+        - {at: "11m", reduce_by: 7}
+        - {at: "14m", reduce_by: 20}
+        - {at: "19m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 2}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 2}
+        - {at: "36m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "43m", reduce_by: 2}
+        - {at: "44m", reduce_by: 1}
+        - {at: "47m", reduce_by: 31}
+        - {at: "54m", reduce_by: 10}
+        - {at: "55m", reduce_by: 8}
+        - {at: "56m", reduce_by: 9}
+        - {at: "57m", reduce_by: 8}
+    # pyroscope-admin
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "200m", max: "200m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: pyroscope-admin}
+      scale_up:
+        - {at: "60m", increase_to: 3}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+    # pyroscope-bucket-info-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 30}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: pyroscope-bucket-info-exporter}
+      scale_up:
+        - {at: "6m", increase_to: 42}
+        - {at: "11m", increase_to: 33}
+        - {at: "51m", increase_to: 27}
+        - {at: "55m", increase_to: 28}
+        - {at: "58m", increase_to: 29}
+        - {at: "60m", increase_to: 30}
+      scale_down:
+        - {at: "10m", reduce_by: 10}
+        - {at: "23m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "34m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+    # pyroscope-compactor
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "24576Mi", max: "24576Mi"}
+      labels: {app: pyroscope-compactor}
+      scale_up:
+        - {at: "3m", increase_to: 41}
+        - {at: "4m", increase_to: 42}
+        - {at: "5m", increase_to: 43}
+        - {at: "6m", increase_to: 44}
+        - {at: "7m", increase_to: 45}
+        - {at: "8m", increase_to: 46}
+        - {at: "10m", increase_to: 47}
+        - {at: "11m", increase_to: 48}
+        - {at: "14m", increase_to: 49}
+        - {at: "23m", increase_to: 62}
+        - {at: "32m", increase_to: 60}
+        - {at: "49m", increase_to: 31}
+        - {at: "52m", increase_to: 33}
+        - {at: "54m", increase_to: 34}
+        - {at: "55m", increase_to: 35}
+        - {at: "56m", increase_to: 36}
+        - {at: "58m", increase_to: 38}
+        - {at: "59m", increase_to: 39}
+      scale_down:
+        - {at: "18m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "24m", reduce_by: 3}
+        - {at: "25m", reduce_by: 3}
+        - {at: "26m", reduce_by: 3}
+        - {at: "27m", reduce_by: 4}
+        - {at: "28m", reduce_by: 4}
+        - {at: "30m", reduce_by: 5}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 12}
+        - {at: "34m", reduce_by: 12}
+        - {at: "35m", reduce_by: 1}
+        - {at: "38m", reduce_by: 2}
+        - {at: "39m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+    # pyroscope-distributor
+    - type: web_app
+      count: 1
+      replicas: {fixed: 27}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: pyroscope-distributor}
+      scale_up:
+        - {at: "2m", increase_to: 28}
+        - {at: "3m", increase_to: 29}
+        - {at: "5m", increase_to: 46}
+        - {at: "12m", increase_to: 36}
+        - {at: "16m", increase_to: 37}
+        - {at: "28m", increase_to: 61}
+        - {at: "40m", increase_to: 47}
+        - {at: "47m", increase_to: 17}
+        - {at: "50m", increase_to: 18}
+        - {at: "52m", increase_to: 19}
+        - {at: "54m", increase_to: 20}
+        - {at: "55m", increase_to: 21}
+        - {at: "56m", increase_to: 22}
+        - {at: "57m", increase_to: 23}
+        - {at: "58m", increase_to: 24}
+        - {at: "59m", increase_to: 25}
+      scale_down:
+        - {at: "7m", reduce_by: 10}
+        - {at: "8m", reduce_by: 1}
+        - {at: "18m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 33}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 2}
+        - {at: "38m", reduce_by: 3}
+        - {at: "41m", reduce_by: 30}
+        - {at: "44m", reduce_by: 1}
+    # pyroscope-ingester
+    - type: web_app
+      count: 1
+      replicas: {fixed: 2}
+      cpu_request: {dist: uniform, min: "4000m", max: "4000m"}
+      memory_request: {dist: uniform, min: "12288Mi", max: "12288Mi"}
+      labels: {app: pyroscope-ingester}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "46m", increase_to: 2}
+        - {at: "47m", increase_to: 4}
+        - {at: "58m", increase_to: 3}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+        - {at: "48m", reduce_by: 1}
+        - {at: "50m", reduce_by: 1}
+        - {at: "52m", reduce_by: 1}
+        - {at: "59m", reduce_by: 1}
+    # pyroscope-querier
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "4096Mi", max: "4096Mi"}
+      labels: {app: pyroscope-querier}
+      scale_up:
+        - {at: "5m", increase_to: 17}
+        - {at: "7m", increase_to: 18}
+        - {at: "10m", increase_to: 19}
+        - {at: "12m", increase_to: 24}
+        - {at: "45m", increase_to: 34}
+        - {at: "56m", increase_to: 14}
+        - {at: "58m", increase_to: 15}
+      scale_down:
+        - {at: "14m", reduce_by: 5}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "47m", reduce_by: 9}
+        - {at: "48m", reduce_by: 5}
+        - {at: "49m", reduce_by: 4}
+        - {at: "52m", reduce_by: 3}
+    # pyroscope-query-frontend
+    - type: web_app
+      count: 1
+      replicas: {fixed: 5}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "256Mi"}
+      labels: {app: pyroscope-query-frontend}
+      scale_up:
+        - {at: "7m", increase_to: 6}
+        - {at: "13m", increase_to: 11}
+        - {at: "47m", increase_to: 8}
+        - {at: "56m", increase_to: 4}
+        - {at: "57m", increase_to: 14}
+      scale_down:
+        - {at: "14m", reduce_by: 1}
+        - {at: "15m", reduce_by: 1}
+        - {at: "16m", reduce_by: 1}
+        - {at: "17m", reduce_by: 1}
+        - {at: "18m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "48m", reduce_by: 1}
+        - {at: "49m", reduce_by: 1}
+        - {at: "50m", reduce_by: 1}
+        - {at: "52m", reduce_by: 2}
+        - {at: "58m", reduce_by: 2}
+    # pyroscope-query-scheduler
+    - type: web_app
+      count: 1
+      replicas: {fixed: 28}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "256Mi"}
+      labels: {app: pyroscope-query-scheduler}
+      scale_up:
+        - {at: "4m", increase_to: 30}
+        - {at: "5m", increase_to: 31}
+        - {at: "6m", increase_to: 32}
+        - {at: "7m", increase_to: 33}
+        - {at: "11m", increase_to: 35}
+        - {at: "12m", increase_to: 36}
+        - {at: "45m", increase_to: 70}
+        - {at: "51m", increase_to: 68}
+        - {at: "59m", increase_to: 27}
+        - {at: "60m", increase_to: 70}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 3}
+        - {at: "35m", reduce_by: 1}
+        - {at: "39m", reduce_by: 2}
+        - {at: "42m", reduce_by: 2}
+        - {at: "46m", reduce_by: 11}
+        - {at: "48m", reduce_by: 20}
+        - {at: "49m", reduce_by: 10}
+        - {at: "52m", reduce_by: 8}
+        - {at: "53m", reduce_by: 8}
+        - {at: "54m", reduce_by: 7}
+        - {at: "55m", reduce_by: 7}
+        - {at: "56m", reduce_by: 7}
+        - {at: "58m", reduce_by: 5}
+    # pyroscope-store-gateway
+    - type: web_app
+      count: 1
+      replicas: {fixed: 18}
+      cpu_request: {dist: uniform, min: "4000m", max: "4000m"}
+      memory_request: {dist: uniform, min: "8192Mi", max: "8192Mi"}
+      labels: {app: pyroscope-store-gateway}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "3m", increase_to: 19}
+        - {at: "4m", increase_to: 20}
+        - {at: "6m", increase_to: 21}
+        - {at: "8m", increase_to: 22}
+        - {at: "10m", increase_to: 23}
+        - {at: "12m", increase_to: 34}
+        - {at: "23m", increase_to: 38}
+        - {at: "30m", increase_to: 25}
+        - {at: "42m", increase_to: 45}
+        - {at: "51m", increase_to: 12}
+        - {at: "52m", increase_to: 13}
+        - {at: "54m", increase_to: 14}
+        - {at: "56m", increase_to: 15}
+        - {at: "60m", increase_to: 18}
+      scale_down:
+        - {at: "13m", reduce_by: 2}
+        - {at: "15m", reduce_by: 4}
+        - {at: "16m", reduce_by: 2}
+        - {at: "17m", reduce_by: 2}
+        - {at: "20m", reduce_by: 1}
+        - {at: "25m", reduce_by: 17}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 2}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 2}
+        - {at: "34m", reduce_by: 2}
+        - {at: "35m", reduce_by: 3}
+        - {at: "41m", reduce_by: 3}
+        - {at: "43m", reduce_by: 17}
+        - {at: "44m", reduce_by: 17}
+    # pyroscope-tenant-settings
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "256Mi", max: "256Mi"}
+      labels: {app: pyroscope-tenant-settings}
+      scale_up:
+        - {at: "4m", increase_to: 13}
+        - {at: "7m", increase_to: 14}
+        - {at: "8m", increase_to: 15}
+        - {at: "10m", increase_to: 29}
+        - {at: "21m", increase_to: 27}
+        - {at: "36m", increase_to: 21}
+        - {at: "50m", increase_to: 21}
+        - {at: "54m", increase_to: 9}
+        - {at: "56m", increase_to: 10}
+        - {at: "58m", increase_to: 11}
+      scale_down:
+        - {at: "11m", reduce_by: 13}
+        - {at: "23m", reduce_by: 12}
+        - {at: "24m", reduce_by: 1}
+        - {at: "29m", reduce_by: 2}
+        - {at: "32m", reduce_by: 1}
+        - {at: "35m", reduce_by: 2}
+        - {at: "37m", reduce_by: 12}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "51m", reduce_by: 7}
+        - {at: "52m", reduce_by: 6}
+    # querier
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "1500m", max: "1500m"}
+      memory_request: {dist: uniform, min: "3072Mi", max: "3072Mi"}
+      labels: {app: querier}
+      scale_up:
+        - {at: "2m", increase_to: 7}
+        - {at: "10m", increase_to: 8}
+        - {at: "60m", increase_to: 4}
+      scale_down:
+        - {at: "4m", reduce_by: 2}
+        - {at: "5m", reduce_by: 1}
+        - {at: "12m", reduce_by: 2}
+        - {at: "13m", reduce_by: 1}
+        - {at: "14m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+    # querier-burst
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "1500m", max: "1500m"}
+      memory_request: {dist: uniform, min: "3072Mi", max: "3072Mi"}
+      labels: {app: querier-burst}
+      scale_up:
+        - {at: "3m", increase_to: 17}
+        - {at: "6m", increase_to: 18}
+        - {at: "7m", increase_to: 19}
+        - {at: "9m", increase_to: 40}
+        - {at: "15m", increase_to: 21}
+        - {at: "18m", increase_to: 29}
+        - {at: "39m", increase_to: 29}
+        - {at: "48m", increase_to: 11}
+        - {at: "52m", increase_to: 12}
+        - {at: "55m", increase_to: 13}
+        - {at: "58m", increase_to: 14}
+        - {at: "59m", increase_to: 15}
+      scale_down:
+        - {at: "10m", reduce_by: 20}
+        - {at: "19m", reduce_by: 5}
+        - {at: "21m", reduce_by: 4}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "40m", reduce_by: 4}
+        - {at: "41m", reduce_by: 4}
+        - {at: "42m", reduce_by: 3}
+        - {at: "44m", reduce_by: 8}
+    # querier-burst-backup
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "1500m", max: "1500m"}
+      memory_request: {dist: uniform, min: "3072Mi", max: "3072Mi"}
+      labels: {app: querier-burst-backup}
+      scale_up:
+        - {at: "44m", increase_to: 11}
+        - {at: "60m", increase_to: 8}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+        - {at: "47m", reduce_by: 1}
+        - {at: "48m", reduce_by: 1}
+    # query-frontend
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: query-frontend}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "5m", increase_to: 13}
+        - {at: "9m", increase_to: 14}
+        - {at: "14m", increase_to: 20}
+        - {at: "36m", increase_to: 23}
+        - {at: "53m", increase_to: 10}
+        - {at: "57m", increase_to: 11}
+        - {at: "60m", increase_to: 12}
+      scale_down:
+        - {at: "15m", reduce_by: 2}
+        - {at: "16m", reduce_by: 1}
+        - {at: "17m", reduce_by: 1}
+        - {at: "18m", reduce_by: 1}
+        - {at: "19m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 4}
+        - {at: "38m", reduce_by: 3}
+        - {at: "39m", reduce_by: 4}
+        - {at: "41m", reduce_by: 3}
+    # query-scheduler
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "600Mi", max: "600Mi"}
+      labels: {app: query-scheduler}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "29m", increase_to: 4}
+        - {at: "52m", increase_to: 5}
+        - {at: "60m", increase_to: 3}
+      scale_down:
+        - {at: "32m", reduce_by: 2}
+        - {at: "53m", reduce_by: 2}
+        - {at: "55m", reduce_by: 1}
+    # quotas-service-api
+    - type: web_app
+      count: 1
+      replicas: {fixed: 9}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: quotas-service-api}
+      scale_up:
+        - {at: "5m", increase_to: 10}
+        - {at: "10m", increase_to: 11}
+        - {at: "36m", increase_to: 16}
+        - {at: "49m", increase_to: 19}
+        - {at: "52m", increase_to: 7}
+        - {at: "55m", increase_to: 12}
+        - {at: "60m", increase_to: 9}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "38m", reduce_by: 3}
+        - {at: "39m", reduce_by: 2}
+        - {at: "40m", reduce_by: 2}
+        - {at: "41m", reduce_by: 2}
+        - {at: "45m", reduce_by: 1}
+        - {at: "50m", reduce_by: 7}
+        - {at: "51m", reduce_by: 6}
+        - {at: "56m", reduce_by: 2}
+        - {at: "57m", reduce_by: 1}
+        - {at: "58m", reduce_by: 1}
+    # quotas-service-operator
+    - type: web_app
+      count: 1
+      replicas: {fixed: 28}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: quotas-service-operator}
+      scale_up:
+        - {at: "2m", increase_to: 29}
+        - {at: "5m", increase_to: 32}
+        - {at: "6m", increase_to: 33}
+        - {at: "8m", increase_to: 35}
+        - {at: "11m", increase_to: 37}
+        - {at: "14m", increase_to: 38}
+        - {at: "23m", increase_to: 54}
+        - {at: "31m", increase_to: 51}
+        - {at: "46m", increase_to: 48}
+        - {at: "57m", increase_to: 24}
+        - {at: "58m", increase_to: 25}
+        - {at: "59m", increase_to: 26}
+        - {at: "60m", increase_to: 27}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "24m", reduce_by: 5}
+        - {at: "25m", reduce_by: 6}
+        - {at: "26m", reduce_by: 6}
+        - {at: "27m", reduce_by: 6}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "32m", reduce_by: 25}
+        - {at: "34m", reduce_by: 2}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 3}
+        - {at: "42m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "47m", reduce_by: 8}
+        - {at: "55m", reduce_by: 18}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-1-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-1-mysql8}
+      scale_up:
+        - {at: "5m", increase_to: 27}
+        - {at: "7m", increase_to: 39}
+        - {at: "11m", increase_to: 31}
+        - {at: "15m", increase_to: 32}
+        - {at: "24m", increase_to: 51}
+        - {at: "48m", increase_to: 16}
+        - {at: "51m", increase_to: 17}
+        - {at: "53m", increase_to: 18}
+        - {at: "55m", increase_to: 19}
+        - {at: "56m", increase_to: 48}
+      scale_down:
+        - {at: "9m", reduce_by: 9}
+        - {at: "21m", reduce_by: 2}
+        - {at: "25m", reduce_by: 8}
+        - {at: "26m", reduce_by: 8}
+        - {at: "27m", reduce_by: 9}
+        - {at: "30m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 2}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "57m", reduce_by: 5}
+        - {at: "59m", reduce_by: 8}
+        - {at: "60m", reduce_by: 4}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-10
+    - type: web_app
+      count: 1
+      replicas: {fixed: 30}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-10}
+      scale_up:
+        - {at: "3m", increase_to: 31}
+        - {at: "5m", increase_to: 32}
+        - {at: "6m", increase_to: 33}
+        - {at: "7m", increase_to: 51}
+        - {at: "15m", increase_to: 36}
+        - {at: "47m", increase_to: 38}
+        - {at: "56m", increase_to: 27}
+        - {at: "57m", increase_to: 28}
+      scale_down:
+        - {at: "10m", reduce_by: 12}
+        - {at: "11m", reduce_by: 4}
+        - {at: "19m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "37m", reduce_by: 2}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "50m", reduce_by: 8}
+        - {at: "51m", reduce_by: 3}
+        - {at: "54m", reduce_by: 1}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-11
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-11}
+      scale_up:
+        - {at: "6m", increase_to: 9}
+        - {at: "9m", increase_to: 10}
+        - {at: "21m", increase_to: 19}
+        - {at: "43m", increase_to: 20}
+        - {at: "47m", increase_to: 11}
+        - {at: "51m", increase_to: 16}
+        - {at: "57m", increase_to: 7}
+      scale_down:
+        - {at: "22m", reduce_by: 3}
+        - {at: "23m", reduce_by: 2}
+        - {at: "24m", reduce_by: 3}
+        - {at: "27m", reduce_by: 2}
+        - {at: "29m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "44m", reduce_by: 5}
+        - {at: "45m", reduce_by: 5}
+        - {at: "48m", reduce_by: 3}
+        - {at: "52m", reduce_by: 3}
+        - {at: "53m", reduce_by: 2}
+        - {at: "56m", reduce_by: 5}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-12
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-12}
+      scale_up:
+        - {at: "3m", increase_to: 17}
+        - {at: "5m", increase_to: 18}
+        - {at: "6m", increase_to: 19}
+        - {at: "11m", increase_to: 21}
+        - {at: "15m", increase_to: 22}
+        - {at: "19m", increase_to: 27}
+        - {at: "38m", increase_to: 33}
+        - {at: "42m", increase_to: 32}
+        - {at: "47m", increase_to: 10}
+        - {at: "51m", increase_to: 11}
+        - {at: "52m", increase_to: 25}
+      scale_down:
+        - {at: "18m", reduce_by: 1}
+        - {at: "20m", reduce_by: 6}
+        - {at: "24m", reduce_by: 2}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "40m", reduce_by: 12}
+        - {at: "41m", reduce_by: 6}
+        - {at: "43m", reduce_by: 6}
+        - {at: "44m", reduce_by: 5}
+        - {at: "45m", reduce_by: 7}
+        - {at: "46m", reduce_by: 5}
+        - {at: "53m", reduce_by: 3}
+        - {at: "54m", reduce_by: 2}
+        - {at: "55m", reduce_by: 2}
+        - {at: "56m", reduce_by: 1}
+        - {at: "57m", reduce_by: 2}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-2-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 2}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-2-mysql8}
+      scale_up:
+        - {at: "6m", increase_to: 3}
+        - {at: "9m", increase_to: 3}
+        - {at: "60m", increase_to: 2}
+      scale_down:
+        - {at: "7m", reduce_by: 1}
+        - {at: "10m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-3-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-3-mysql8}
+      scale_up:
+        - {at: "3m", increase_to: 43}
+        - {at: "4m", increase_to: 45}
+        - {at: "7m", increase_to: 49}
+        - {at: "9m", increase_to: 93}
+        - {at: "35m", increase_to: 67}
+        - {at: "38m", increase_to: 91}
+        - {at: "50m", increase_to: 26}
+        - {at: "52m", increase_to: 63}
+        - {at: "56m", increase_to: 33}
+        - {at: "57m", increase_to: 34}
+        - {at: "58m", increase_to: 36}
+        - {at: "59m", increase_to: 38}
+        - {at: "60m", increase_to: 39}
+      scale_down:
+        - {at: "10m", reduce_by: 10}
+        - {at: "11m", reduce_by: 10}
+        - {at: "12m", reduce_by: 10}
+        - {at: "13m", reduce_by: 8}
+        - {at: "20m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 3}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 2}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 2}
+        - {at: "30m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "36m", reduce_by: 9}
+        - {at: "37m", reduce_by: 10}
+        - {at: "40m", reduce_by: 22}
+        - {at: "41m", reduce_by: 11}
+        - {at: "42m", reduce_by: 12}
+        - {at: "43m", reduce_by: 11}
+        - {at: "44m", reduce_by: 11}
+        - {at: "53m", reduce_by: 11}
+        - {at: "54m", reduce_by: 11}
+        - {at: "55m", reduce_by: 10}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-4-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-4-mysql8}
+      scale_up:
+        - {at: "5m", increase_to: 21}
+        - {at: "10m", increase_to: 22}
+        - {at: "37m", increase_to: 32}
+        - {at: "53m", increase_to: 18}
+        - {at: "57m", increase_to: 19}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "40m", reduce_by: 9}
+        - {at: "41m", reduce_by: 3}
+        - {at: "42m", reduce_by: 3}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-5-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 25}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-5-mysql8}
+      scale_up:
+        - {at: "3m", increase_to: 35}
+        - {at: "7m", increase_to: 30}
+        - {at: "9m", increase_to: 31}
+        - {at: "10m", increase_to: 32}
+        - {at: "13m", increase_to: 33}
+        - {at: "38m", increase_to: 39}
+        - {at: "46m", increase_to: 51}
+        - {at: "52m", increase_to: 18}
+        - {at: "53m", increase_to: 19}
+        - {at: "55m", increase_to: 20}
+        - {at: "56m", increase_to: 21}
+        - {at: "57m", increase_to: 22}
+        - {at: "58m", increase_to: 23}
+      scale_down:
+        - {at: "6m", reduce_by: 6}
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "29m", reduce_by: 3}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 2}
+        - {at: "35m", reduce_by: 2}
+        - {at: "39m", reduce_by: 4}
+        - {at: "40m", reduce_by: 4}
+        - {at: "41m", reduce_by: 3}
+        - {at: "42m", reduce_by: 5}
+        - {at: "43m", reduce_by: 4}
+        - {at: "44m", reduce_by: 3}
+        - {at: "48m", reduce_by: 18}
+        - {at: "51m", reduce_by: 16}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-6-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-6-mysql8}
+      scale_up:
+        - {at: "3m", increase_to: 17}
+        - {at: "5m", increase_to: 18}
+        - {at: "7m", increase_to: 19}
+        - {at: "10m", increase_to: 20}
+        - {at: "16m", increase_to: 26}
+        - {at: "47m", increase_to: 11}
+        - {at: "48m", increase_to: 28}
+        - {at: "53m", increase_to: 12}
+        - {at: "55m", increase_to: 17}
+        - {at: "59m", increase_to: 15}
+      scale_down:
+        - {at: "17m", reduce_by: 1}
+        - {at: "18m", reduce_by: 2}
+        - {at: "19m", reduce_by: 2}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "27m", reduce_by: 2}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "49m", reduce_by: 17}
+        - {at: "56m", reduce_by: 4}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-7-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 35}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-7-mysql8}
+      scale_up:
+        - {at: "2m", increase_to: 36}
+        - {at: "3m", increase_to: 37}
+        - {at: "5m", increase_to: 39}
+        - {at: "8m", increase_to: 41}
+        - {at: "10m", increase_to: 43}
+        - {at: "13m", increase_to: 44}
+        - {at: "37m", increase_to: 67}
+        - {at: "49m", increase_to: 41}
+        - {at: "52m", increase_to: 27}
+        - {at: "53m", increase_to: 28}
+        - {at: "55m", increase_to: 30}
+        - {at: "57m", increase_to: 31}
+        - {at: "58m", increase_to: 79}
+        - {at: "60m", increase_to: 35}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 2}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "41m", reduce_by: 41}
+        - {at: "42m", reduce_by: 1}
+        - {at: "50m", reduce_by: 15}
+        - {at: "59m", reduce_by: 46}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-8-mysql8
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-8-mysql8}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+    # rds-proxy-prod-us-east-0-hosted-grafana-shared-9
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "250m", max: "250m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: rds-proxy-prod-us-east-0-hosted-grafana-shared-9}
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "7m", increase_to: 22}
+        - {at: "9m", increase_to: 23}
+        - {at: "11m", increase_to: 24}
+        - {at: "30m", increase_to: 28}
+        - {at: "51m", increase_to: 16}
+        - {at: "53m", increase_to: 35}
+        - {at: "60m", increase_to: 20}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 2}
+        - {at: "34m", reduce_by: 6}
+        - {at: "35m", reduce_by: 3}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "55m", reduce_by: 9}
+        - {at: "56m", reduce_by: 4}
+        - {at: "58m", reduce_by: 4}
+    # redis-alerting
+    - type: web_app
+      count: 1
+      replicas: {fixed: 28}
+      cpu_request: {dist: uniform, min: "8100m", max: "8100m"}
+      memory_request: {dist: uniform, min: "2148Mi", max: "2148Mi"}
+      labels: {app: redis-alerting}
+      scale_up:
+        - {at: "4m", increase_to: 29}
+        - {at: "6m", increase_to: 30}
+        - {at: "9m", increase_to: 31}
+        - {at: "14m", increase_to: 32}
+        - {at: "49m", increase_to: 24}
+        - {at: "54m", increase_to: 25}
+        - {at: "56m", increase_to: 26}
+        - {at: "58m", increase_to: 44}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "60m", reduce_by: 16}
+    # redis-alerting-2
+    - type: web_app
+      count: 1
+      replicas: {fixed: 16}
+      cpu_request: {dist: uniform, min: "2100m", max: "2100m"}
+      memory_request: {dist: uniform, min: "2148Mi", max: "2148Mi"}
+      labels: {app: redis-alerting-2}
+      scale_up:
+        - {at: "5m", increase_to: 17}
+        - {at: "8m", increase_to: 18}
+        - {at: "11m", increase_to: 19}
+        - {at: "52m", increase_to: 13}
+        - {at: "54m", increase_to: 28}
+      scale_down:
+        - {at: "22m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "55m", reduce_by: 5}
+        - {at: "57m", reduce_by: 4}
+        - {at: "59m", reduce_by: 1}
+    # redis-alerting-3
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "2100m", max: "2100m"}
+      memory_request: {dist: uniform, min: "2148Mi", max: "2148Mi"}
+      labels: {app: redis-alerting-3}
+      scale_up:
+        - {at: "12m", increase_to: 5}
+        - {at: "28m", increase_to: 8}
+        - {at: "51m", increase_to: 3}
+        - {at: "54m", increase_to: 7}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "55m", reduce_by: 2}
+        - {at: "56m", reduce_by: 1}
+        - {at: "57m", reduce_by: 1}
+    # redis-alerting-4
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "2100m", max: "2100m"}
+      memory_request: {dist: uniform, min: "2148Mi", max: "2148Mi"}
+      labels: {app: redis-alerting-4}
+      scale_up:
+        - {at: "2m", increase_to: 41}
+        - {at: "4m", increase_to: 44}
+        - {at: "5m", increase_to: 46}
+        - {at: "6m", increase_to: 48}
+        - {at: "7m", increase_to: 49}
+        - {at: "8m", increase_to: 109}
+        - {at: "11m", increase_to: 53}
+        - {at: "12m", increase_to: 54}
+        - {at: "13m", increase_to: 55}
+        - {at: "28m", increase_to: 66}
+        - {at: "33m", increase_to: 78}
+        - {at: "41m", increase_to: 61}
+        - {at: "49m", increase_to: 25}
+        - {at: "50m", increase_to: 26}
+        - {at: "53m", increase_to: 29}
+        - {at: "56m", increase_to: 33}
+        - {at: "57m", increase_to: 35}
+        - {at: "58m", increase_to: 36}
+        - {at: "59m", increase_to: 38}
+        - {at: "60m", increase_to: 39}
+      scale_down:
+        - {at: "9m", reduce_by: 58}
+        - {at: "20m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 4}
+        - {at: "27m", reduce_by: 2}
+        - {at: "30m", reduce_by: 9}
+        - {at: "31m", reduce_by: 5}
+        - {at: "32m", reduce_by: 6}
+        - {at: "34m", reduce_by: 15}
+        - {at: "36m", reduce_by: 32}
+        - {at: "37m", reduce_by: 2}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "42m", reduce_by: 8}
+        - {at: "43m", reduce_by: 7}
+        - {at: "44m", reduce_by: 8}
+        - {at: "45m", reduce_by: 7}
+        - {at: "48m", reduce_by: 7}
+    # redis-alerting-5
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "1100m", max: "1100m"}
+      memory_request: {dist: uniform, min: "2148Mi", max: "2148Mi"}
+      labels: {app: redis-alerting-5}
+      scale_up:
+        - {at: "25m", increase_to: 5}
+        - {at: "40m", increase_to: 4}
+        - {at: "45m", increase_to: 6}
+        - {at: "60m", increase_to: 3}
+      scale_down:
+        - {at: "26m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "44m", reduce_by: 1}
+        - {at: "46m", reduce_by: 1}
+        - {at: "47m", reduce_by: 1}
+        - {at: "49m", reduce_by: 2}
+    # redis-cluster
+    - type: web_app
+      count: 1
+      replicas: {fixed: 12}
+      cpu_request: {dist: uniform, min: "1100m", max: "1100m"}
+      memory_request: {dist: uniform, min: "10340Mi", max: "10340Mi"}
+      labels: {app: redis-cluster}
+      scale_up:
+        - {at: "5m", increase_to: 13}
+        - {at: "8m", increase_to: 14}
+        - {at: "51m", increase_to: 13}
+        - {at: "55m", increase_to: 18}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "52m", reduce_by: 4}
+        - {at: "56m", reduce_by: 4}
+        - {at: "57m", reduce_by: 3}
+    # redis-cluster-proxy
+    - type: web_app
+      count: 1
+      replicas: {fixed: 15}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: redis-cluster-proxy}
+      scale_up:
+        - {at: "7m", increase_to: 16}
+        - {at: "10m", increase_to: 17}
+        - {at: "29m", increase_to: 23}
+        - {at: "55m", increase_to: 13}
+        - {at: "57m", increase_to: 14}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "31m", reduce_by: 5}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 2}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+    # redis-live
+    - type: web_app
+      count: 1
+      replicas: {fixed: 6}
+      cpu_request: {dist: uniform, min: "3100m", max: "3100m"}
+      memory_request: {dist: uniform, min: "8292Mi", max: "8292Mi"}
+      labels: {app: redis-live}
+      scale_up:
+        - {at: "6m", increase_to: 7}
+        - {at: "9m", increase_to: 10}
+        - {at: "16m", increase_to: 13}
+        - {at: "56m", increase_to: 5}
+        - {at: "59m", increase_to: 13}
+      scale_down:
+        - {at: "10m", reduce_by: 1}
+        - {at: "11m", reduce_by: 1}
+        - {at: "13m", reduce_by: 1}
+        - {at: "17m", reduce_by: 2}
+        - {at: "18m", reduce_by: 1}
+        - {at: "19m", reduce_by: 2}
+        - {at: "21m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "60m", reduce_by: 8}
+    # redis-live-2
+    - type: web_app
+      count: 1
+      replicas: {fixed: 24}
+      cpu_request: {dist: uniform, min: "3100m", max: "3100m"}
+      memory_request: {dist: uniform, min: "8292Mi", max: "8292Mi"}
+      labels: {app: redis-live-2}
+      scale_up:
+        - {at: "3m", increase_to: 25}
+        - {at: "6m", increase_to: 26}
+        - {at: "7m", increase_to: 27}
+        - {at: "11m", increase_to: 28}
+        - {at: "12m", increase_to: 29}
+        - {at: "41m", increase_to: 31}
+        - {at: "50m", increase_to: 19}
+        - {at: "54m", increase_to: 20}
+        - {at: "58m", increase_to: 22}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "27m", reduce_by: 2}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "43m", reduce_by: 6}
+        - {at: "44m", reduce_by: 5}
+        - {at: "45m", reduce_by: 2}
+    # redis-live-3
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "3100m", max: "3100m"}
+      memory_request: {dist: uniform, min: "8292Mi", max: "8292Mi"}
+      labels: {app: redis-live-3}
+      scale_up:
+        - {at: "6m", increase_to: 11}
+        - {at: "12m", increase_to: 12}
+        - {at: "50m", increase_to: 8}
+        - {at: "58m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+    # redis-live-4
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "3100m", max: "3100m"}
+      memory_request: {dist: uniform, min: "8292Mi", max: "8292Mi"}
+      labels: {app: redis-live-4}
+      scale_up:
+        - {at: "3m", increase_to: 41}
+        - {at: "4m", increase_to: 42}
+        - {at: "5m", increase_to: 43}
+        - {at: "6m", increase_to: 44}
+        - {at: "8m", increase_to: 45}
+        - {at: "9m", increase_to: 46}
+        - {at: "12m", increase_to: 64}
+        - {at: "23m", increase_to: 62}
+        - {at: "49m", increase_to: 32}
+        - {at: "52m", increase_to: 33}
+        - {at: "54m", increase_to: 34}
+        - {at: "55m", increase_to: 35}
+        - {at: "56m", increase_to: 36}
+        - {at: "59m", increase_to: 39}
+      scale_down:
+        - {at: "13m", reduce_by: 4}
+        - {at: "14m", reduce_by: 4}
+        - {at: "15m", reduce_by: 4}
+        - {at: "17m", reduce_by: 4}
+        - {at: "20m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "25m", reduce_by: 6}
+        - {at: "26m", reduce_by: 3}
+        - {at: "27m", reduce_by: 4}
+        - {at: "30m", reduce_by: 9}
+        - {at: "31m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+    # redis-live-5
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "3100m", max: "3100m"}
+      memory_request: {dist: uniform, min: "8292Mi", max: "8292Mi"}
+      labels: {app: redis-live-5}
+      scale_up:
+        - {at: "3m", increase_to: 21}
+        - {at: "5m", increase_to: 22}
+        - {at: "6m", increase_to: 23}
+        - {at: "10m", increase_to: 25}
+        - {at: "14m", increase_to: 26}
+        - {at: "43m", increase_to: 36}
+        - {at: "45m", increase_to: 46}
+        - {at: "52m", increase_to: 15}
+        - {at: "54m", increase_to: 16}
+        - {at: "55m", increase_to: 39}
+        - {at: "59m", increase_to: 19}
+      scale_down:
+        - {at: "19m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "46m", reduce_by: 6}
+        - {at: "47m", reduce_by: 5}
+        - {at: "51m", reduce_by: 21}
+        - {at: "56m", reduce_by: 8}
+        - {at: "57m", reduce_by: 6}
+        - {at: "58m", reduce_by: 7}
+    # redis-live-6
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "3100m", max: "3100m"}
+      memory_request: {dist: uniform, min: "8292Mi", max: "8292Mi"}
+      labels: {app: redis-live-6}
+      scale_up:
+        - {at: "4m", increase_to: 11}
+        - {at: "8m", increase_to: 12}
+        - {at: "12m", increase_to: 13}
+        - {at: "43m", increase_to: 25}
+        - {at: "47m", increase_to: 23}
+        - {at: "54m", increase_to: 8}
+        - {at: "58m", increase_to: 9}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "44m", reduce_by: 5}
+        - {at: "45m", reduce_by: 5}
+        - {at: "46m", reduce_by: 5}
+        - {at: "48m", reduce_by: 3}
+        - {at: "49m", reduce_by: 3}
+        - {at: "52m", reduce_by: 8}
+        - {at: "53m", reduce_by: 2}
+    # rollout-operator
+    - type: web_app
+      count: 1
+      replicas: {fixed: 4}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: rollout-operator}
+      scale_up:
+        - {at: "47m", increase_to: 5}
+        - {at: "56m", increase_to: 5}
+      scale_down:
+        - {at: "33m", reduce_by: 1}
+        - {at: "48m", reduce_by: 1}
+        - {at: "50m", reduce_by: 1}
+        - {at: "57m", reduce_by: 1}
+        - {at: "58m", reduce_by: 1}
+    # ruler
+    - type: web_app
+      count: 1
+      replicas: {fixed: 36}
+      cpu_request: {dist: uniform, min: "200m", max: "200m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: ruler}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 38}
+        - {at: "5m", increase_to: 39}
+        - {at: "6m", increase_to: 40}
+        - {at: "7m", increase_to: 41}
+        - {at: "9m", increase_to: 42}
+        - {at: "10m", increase_to: 43}
+        - {at: "12m", increase_to: 44}
+        - {at: "15m", increase_to: 53}
+        - {at: "19m", increase_to: 56}
+        - {at: "50m", increase_to: 28}
+        - {at: "52m", increase_to: 29}
+        - {at: "55m", increase_to: 31}
+        - {at: "56m", increase_to: 32}
+        - {at: "58m", increase_to: 34}
+        - {at: "60m", increase_to: 36}
+      scale_down:
+        - {at: "16m", reduce_by: 3}
+        - {at: "17m", reduce_by: 3}
+        - {at: "18m", reduce_by: 3}
+        - {at: "21m", reduce_by: 9}
+        - {at: "22m", reduce_by: 4}
+        - {at: "23m", reduce_by: 1}
+        - {at: "25m", reduce_by: 2}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 2}
+        - {at: "34m", reduce_by: 5}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 3}
+    # ruler-querier
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "6144Mi", max: "6144Mi"}
+      labels: {app: ruler-querier}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+    # ruler-query-frontend
+    - type: web_app
+      count: 1
+      replicas: {fixed: 2}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: ruler-query-frontend}
+      topology_spread:
+        max_skew: 1
+        topology_key: "kubernetes.io/hostname"
+      scale_up:
+        - {at: "60m", increase_to: 2}
+      scale_down:
+        - {at: "32m", reduce_by: 1}
+    # ruler-query-scheduler
+    - type: web_app
+      count: 1
+      replicas: {fixed: 40}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "1024Mi", max: "1024Mi"}
+      labels: {app: ruler-query-scheduler}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "2m", increase_to: 94}
+        - {at: "6m", increase_to: 46}
+        - {at: "8m", increase_to: 49}
+        - {at: "12m", increase_to: 52}
+        - {at: "15m", increase_to: 53}
+        - {at: "31m", increase_to: 89}
+        - {at: "48m", increase_to: 27}
+        - {at: "50m", increase_to: 28}
+        - {at: "52m", increase_to: 79}
+        - {at: "56m", increase_to: 34}
+        - {at: "57m", increase_to: 35}
+        - {at: "58m", increase_to: 37}
+      scale_down:
+        - {at: "3m", reduce_by: 18}
+        - {at: "5m", reduce_by: 31}
+        - {at: "19m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "22m", reduce_by: 1}
+        - {at: "24m", reduce_by: 2}
+        - {at: "25m", reduce_by: 1}
+        - {at: "27m", reduce_by: 3}
+        - {at: "28m", reduce_by: 1}
+        - {at: "30m", reduce_by: 3}
+        - {at: "32m", reduce_by: 13}
+        - {at: "33m", reduce_by: 14}
+        - {at: "34m", reduce_by: 14}
+        - {at: "35m", reduce_by: 15}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "46m", reduce_by: 3}
+        - {at: "53m", reduce_by: 1}
+        - {at: "54m", reduce_by: 31}
+        - {at: "55m", reduce_by: 14}
+    # shared-10-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 35}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: shared-10-exporter}
+      scale_up:
+        - {at: "3m", increase_to: 36}
+        - {at: "6m", increase_to: 37}
+        - {at: "8m", increase_to: 38}
+        - {at: "9m", increase_to: 39}
+        - {at: "12m", increase_to: 40}
+        - {at: "31m", increase_to: 48}
+        - {at: "50m", increase_to: 30}
+        - {at: "53m", increase_to: 31}
+        - {at: "55m", increase_to: 32}
+        - {at: "58m", increase_to: 33}
+        - {at: "59m", increase_to: 34}
+      scale_down:
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "32m", reduce_by: 4}
+        - {at: "33m", reduce_by: 4}
+        - {at: "34m", reduce_by: 4}
+        - {at: "35m", reduce_by: 4}
+        - {at: "36m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+    # shared-11-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: shared-11-exporter}
+      scale_up:
+        - {at: "3m", increase_to: 37}
+        - {at: "6m", increase_to: 23}
+        - {at: "7m", increase_to: 24}
+        - {at: "8m", increase_to: 25}
+        - {at: "10m", increase_to: 26}
+        - {at: "13m", increase_to: 27}
+        - {at: "20m", increase_to: 35}
+        - {at: "50m", increase_to: 13}
+        - {at: "53m", increase_to: 14}
+        - {at: "55m", increase_to: 16}
+        - {at: "57m", increase_to: 46}
+      scale_down:
+        - {at: "4m", reduce_by: 15}
+        - {at: "22m", reduce_by: 9}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 2}
+        - {at: "29m", reduce_by: 1}
+        - {at: "31m", reduce_by: 2}
+        - {at: "32m", reduce_by: 1}
+        - {at: "33m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "42m", reduce_by: 1}
+        - {at: "58m", reduce_by: 10}
+        - {at: "59m", reduce_by: 8}
+        - {at: "60m", reduce_by: 9}
+    # shared-12-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 45}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: shared-12-exporter}
+      scale_up:
+        - {at: "2m", increase_to: 46}
+        - {at: "3m", increase_to: 48}
+        - {at: "4m", increase_to: 50}
+        - {at: "6m", increase_to: 53}
+        - {at: "7m", increase_to: 55}
+        - {at: "9m", increase_to: 57}
+        - {at: "11m", increase_to: 72}
+        - {at: "26m", increase_to: 77}
+        - {at: "35m", increase_to: 79}
+        - {at: "50m", increase_to: 29}
+        - {at: "51m", increase_to: 30}
+        - {at: "52m", increase_to: 32}
+        - {at: "54m", increase_to: 34}
+        - {at: "55m", increase_to: 36}
+        - {at: "56m", increase_to: 37}
+        - {at: "58m", increase_to: 41}
+        - {at: "59m", increase_to: 43}
+      scale_down:
+        - {at: "12m", reduce_by: 4}
+        - {at: "16m", reduce_by: 6}
+        - {at: "18m", reduce_by: 1}
+        - {at: "20m", reduce_by: 1}
+        - {at: "23m", reduce_by: 3}
+        - {at: "24m", reduce_by: 2}
+        - {at: "27m", reduce_by: 6}
+        - {at: "29m", reduce_by: 12}
+        - {at: "31m", reduce_by: 15}
+        - {at: "32m", reduce_by: 2}
+        - {at: "33m", reduce_by: 2}
+        - {at: "36m", reduce_by: 22}
+        - {at: "37m", reduce_by: 23}
+        - {at: "38m", reduce_by: 2}
+        - {at: "41m", reduce_by: 3}
+        - {at: "42m", reduce_by: 1}
+        - {at: "45m", reduce_by: 1}
+    # shared-9-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 3}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: shared-9-exporter}
+      scale_up:
+        - {at: "8m", increase_to: 5}
+        - {at: "12m", increase_to: 4}
+        - {at: "35m", increase_to: 8}
+        - {at: "51m", increase_to: 2}
+        - {at: "56m", increase_to: 3}
+      scale_down:
+        - {at: "9m", reduce_by: 1}
+        - {at: "11m", reduce_by: 1}
+        - {at: "21m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "38m", reduce_by: 6}
+        - {at: "43m", reduce_by: 1}
+        - {at: "57m", reduce_by: 1}
+    # smtprelay
+    - type: web_app
+      count: 1
+      replicas: {fixed: 14}
+      cpu_request: {dist: uniform, min: "200m", max: "200m"}
+      memory_request: {dist: uniform, min: "200Mi", max: "200Mi"}
+      labels: {app: smtprelay}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "4m", increase_to: 15}
+        - {at: "7m", increase_to: 16}
+        - {at: "10m", increase_to: 17}
+        - {at: "23m", increase_to: 23}
+        - {at: "31m", increase_to: 19}
+        - {at: "51m", increase_to: 21}
+        - {at: "58m", increase_to: 13}
+      scale_down:
+        - {at: "24m", reduce_by: 4}
+        - {at: "25m", reduce_by: 3}
+        - {at: "28m", reduce_by: 1}
+        - {at: "34m", reduce_by: 7}
+        - {at: "38m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+        - {at: "52m", reduce_by: 2}
+        - {at: "53m", reduce_by: 2}
+        - {at: "57m", reduce_by: 5}
+    # spec-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 5}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: spec-exporter}
+      scale_up:
+        - {at: "2m", increase_to: 7}
+        - {at: "14m", increase_to: 9}
+        - {at: "60m", increase_to: 5}
+      scale_down:
+        - {at: "4m", reduce_by: 1}
+        - {at: "6m", reduce_by: 1}
+        - {at: "15m", reduce_by: 4}
+        - {at: "31m", reduce_by: 1}
+    # store-gateway-zone-a
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "13312Mi", max: "13312Mi"}
+      labels: {app: store-gateway-zone-a}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+        target_label_value: store-gateway
+      scale_up:
+        - {at: "6m", increase_to: 9}
+        - {at: "9m", increase_to: 10}
+        - {at: "35m", increase_to: 12}
+        - {at: "46m", increase_to: 13}
+        - {at: "50m", increase_to: 22}
+      scale_down:
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 1}
+        - {at: "32m", reduce_by: 1}
+        - {at: "34m", reduce_by: 1}
+        - {at: "36m", reduce_by: 2}
+        - {at: "38m", reduce_by: 5}
+        - {at: "47m", reduce_by: 4}
+        - {at: "49m", reduce_by: 4}
+        - {at: "51m", reduce_by: 3}
+        - {at: "55m", reduce_by: 11}
+        - {at: "57m", reduce_by: 1}
+    # store-gateway-zone-b
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "13312Mi", max: "13312Mi"}
+      labels: {app: store-gateway-zone-b}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+        target_label_value: store-gateway
+      scale_up:
+        - {at: "6m", increase_to: 9}
+        - {at: "11m", increase_to: 10}
+        - {at: "18m", increase_to: 16}
+        - {at: "37m", increase_to: 14}
+        - {at: "51m", increase_to: 6}
+        - {at: "57m", increase_to: 7}
+      scale_down:
+        - {at: "19m", reduce_by: 2}
+        - {at: "20m", reduce_by: 2}
+        - {at: "21m", reduce_by: 3}
+        - {at: "27m", reduce_by: 1}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 1}
+        - {at: "39m", reduce_by: 6}
+        - {at: "40m", reduce_by: 2}
+        - {at: "41m", reduce_by: 1}
+    # store-gateway-zone-c
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "13312Mi", max: "13312Mi"}
+      labels: {app: store-gateway-zone-c}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+        target_label_value: store-gateway
+      scale_up:
+        - {at: "53m", increase_to: 9}
+        - {at: "60m", increase_to: 8}
+      scale_down:
+        - {at: "31m", reduce_by: 1}
+        - {at: "54m", reduce_by: 1}
+        - {at: "56m", reduce_by: 1}
+    # template-miner
+    - type: web_app
+      count: 1
+      replicas: {fixed: 10}
+      cpu_request: {dist: uniform, min: "2000m", max: "2000m"}
+      memory_request: {dist: uniform, min: "2048Mi", max: "2048Mi"}
+      labels: {app: template-miner}
+      pod_anti_affinity:
+        label_key: app
+        topology_key: "kubernetes.io/hostname"
+        affinity_type: required
+      scale_up:
+        - {at: "6m", increase_to: 11}
+        - {at: "9m", increase_to: 12}
+        - {at: "12m", increase_to: 15}
+        - {at: "26m", increase_to: 17}
+        - {at: "33m", increase_to: 18}
+        - {at: "53m", increase_to: 8}
+        - {at: "57m", increase_to: 9}
+        - {at: "60m", increase_to: 10}
+      scale_down:
+        - {at: "13m", reduce_by: 3}
+        - {at: "24m", reduce_by: 1}
+        - {at: "27m", reduce_by: 2}
+        - {at: "30m", reduce_by: 5}
+        - {at: "31m", reduce_by: 1}
+        - {at: "35m", reduce_by: 4}
+        - {at: "36m", reduce_by: 1}
+        - {at: "38m", reduce_by: 5}
+        - {at: "41m", reduce_by: 1}
+    # tempo-autoscaler-metrics
+    - type: web_app
+      count: 1
+      replicas: {fixed: 32}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: tempo-autoscaler-metrics}
+      scale_up:
+        - {at: "2m", increase_to: 33}
+        - {at: "3m", increase_to: 34}
+        - {at: "5m", increase_to: 36}
+        - {at: "6m", increase_to: 37}
+        - {at: "8m", increase_to: 39}
+        - {at: "9m", increase_to: 40}
+        - {at: "11m", increase_to: 42}
+        - {at: "13m", increase_to: 62}
+        - {at: "31m", increase_to: 49}
+        - {at: "49m", increase_to: 21}
+        - {at: "51m", increase_to: 43}
+        - {at: "57m", increase_to: 28}
+        - {at: "58m", increase_to: 29}
+        - {at: "59m", increase_to: 30}
+      scale_down:
+        - {at: "15m", reduce_by: 8}
+        - {at: "16m", reduce_by: 3}
+        - {at: "17m", reduce_by: 5}
+        - {at: "20m", reduce_by: 4}
+        - {at: "21m", reduce_by: 1}
+        - {at: "23m", reduce_by: 1}
+        - {at: "24m", reduce_by: 1}
+        - {at: "25m", reduce_by: 1}
+        - {at: "26m", reduce_by: 1}
+        - {at: "28m", reduce_by: 2}
+        - {at: "33m", reduce_by: 15}
+        - {at: "34m", reduce_by: 7}
+        - {at: "35m", reduce_by: 1}
+        - {at: "36m", reduce_by: 1}
+        - {at: "37m", reduce_by: 1}
+        - {at: "38m", reduce_by: 1}
+        - {at: "40m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "43m", reduce_by: 1}
+        - {at: "54m", reduce_by: 11}
+        - {at: "55m", reduce_by: 3}
+        - {at: "56m", reduce_by: 2}
+    # tempo-bucket-info-exporter
+    - type: web_app
+      count: 1
+      replicas: {fixed: 8}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: tempo-bucket-info-exporter}
+      scale_up:
+        - {at: "6m", increase_to: 9}
+        - {at: "11m", increase_to: 10}
+        - {at: "28m", increase_to: 10}
+        - {at: "31m", increase_to: 17}
+        - {at: "51m", increase_to: 6}
+        - {at: "55m", increase_to: 13}
+      scale_down:
+        - {at: "21m", reduce_by: 1}
+        - {at: "27m", reduce_by: 1}
+        - {at: "29m", reduce_by: 1}
+        - {at: "30m", reduce_by: 1}
+        - {at: "32m", reduce_by: 2}
+        - {at: "34m", reduce_by: 3}
+        - {at: "35m", reduce_by: 3}
+        - {at: "36m", reduce_by: 2}
+        - {at: "37m", reduce_by: 1}
+        - {at: "41m", reduce_by: 1}
+        - {at: "56m", reduce_by: 3}
+        - {at: "57m", reduce_by: 3}
+    # vulture
+    - type: web_app
+      count: 1
+      replicas: {fixed: 20}
+      cpu_request: {dist: uniform, min: "100m", max: "100m"}
+      memory_request: {dist: uniform, min: "128Mi", max: "128Mi"}
+      labels: {app: vulture}
+      scale_up:
+        - {at: "6m", increase_to: 21}
+        - {at: "9m", increase_to: 22}
+        - {at: "28m", increase_to: 27}
+        - {at: "54m", increase_to: 18}
+        - {at: "58m", increase_to: 19}
+        - {at: "60m", increase_to: 20}
+      scale_down:
+        - {at: "24m", reduce_by: 1}
+        - {at: "30m", reduce_by: 5}
+        - {at: "31m", reduce_by: 3}
+        - {at: "34m", reduce_by: 1}
+        - {at: "39m", reduce_by: 1}
+
+  variants:
+    - name: baseline
+      scheduler: {scoring: LeastAllocated, weight: 1}
+
+  metrics:
+    compare:
+      - total_cost
+      - node_count
+      - pending_pods
