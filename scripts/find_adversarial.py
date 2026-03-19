@@ -153,6 +153,8 @@ def main():
     parser = argparse.ArgumentParser(description="Adversarial scenario finder (Optuna TPE)")
     parser.add_argument("--budget", type=int, default=BUDGET)
     parser.add_argument("--top-k", type=int, default=TOP_K)
+    parser.add_argument("--random-node-mix", action="store_true",
+                        help="Use old random instance type subsets instead of all-types/smallest-fit")
     args = parser.parse_args()
 
     budget = args.budget
@@ -170,6 +172,7 @@ def main():
         max_nodes=50,           # was 200 — dial back, increase gradually
         variant_pair=VARIANT_PAIR,
         chaos=False,
+        random_node_mix=args.random_node_mix,
     )
     normal_ranked = normal_search.run()
     print(f"  Normal: {len(normal_ranked)} scenarios evaluated")
@@ -186,6 +189,7 @@ def main():
         max_nodes=50,
         variant_pair=VARIANT_PAIR,
         chaos=True,
+        random_node_mix=args.random_node_mix,
     )
     chaos_ranked = chaos_search.run()
     print(f"  Chaos: {len(chaos_ranked)} scenarios evaluated")
