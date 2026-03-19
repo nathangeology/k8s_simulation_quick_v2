@@ -1,0 +1,111 @@
+# Latency-sensitive vs batch — policy divergence scenario
+# High-priority web apps with strict PDBs coexist with expendable batch jobs.
+# WhenCostJustifiesDisruption with high threshold should protect latency-sensitive
+# pods while WhenEmptyOrUnderutilized disrupts them during consolidation.
+study:
+  name: consolidate-when-latency-vs-batch
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - c-4x-amd64-linux
+          - c-8x-amd64-linux
+          - c-16x-amd64-linux
+          - c-32x-amd64-linux
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+          - m-16x-amd64-linux
+        min_nodes: 0
+        max_nodes: 100
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+      - name: node-agent
+        cpu_request: "50m"
+        memory_request: "128Mi"
+    delays:
+      node_startup: "45s"
+      node_startup_jitter: "15s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    # Latency-sensitive API servers — must not be disrupted
+    - type: web_app
+      count: 4
+      replicas:
+        fixed: 10
+      cpu_request:
+        dist: uniform
+        min: "500m"
+        max: "1000m"
+      memory_request:
+        dist: uniform
+        min: "512Mi"
+        max: "1Gi"
+      priority: high
+      traffic: diurnal
+      pdb:
+        min_available: "80%"
+      topology_spread:
+        max_skew: 1
+        topology_key: kubernetes.io/hostname
+
+    # Batch processing — expendable, creates consolidation pressure
+    - type: batch_job
+      count: 10
+      priority: low
+      cpu_request:
+        dist: uniform
+        min: "1000m"
+        max: "4000m"
+      memory_request:
+        dist: uniform
+        min: "1Gi"
+        max: "4Gi"
+      duration:
+        dist: exponential
+        mean: "1h"
+
+    # Second wave of batch — staggered start
+    - type: batch_job
+      count: 8
+      priority: low
+      cpu_request:
+        dist: uniform
+        min: "500m"
+        max: "2000m"
+      memory_request:
+        dist: uniform
+        min: "512Mi"
+        max: "2Gi"
+      duration:
+        dist: exponential
+        mean: "90m"
+      start_at: "2h"
+
+  traffic_pattern:
+    type: diurnal
+    peak_multiplier: 3.0
+    duration: "24h"
+
+  variants:
+    - name: when-empty
+      karpenter_version: "v1"
+    - name: when-underutilized
+      karpenter_version: "v1"
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted

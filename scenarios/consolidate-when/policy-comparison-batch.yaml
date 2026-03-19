@@ -1,0 +1,92 @@
+# ConsolidateWhen policy comparison — batch-heavy workload
+# Batch job completions create empty nodes — tests WhenEmpty vs full consolidation.
+study:
+  name: consolidate-when-batch
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - c-4x-amd64-linux
+          - c-8x-amd64-linux
+          - c-16x-amd64-linux
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+          - m-16x-amd64-linux
+        min_nodes: 0
+        max_nodes: 80
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    - type: batch_job
+      count: 6
+      priority: low
+      cpu_request:
+        dist: uniform
+        min: "500m"
+        max: "4000m"
+      memory_request:
+        dist: uniform
+        min: "512Mi"
+        max: "4Gi"
+      duration:
+        dist: exponential
+        mean: "2h"
+
+    - type: batch_job
+      count: 4
+      priority: low
+      cpu_request:
+        dist: uniform
+        min: "1000m"
+        max: "8000m"
+      memory_request:
+        dist: uniform
+        min: "1Gi"
+        max: "8Gi"
+      duration:
+        dist: lognormal
+        mean: "4h"
+        std: "2h"
+
+    # Small steady web app to keep some nodes partially utilized
+    - type: web_app
+      count: 2
+      replicas:
+        fixed: 5
+      cpu_request:
+        dist: uniform
+        min: "200m"
+        max: "400m"
+      memory_request:
+        dist: uniform
+        min: "256Mi"
+        max: "512Mi"
+      priority: high
+      traffic: steady
+
+  variants:
+    - name: when-empty
+      karpenter_version: "v1"
+    - name: when-underutilized
+      karpenter_version: "v1"
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted

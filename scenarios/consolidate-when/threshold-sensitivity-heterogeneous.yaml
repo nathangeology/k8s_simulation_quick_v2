@@ -1,0 +1,124 @@
+# Decision ratio threshold sensitivity — heterogeneous workload
+# Diverse pod sizes, priorities, and PDBs create a wide distribution of
+# decision ratios. Threshold sweep reveals the cost-disruption tradeoff.
+#
+# Variants use WhenCostJustifiesDisruption at thresholds: 0.5, 1.0, 1.5, 2.0, 3.0
+# NOTE: Requires simulator support for decision_ratio_threshold field.
+# Until implemented, this scenario documents the intended experiment design.
+study:
+  name: threshold-sensitivity-heterogeneous
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - c-2x-amd64-linux
+          - c-4x-amd64-linux
+          - c-8x-amd64-linux
+          - c-16x-amd64-linux
+          - c-32x-amd64-linux
+          - c-48x-amd64-linux
+          - m-2x-amd64-linux
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+          - m-16x-amd64-linux
+          - m-32x-amd64-linux
+          - s-4x-amd64-linux
+          - s-8x-amd64-linux
+          - s-16x-amd64-linux
+        min_nodes: 0
+        max_nodes: 150
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    # Large high-priority pods — expensive to disrupt
+    - type: web_app
+      count: 3
+      replicas:
+        fixed: 6
+      cpu_request:
+        dist: uniform
+        min: "1000m"
+        max: "4000m"
+      memory_request:
+        dist: uniform
+        min: "2Gi"
+        max: "8Gi"
+      priority: high
+      traffic: diurnal
+      pdb:
+        min_available: "80%"
+      scale_down:
+        - {at: "12h", reduce_by: 4}
+
+    # Small medium-priority pods — moderate disruption cost
+    - type: saas_microservice
+      count: 12
+      replicas:
+        fixed: 5
+      cpu_request:
+        dist: uniform
+        min: "50m"
+        max: "200m"
+      memory_request:
+        dist: uniform
+        min: "64Mi"
+        max: "256Mi"
+      priority: medium
+      traffic: diurnal
+      scale_down:
+        - {at: "12h", reduce_by: 3}
+
+    # Batch jobs — cheap to disrupt, create consolidation opportunities
+    - type: batch_job
+      count: 6
+      priority: low
+      cpu_request:
+        dist: uniform
+        min: "500m"
+        max: "2000m"
+      memory_request:
+        dist: uniform
+        min: "512Mi"
+        max: "2Gi"
+      duration:
+        dist: exponential
+        mean: "2h"
+
+  traffic_pattern:
+    type: diurnal
+    peak_multiplier: 5.0
+    duration: "24h"
+
+  # Threshold variants — to be wired when ConsolidateWhen is implemented.
+  # Each variant will use WhenCostJustifiesDisruption with different thresholds.
+  # consolidate_when:
+  #   aggressive:          { policy: WhenCostJustifiesDisruption, threshold: 0.5 }
+  #   break-even:          { policy: WhenCostJustifiesDisruption, threshold: 1.0 }
+  #   conservative:        { policy: WhenCostJustifiesDisruption, threshold: 1.5 }
+  #   cautious:            { policy: WhenCostJustifiesDisruption, threshold: 2.0 }
+  #   minimal-disruption:  { policy: WhenCostJustifiesDisruption, threshold: 3.0 }
+  variants:
+    - name: baseline-underutilized
+      karpenter_version: "v1"
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted
