@@ -25,6 +25,7 @@ from kubesim.strategies import ALL_WORKLOAD_TYPES
 from kubesim.objectives import (
     cost_efficiency, availability, scheduling_failure_rate, entropy_deviation, OBJECTIVES,
 )
+from kubesim.scale_invariant_scoring import clamped_relative_divergence
 
 BUDGET = 100          # was 500 — dial back to avoid OOM crashes, increase gradually
 TOP_K = 10
@@ -56,19 +57,7 @@ OBJECTIVE_FNS = {
 
 def _combined_divergence(results: list[dict]) -> float:
     """Multi-objective divergence between the two scheduling variants."""
-    by_variant: dict[str, list[dict]] = {}
-    for r in results:
-        by_variant.setdefault(r.get("variant", ""), []).append(r)
-    if len(by_variant) < 2:
-        return 0.0
-    groups = list(by_variant.values())
-    total = 0.0
-    for fn in OBJECTIVE_FNS.values():
-        a, b = fn(groups[0]), fn(groups[1])
-        delta = abs(a - b)
-        if delta < float("inf"):
-            total += delta
-    return total
+    return clamped_relative_divergence(results, OBJECTIVE_FNS)
 
 
 def _categorize(scenario: dict, results: list[dict]) -> dict | None:
@@ -96,7 +85,7 @@ def _categorize(scenario: dict, results: list[dict]) -> dict | None:
             delta = 0.0
         obj_scores[name] = {"most": m_score, "least": l_score, "delta": delta}
 
-    combined = sum(abs(v["delta"]) for v in obj_scores.values())
+    combined = clamped_relative_divergence(results, OBJECTIVE_FNS)
 
     if signed_delta > 0:
         category = "adversarial_to_most"
@@ -135,6 +124,7 @@ def write_manifest(entries: list[dict]) -> None:
     manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "search_method": "optuna_tpe",
+        "scoring_method": "clamped_relative_divergence",
         "budget": BUDGET,
         "seeds": SEEDS,
         "top_k_per_category": TOP_K,
