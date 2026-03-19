@@ -480,6 +480,81 @@ _WORKLOAD_ARCHETYPES = {
 }
 
 
+# Instance type specs: (vCPU_millicores, memory_MiB)
+_INSTANCE_SPECS: dict[str, tuple[int, int]] = {
+    "t3.micro": (2000, 1024), "t3.small": (2000, 2048), "t3.medium": (2000, 4096),
+    "m5.large": (2000, 8192), "m5.xlarge": (4000, 16384), "m5.2xlarge": (8000, 32768),
+    "m5.4xlarge": (16000, 65536),
+    "c5.large": (2000, 4096), "c5.xlarge": (4000, 8192), "c5.2xlarge": (8000, 16384),
+    "c5.4xlarge": (16000, 32768),
+    "r5.large": (2000, 16384), "r5.xlarge": (4000, 32768), "r5.2xlarge": (8000, 65536),
+    "m6i.large": (2000, 8192), "m6i.xlarge": (4000, 16384), "m6i.2xlarge": (8000, 32768),
+    "c6i.large": (2000, 4096), "c6i.xlarge": (4000, 8192), "c6i.2xlarge": (8000, 16384),
+    "p3.2xlarge": (8000, 62464), "p3.8xlarge": (32000, 249856),
+    "g4dn.xlarge": (4000, 16384), "g4dn.2xlarge": (8000, 32768),
+}
+
+# Archetype default resource requests: (cpu_millicores, memory_MiB)
+_ARCHETYPE_RESOURCE_DEFAULTS: dict[str, tuple[int, int]] = {
+    "web_app": (250, 256), "batch_job": (1000, 2048),
+    "ml_training": (8000, 32768), "saas_microservice": (500, 512),
+}
+
+
+def _parse_cpu_millicores(s: str) -> int:
+    """Parse a CPU request string to millicores."""
+    if s.endswith("m"):
+        return int(s[:-1])
+    return int(float(s) * 1000)
+
+
+def _parse_memory_mib(s: str) -> int:
+    """Parse a memory request string to MiB."""
+    if s.endswith("Mi"):
+        return int(s[:-2])
+    if s.endswith("Gi"):
+        return int(float(s[:-2]) * 1024)
+    return int(s) // (1024 * 1024)
+
+
+def _max_workload_request(workloads: list[dict]) -> tuple[int, int]:
+    """Return (max_cpu_millicores, max_memory_mib) across workloads."""
+    max_cpu, max_mem = 0, 0
+    for w in workloads:
+        wtype = w.get("type", "")
+        cpu_dist = w.get("cpu_request")
+        mem_dist = w.get("memory_request")
+        if cpu_dist and isinstance(cpu_dist, dict):
+            cpu = _parse_cpu_millicores(cpu_dist.get("max", cpu_dist.get("min", "500m")))
+        else:
+            cpu = _ARCHETYPE_RESOURCE_DEFAULTS.get(wtype, (500, 512))[0]
+        if mem_dist and isinstance(mem_dist, dict):
+            mem = _parse_memory_mib(mem_dist.get("max", mem_dist.get("min", "512Mi")))
+        else:
+            mem = _ARCHETYPE_RESOURCE_DEFAULTS.get(wtype, (500, 512))[1]
+        max_cpu = max(max_cpu, cpu)
+        max_mem = max(max_mem, mem)
+    return max_cpu, max_mem
+
+
+def _smallest_fitting_type(cpu_m: int, mem_m: int, candidates: list[str]) -> str:
+    """Return the smallest instance type from candidates that fits the request.
+
+    "Smallest" = least total resource (cpu + normalized memory). Falls back to
+    the first candidate if nothing fits.
+    """
+    best, best_size = None, float("inf")
+    for it in candidates:
+        spec = _INSTANCE_SPECS.get(it)
+        if not spec:
+            continue
+        if spec[0] >= cpu_m and spec[1] >= mem_m:
+            size = spec[0] + spec[1]
+            if size < best_size:
+                best, best_size = it, size
+    return best or candidates[0]
+
+
 @dataclass
 class OptunaAdversarialSearch:
     """Bayesian optimization search for adversarial scenarios using Optuna TPE.
@@ -498,6 +573,8 @@ class OptunaAdversarialSearch:
         max_nodes: Maximum nodes per pool.
         variant_pair: Optional variant pair to inject into scenarios.
         chaos: If True, use chaos-style search space.
+        random_node_mix: If True, use old behavior (random instance type subsets).
+            If False (default), each pool uses all types or smallest-fitting single type.
     """
 
     objective_fn: Callable[[list[dict]], float]
@@ -510,6 +587,7 @@ class OptunaAdversarialSearch:
     max_nodes: int = 200
     variant_pair: VariantPair | None = None
     chaos: bool = False
+    random_node_mix: bool = False
 
     def _build_scenario(self, trial) -> dict:
         """Map Optuna trial parameters to a scenario config dict."""
@@ -526,9 +604,8 @@ class OptunaAdversarialSearch:
                     "min_nodes": 1,
                     "max_nodes": trial.suggest_int(f"pool{p}_max", 5, self.max_nodes),
                 }
-            else:
-                # 80% chance: use all instance types (realistic default)
-                # 20% chance: restricted subset (explore constrained scenarios)
+            elif self.random_node_mix:
+                # Old behavior: 80% all types, 20% random restricted subset
                 restrict = trial.suggest_categorical(f"pool{p}_restrict", [False, False, False, False, True])
                 if restrict:
                     n_types = trial.suggest_int(f"pool{p}_n_types", 1, 6)
@@ -542,6 +619,18 @@ class OptunaAdversarialSearch:
                         its = [INSTANCE_TYPES[0]]
                 else:
                     its = list(INSTANCE_TYPES)
+                max_n = max(5, self.max_nodes)
+                min_cap = min(10, max_n - 1)
+                pool = {
+                    "instance_types": its,
+                    "min_nodes": trial.suggest_int(f"pool{p}_min", 0, max(0, min_cap)),
+                    "max_nodes": trial.suggest_int(f"pool{p}_max", max(1, min_cap + 1), max_n),
+                }
+            else:
+                # Default: all types or smallest-fitting single type
+                # (workloads built below — deferred resolution for single-fit pools)
+                use_single = trial.suggest_categorical(f"pool{p}_single_fit", [True, False])
+                its = None if use_single else list(INSTANCE_TYPES)
                 max_n = max(5, self.max_nodes)
                 min_cap = min(10, max_n - 1)
                 pool = {
@@ -581,6 +670,13 @@ class OptunaAdversarialSearch:
                 workloads.append({"type": wtype, "count": 1})
 
         time_mode = "wall_clock"  # logical mode causes consolidation thrash (33M+ events)
+
+        # Resolve deferred single-fit pools now that workloads are known
+        if not self.random_node_mix and not self.chaos:
+            max_cpu, max_mem = _max_workload_request(workloads)
+            for pool in pools:
+                if pool["instance_types"] is None:
+                    pool["instance_types"] = [_smallest_fitting_type(max_cpu, max_mem, INSTANCE_TYPES)]
 
         scenario = {
             "study": {
