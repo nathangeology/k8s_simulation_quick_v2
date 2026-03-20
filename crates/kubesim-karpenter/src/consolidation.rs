@@ -1098,25 +1098,26 @@ impl EventHandler for DrainHandler {
             None => return Vec::new(),
         };
 
-        // Collect unique owners before eviction (skip daemonset pods)
+        // Collect unique owners and non-daemonset pod list
         let mut owners = Vec::new();
-        let mut evictable = Vec::new();
+        let mut non_ds_pods = Vec::new();
         for &pid in &pod_ids {
             if let Some(pod) = state.pods.get(pid) {
                 if pod.is_daemonset { continue; }
                 if !owners.contains(&pod.owner) {
                     owners.push(pod.owner);
                 }
-                if pdb_allows_eviction(state, pod) {
-                    evictable.push(pid);
-                }
+                non_ds_pods.push(pid);
             }
         }
 
         let mut follow_ups = Vec::new();
 
-        for pid in evictable {
-            // Emit PodTerminating so MetricsCollector counts the disruption
+        // Evict pods one at a time, re-checking PDB after each eviction
+        for pid in non_ds_pods {
+            let can_evict = state.pods.get(pid)
+                .map_or(false, |p| p.phase == PodPhase::Running && pdb_allows_eviction(state, p));
+            if !can_evict { continue; }
             follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0),
                 event: Event::PodTerminating(pid),

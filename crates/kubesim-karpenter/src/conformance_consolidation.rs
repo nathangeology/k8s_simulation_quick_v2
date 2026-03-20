@@ -10,6 +10,13 @@ pub fn specs() -> Vec<BehaviorSpec> {
         empty_before_underutilized_spec(),
         greedy_excludes_already_selected_spec(),
         consolidate_after_exempts_young_nodes_spec(),
+        consolidation_counts_evictions_spec(),
+        consolidation_respects_pdb_spec(),
+        when_empty_no_evictions_spec(),
+        when_empty_skips_occupied_spec(),
+        cost_justified_threshold_spec(),
+        decision_ratio_normalized_spec(),
+        consolidation_reduces_node_count_spec(),
     ]
 }
 
@@ -208,6 +215,274 @@ fn consolidate_after_exempts_young_nodes_spec() -> BehaviorSpec {
 
             if actions.len() != 1 {
                 return Err(format!("expected 1 action (old node only), got {}", actions.len()));
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 5: Consolidation of N pods produces N disruptions via DrainHandler.
+fn consolidation_counts_evictions_spec() -> BehaviorSpec {
+    use crate::consolidation::DrainHandler;
+    use kubesim_core::*;
+    use kubesim_engine::{Event as EngineEvent, EventHandler};
+
+    BehaviorSpec {
+        name: "consolidation-counts-evictions",
+        description: "Draining a node with N pods emits N PodTerminating events",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|_profile| {
+            let mut state = ClusterState::new();
+            let na = state.add_node(node(4000, 8_000_000_000, "default"));
+            for _ in 0..3 {
+                let p = state.submit_pod(pod(500, 500_000_000));
+                state.bind_pod(p, na);
+            }
+
+            let mut handler = DrainHandler;
+            let events = handler.handle(&EngineEvent::NodeDrained(na), SimTime(10), &mut state);
+
+            let terminating_count = events.iter()
+                .filter(|e| matches!(e.event, EngineEvent::PodTerminating(_)))
+                .count();
+
+            if terminating_count != 3 {
+                return Err(format!("expected 3 PodTerminating events, got {}", terminating_count));
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 6: PDB with min_available limits evictions per drain round.
+fn consolidation_respects_pdb_spec() -> BehaviorSpec {
+    use crate::consolidation::DrainHandler;
+    use kubesim_core::*;
+    use kubesim_engine::{Event as EngineEvent, EventHandler};
+
+    BehaviorSpec {
+        name: "consolidation-respects-pdb",
+        description: "PDB min_available limits how many pods are evicted per drain",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|_profile| {
+            let mut state = ClusterState::new();
+            let na = state.add_node(node(4000, 8_000_000_000, "default"));
+
+            let labels = LabelSet(vec![("app".into(), "web".into())]);
+            for _ in 0..3 {
+                let mut p = pod(500, 500_000_000);
+                p.labels = labels.clone();
+                let pid = state.submit_pod(p);
+                state.bind_pod(pid, na);
+            }
+
+            // PDB: min_available=2 → only 1 can be evicted at a time
+            state.pdbs.push(PodDisruptionBudget {
+                selector: LabelSelector { match_labels: labels.clone() },
+                min_available: 2,
+            });
+
+            let mut handler = DrainHandler;
+            let events = handler.handle(&EngineEvent::NodeDrained(na), SimTime(10), &mut state);
+
+            let terminating_count = events.iter()
+                .filter(|e| matches!(e.event, EngineEvent::PodTerminating(_)))
+                .count();
+
+            if terminating_count > 1 {
+                return Err(format!(
+                    "PDB min_available=2 with 3 pods should allow at most 1 eviction, got {}",
+                    terminating_count
+                ));
+            }
+            if terminating_count == 0 {
+                return Err("expected at least 1 eviction but got 0".into());
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 7: WhenEmpty on an empty node produces 0 pod disruptions.
+fn when_empty_no_evictions_spec() -> BehaviorSpec {
+    use crate::consolidation::{evaluate_versioned, ConsolidationAction, ConsolidationPolicy};
+    use kubesim_core::*;
+
+    BehaviorSpec {
+        name: "when-empty-no-evictions",
+        description: "WhenEmpty on an empty node terminates it with 0 pod disruptions",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|profile| {
+            let mut state = ClusterState::new();
+            state.add_node(node(4000, 8_000_000_000, "default"));
+
+            let actions = evaluate_versioned(
+                &state, ConsolidationPolicy::WhenEmpty, 10,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
+            );
+
+            if actions.len() != 1 {
+                return Err(format!("expected 1 action, got {}", actions.len()));
+            }
+            match &actions[0] {
+                ConsolidationAction::TerminateEmpty(_) => Ok(()),
+                other => Err(format!("expected TerminateEmpty, got {:?}", other)),
+            }
+        }),
+    }
+}
+
+/// Spec 8: WhenEmpty skips nodes that have non-daemonset pods.
+fn when_empty_skips_occupied_spec() -> BehaviorSpec {
+    use crate::consolidation::{evaluate_versioned, ConsolidationPolicy};
+    use kubesim_core::*;
+
+    BehaviorSpec {
+        name: "when-empty-skips-occupied",
+        description: "WhenEmpty does not consolidate nodes with running pods",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|profile| {
+            let mut state = ClusterState::new();
+            let na = state.add_node(node(4000, 8_000_000_000, "default"));
+            let p = state.submit_pod(pod(500, 500_000_000));
+            state.bind_pod(p, na);
+
+            let actions = evaluate_versioned(
+                &state, ConsolidationPolicy::WhenEmpty, 10,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
+            );
+
+            if !actions.is_empty() {
+                return Err(format!("expected 0 actions for occupied node, got {}", actions.len()));
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 9: Low decision_ratio_threshold consolidates, high threshold doesn't.
+fn cost_justified_threshold_spec() -> BehaviorSpec {
+    use crate::consolidation::{evaluate_versioned_with_metrics, ConsolidationDecisionMetrics, ConsolidationPolicy};
+    use kubesim_core::*;
+
+    BehaviorSpec {
+        name: "cost-justified-threshold",
+        description: "Low threshold consolidates, high threshold blocks consolidation",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|profile| {
+            let mut state = ClusterState::new();
+            let na = state.add_node(Node { cost_per_hour: 0.5, ..node(4000, 8_000_000_000, "default") });
+            let p = state.submit_pod(pod(500, 500_000_000));
+            state.bind_pod(p, na);
+            // Target node must have a pod so WhenEmpty doesn't pick it up
+            let nb = state.add_node(node(8000, 16_000_000_000, "default"));
+            let p2 = state.submit_pod(pod(100, 100_000_000));
+            state.bind_pod(p2, nb);
+
+            let mut m1 = ConsolidationDecisionMetrics::default();
+            let actions_low = evaluate_versioned_with_metrics(
+                &state, ConsolidationPolicy::WhenCostJustifiesDisruption, 10,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
+                0.1, Some(&mut m1),
+            );
+
+            let mut m2 = ConsolidationDecisionMetrics::default();
+            let actions_high = evaluate_versioned_with_metrics(
+                &state, ConsolidationPolicy::WhenCostJustifiesDisruption, 10,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
+                1000.0, Some(&mut m2),
+            );
+
+            if actions_low.is_empty() {
+                return Err("low threshold should produce consolidation actions".into());
+            }
+            if !actions_high.is_empty() {
+                return Err(format!("high threshold should block consolidation, got {} actions", actions_high.len()));
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 10: Decision ratio is non-negative and finite for various pod counts.
+fn decision_ratio_normalized_spec() -> BehaviorSpec {
+    use crate::consolidation::{evaluate_versioned_with_metrics, ConsolidationDecisionMetrics, ConsolidationPolicy};
+    use kubesim_core::*;
+
+    BehaviorSpec {
+        name: "decision-ratio-normalized",
+        description: "Decision ratio mean is non-negative for various pod counts",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|profile| {
+            for pod_count in [1, 5, 20] {
+                let mut state = ClusterState::new();
+                let na = state.add_node(Node { cost_per_hour: 0.5, ..node(8000, 16_000_000_000, "default") });
+                for _ in 0..pod_count {
+                    let p = state.submit_pod(pod(100, 100_000_000));
+                    state.bind_pod(p, na);
+                }
+                state.add_node(node(16000, 32_000_000_000, "default"));
+
+                let mut metrics = ConsolidationDecisionMetrics::default();
+                let _ = evaluate_versioned_with_metrics(
+                    &state, ConsolidationPolicy::WhenCostJustifiesDisruption, 10,
+                    Some(profile), None, "default", 0, &Resources::default(), 0,
+                    0.0, Some(&mut metrics),
+                );
+
+                if metrics.decisions_total == 0 {
+                    return Err(format!("no decisions evaluated for pod_count={}", pod_count));
+                }
+                let mean = metrics.decision_ratio_sum / metrics.decisions_total as f64;
+                if mean < 0.0 {
+                    return Err(format!("negative mean ratio {} for pod_count={}", mean, pod_count));
+                }
+                if mean.is_nan() || mean.is_infinite() {
+                    return Err(format!("non-finite mean ratio for pod_count={}", pod_count));
+                }
+            }
+            Ok(())
+        }),
+    }
+}
+
+/// Spec 11: After consolidation, fewer nodes are targeted for removal.
+fn consolidation_reduces_node_count_spec() -> BehaviorSpec {
+    use crate::consolidation::{evaluate_versioned, ConsolidationAction, ConsolidationPolicy};
+    use kubesim_core::*;
+
+    BehaviorSpec {
+        name: "consolidation-reduces-node-count",
+        description: "Consolidation actions target nodes for removal, reducing node count",
+        applies_to: VersionRange::from(KarpenterVersion::V0_35),
+        test: Box::new(|profile| {
+            let mut state = ClusterState::new();
+            let na = state.add_node(Node { cost_per_hour: 0.1, ..node(4000, 8_000_000_000, "default") });
+            let p1 = state.submit_pod(pod(500, 500_000_000));
+            state.bind_pod(p1, na);
+
+            let nb = state.add_node(Node { cost_per_hour: 0.1, ..node(4000, 8_000_000_000, "default") });
+            let p2 = state.submit_pod(pod(500, 500_000_000));
+            state.bind_pod(p2, nb);
+
+            state.add_node(node(8000, 16_000_000_000, "default"));
+
+            let initial_nodes = state.nodes.len() as usize;
+            let actions = evaluate_versioned(
+                &state, ConsolidationPolicy::WhenUnderutilized, 10,
+                Some(profile), None, "default", 0, &Resources::default(), 0,
+            );
+
+            let nodes_removed = actions.iter().filter(|a| matches!(
+                a,
+                ConsolidationAction::TerminateEmpty(_) | ConsolidationAction::DrainAndTerminate { .. }
+            )).count();
+
+            if nodes_removed == 0 {
+                return Err("expected at least 1 node to be consolidated".into());
+            }
+            if nodes_removed >= initial_nodes {
+                return Err(format!("removed {} nodes out of {} — should keep at least 1", nodes_removed, initial_nodes));
             }
             Ok(())
         }),
