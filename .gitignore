@@ -8,3 +8,4 @@ target/
 .venv/
 *.so
 .hypothesis/
+config.json
