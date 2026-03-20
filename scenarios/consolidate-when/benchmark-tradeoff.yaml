@@ -1,0 +1,124 @@
+# ConsolidateWhen tradeoff analysis on benchmark-control workload
+# 10 variants: WhenEmpty, WhenEmptyOrUnderutilized, and 8 WhenCostJustifiesDisruption thresholds
+# Base workload: 1→500→10 replicas scale-out/scale-in pattern
+study:
+  name: consolidate-when-benchmark-tradeoff
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+        min_nodes: 0
+        max_nodes: 1000
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    # Deployment A: 1→500→10 replicas (CPU-bound)
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "950m", max: "950m"}
+      memory_request: {dist: uniform, min: "3.5Gi", max: "3.5Gi"}
+      scale_up:
+        - {at: "10s", increase_to: 500}
+      scale_down:
+        - {at: "15m", reduce_by: 150}    # 500→350
+        - {at: "25m", reduce_by: 340}    # 350→10
+
+    # Deployment B: 1→500→10 replicas (memory-bound)
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "950m", max: "950m"}
+      memory_request: {dist: uniform, min: "6.5Gi", max: "6.5Gi"}
+      scale_up:
+        - {at: "10s", increase_to: 500}
+      scale_down:
+        - {at: "15m", reduce_by: 150}    # 500→350
+        - {at: "25m", reduce_by: 340}    # 350→10
+
+  variants:
+    - name: when-empty
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenEmpty
+
+    - name: when-underutilized
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
+
+    - name: cost-justified-0.25
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.25
+
+    - name: cost-justified-0.50
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.50
+
+    - name: cost-justified-0.75
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.75
+
+    - name: cost-justified-1.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.00
+
+    - name: cost-justified-1.50
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.50
+
+    - name: cost-justified-2.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 2.00
+
+    - name: cost-justified-3.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 3.00
+
+    - name: cost-justified-5.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 5.00
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - cumulative_cost
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted
+      - disruption_count
+      - time_weighted_node_count
+      - peak_node_count
