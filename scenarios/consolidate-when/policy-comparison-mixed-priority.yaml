@@ -107,8 +107,17 @@ study:
   variants:
     - name: when-empty
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenEmpty
     - name: when-underutilized
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
+    - name: cost-justified
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.0
 
   metrics:
     compare:

@@ -1,9 +1,6 @@
 # Cost vs disruption tradeoff curve
 # 10 threshold variants from 0.25 to 5.0 to map the Pareto frontier.
 # Plot: total_cost_per_hour (x) vs pods_evicted (y) per variant.
-#
-# NOTE: Requires simulator support for decision_ratio_threshold.
-# Threshold values documented in comments; single baseline variant for now.
 study:
   name: cost-disruption-tradeoff
   runs: 100
@@ -99,21 +96,57 @@ study:
     peak_multiplier: 4.0
     duration: "24h"
 
-  # Intended 10-point threshold sweep (requires ConsolidateWhen support):
-  # consolidate_when variants:
-  #   threshold-0.25: { policy: WhenCostJustifiesDisruption, threshold: 0.25 }
-  #   threshold-0.50: { policy: WhenCostJustifiesDisruption, threshold: 0.50 }
-  #   threshold-0.75: { policy: WhenCostJustifiesDisruption, threshold: 0.75 }
-  #   threshold-1.00: { policy: WhenCostJustifiesDisruption, threshold: 1.00 }
-  #   threshold-1.25: { policy: WhenCostJustifiesDisruption, threshold: 1.25 }
-  #   threshold-1.50: { policy: WhenCostJustifiesDisruption, threshold: 1.50 }
-  #   threshold-2.00: { policy: WhenCostJustifiesDisruption, threshold: 2.00 }
-  #   threshold-3.00: { policy: WhenCostJustifiesDisruption, threshold: 3.00 }
-  #   threshold-4.00: { policy: WhenCostJustifiesDisruption, threshold: 4.00 }
-  #   threshold-5.00: { policy: WhenCostJustifiesDisruption, threshold: 5.00 }
   variants:
-    - name: baseline-underutilized
+    - name: threshold-0.25
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.25
+    - name: threshold-0.50
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.50
+    - name: threshold-0.75
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.75
+    - name: threshold-1.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.00
+    - name: threshold-1.25
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.25
+    - name: threshold-1.50
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.50
+    - name: threshold-2.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 2.00
+    - name: threshold-3.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 3.00
+    - name: threshold-4.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 4.00
+    - name: threshold-5.00
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 5.00
 
   metrics:
     compare:

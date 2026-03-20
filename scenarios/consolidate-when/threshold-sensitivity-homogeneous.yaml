@@ -51,8 +51,31 @@ study:
     duration: "24h"
 
   variants:
-    - name: baseline-underutilized
+    - name: aggressive
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.5
+    - name: break-even
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.0
+    - name: conservative
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.5
+    - name: cautious
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 2.0
+    - name: minimal-disruption
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 3.0
 
   metrics:
     compare:

@@ -1,10 +1,6 @@
 # Decision ratio threshold sensitivity — heterogeneous workload
 # Diverse pod sizes, priorities, and PDBs create a wide distribution of
 # decision ratios. Threshold sweep reveals the cost-disruption tradeoff.
-#
-# Variants use WhenCostJustifiesDisruption at thresholds: 0.5, 1.0, 1.5, 2.0, 3.0
-# NOTE: Requires simulator support for decision_ratio_threshold field.
-# Until implemented, this scenario documents the intended experiment design.
 study:
   name: threshold-sensitivity-heterogeneous
   runs: 100
@@ -103,17 +99,32 @@ study:
     peak_multiplier: 5.0
     duration: "24h"
 
-  # Threshold variants — to be wired when ConsolidateWhen is implemented.
-  # Each variant will use WhenCostJustifiesDisruption with different thresholds.
-  # consolidate_when:
-  #   aggressive:          { policy: WhenCostJustifiesDisruption, threshold: 0.5 }
-  #   break-even:          { policy: WhenCostJustifiesDisruption, threshold: 1.0 }
-  #   conservative:        { policy: WhenCostJustifiesDisruption, threshold: 1.5 }
-  #   cautious:            { policy: WhenCostJustifiesDisruption, threshold: 2.0 }
-  #   minimal-disruption:  { policy: WhenCostJustifiesDisruption, threshold: 3.0 }
   variants:
-    - name: baseline-underutilized
+    - name: aggressive
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.5
+    - name: break-even
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.0
+    - name: conservative
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.5
+    - name: cautious
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 2.0
+    - name: minimal-disruption
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 3.0
 
   metrics:
     compare:

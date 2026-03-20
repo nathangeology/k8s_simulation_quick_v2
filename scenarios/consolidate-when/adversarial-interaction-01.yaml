@@ -83,17 +83,33 @@ study:
         min: "1506m"
         max: "8000m"
 
-  # Compare scheduling strategies under different consolidation policies.
-  # When ConsolidateWhen is implemented, add cost-justified variants.
   variants:
     - name: most-allocated-when-underutilized
       scheduler:
         scoring: MostAllocated
         weight: 1
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
     - name: least-allocated-when-underutilized
       scheduler:
         scoring: LeastAllocated
         weight: 1
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
+    - name: most-allocated-cost-justified
+      scheduler:
+        scoring: MostAllocated
+        weight: 1
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.0
+    - name: least-allocated-cost-justified
+      scheduler:
+        scoring: LeastAllocated
+        weight: 1
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.0
 
   metrics:
     compare:

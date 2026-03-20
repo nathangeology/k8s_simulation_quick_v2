@@ -1,9 +1,6 @@
 # ConsolidateWhen policy comparison — diurnal traffic with scale-down
 # Tests all 3 policies under realistic day/night traffic patterns.
 # Off-peak troughs create consolidation opportunities where policies should diverge.
-#
-# NOTE: Requires simulator support for ConsolidateWhen field and decision_ratio_threshold.
-# Until implemented, use consolidation.policy: WhenEmpty / WhenUnderutilized as proxy.
 study:
   name: consolidate-when-diurnal
   runs: 100
@@ -82,17 +79,20 @@ study:
     peak_multiplier: 4.0
     duration: "24h"
 
-  # Variant structure for when ConsolidateWhen is implemented.
-  # For now, these serve as documentation of the intended comparison.
-  # consolidate_when variants:
-  #   when-empty:           { policy: WhenEmpty }
-  #   when-underutilized:   { policy: WhenEmptyOrUnderutilized }
-  #   cost-justified:       { policy: WhenCostJustifiesDisruption, threshold: 1.0 }
   variants:
     - name: when-empty
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenEmpty
     - name: when-underutilized
       karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
+    - name: cost-justified
+      karpenter_version: "v1"
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.0
 
   metrics:
     compare:

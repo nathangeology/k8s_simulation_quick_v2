@@ -210,6 +210,10 @@ impl MetricsCollector {
             cpu_weighted_entropy_normalized,
             total_vcpu_allocated,
             total_memory_allocated_gib,
+            consolidation_decisions_total: 0,
+            consolidation_decisions_accepted: 0,
+            consolidation_decisions_rejected: 0,
+            consolidation_decision_ratio_mean: 0.0,
         });
 
         self.recent_latencies.clear();

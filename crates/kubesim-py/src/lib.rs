@@ -91,6 +91,15 @@ fn parse_karpenter_version(s: &str) -> Option<KarpenterVersion> {
     }
 }
 
+fn map_consolidation_policy(p: kubesim_workload::ConsolidationPolicy) -> ConsolidationPolicy {
+    match p {
+        kubesim_workload::ConsolidationPolicy::WhenEmpty => ConsolidationPolicy::WhenEmpty,
+        kubesim_workload::ConsolidationPolicy::WhenUnderutilized => ConsolidationPolicy::WhenUnderutilized,
+        kubesim_workload::ConsolidationPolicy::WhenEmptyOrUnderutilized => ConsolidationPolicy::WhenUnderutilized,
+        kubesim_workload::ConsolidationPolicy::WhenCostJustifiesDisruption => ConsolidationPolicy::WhenCostJustifiesDisruption,
+    }
+}
+
 /// Compute the system overhead Resources from scenario cluster config.
 fn compute_overhead(cluster: &kubesim_workload::ClusterConfig) -> Resources {
     let (cpu, mem) = match &cluster.system_overhead {
@@ -993,14 +1002,18 @@ fn run_single(
             let consolidation_policy = karpenter
                 .consolidation
                 .as_ref()
-                .map(|c| match c.policy {
-                    kubesim_workload::ConsolidationPolicy::WhenEmpty => ConsolidationPolicy::WhenEmpty,
-                    kubesim_workload::ConsolidationPolicy::WhenUnderutilized => ConsolidationPolicy::WhenUnderutilized,
-                })
+                .map(|c| map_consolidation_policy(c.policy))
                 .unwrap_or(ConsolidationPolicy::WhenUnderutilized);
 
-            let mut consol = ConsolidationHandler::new(pool, consolidation_policy)
+            // Variant-level consolidate_when override
+            let (effective_policy, effective_threshold) = match variant.and_then(|v| v.consolidate_when.as_ref()) {
+                Some(cw) => (map_consolidation_policy(cw.policy), cw.decision_ratio_threshold.unwrap_or(1.0)),
+                None => (consolidation_policy, karpenter.consolidation.as_ref().and_then(|c| c.decision_ratio_threshold).unwrap_or(1.0)),
+            };
+
+            let mut consol = ConsolidationHandler::new(pool, effective_policy)
                 .with_catalog(Catalog::for_provider(provider).expect("embedded catalog"));
+            consol.decision_ratio_threshold = effective_threshold;
             if time_mode == TimeMode::Logical {
                 consol = consol.with_logical_mode();
             }
@@ -1188,6 +1201,10 @@ fn snapshot_to_dict<'py>(py: Python<'py>, s: &kubesim_metrics::MetricsSnapshot) 
     d.set_item("memory_utilization_p99", s.memory_utilization.p99)?;
     d.set_item("total_vcpu_allocated", s.total_vcpu_allocated)?;
     d.set_item("total_memory_allocated_gib", s.total_memory_allocated_gib)?;
+    d.set_item("consolidation_decisions_total", s.consolidation_decisions_total)?;
+    d.set_item("consolidation_decisions_accepted", s.consolidation_decisions_accepted)?;
+    d.set_item("consolidation_decisions_rejected", s.consolidation_decisions_rejected)?;
+    d.set_item("consolidation_decision_ratio_mean", s.consolidation_decision_ratio_mean)?;
     Ok(d)
 }
 
@@ -1710,10 +1727,7 @@ impl StepSimulation {
                 let consolidation_policy = karpenter
                     .consolidation
                     .as_ref()
-                    .map(|c| match c.policy {
-                        kubesim_workload::ConsolidationPolicy::WhenEmpty => ConsolidationPolicy::WhenEmpty,
-                        kubesim_workload::ConsolidationPolicy::WhenUnderutilized => ConsolidationPolicy::WhenUnderutilized,
-                    })
+                    .map(|c| map_consolidation_policy(c.policy))
                     .unwrap_or(ConsolidationPolicy::WhenUnderutilized);
 
                 engine.add_handler(Box::new(

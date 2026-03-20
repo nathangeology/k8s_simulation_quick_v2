@@ -20,6 +20,20 @@ use crate::version::{ConsolidationStrategy, DisruptionReason, VersionProfile, ev
 pub enum ConsolidationPolicy {
     WhenEmpty,
     WhenUnderutilized,
+    WhenCostJustifiesDisruption,
+}
+
+/// Metrics from a consolidation evaluation round (decision ratio tracking).
+#[derive(Debug, Clone, Default)]
+pub struct ConsolidationDecisionMetrics {
+    /// Total candidates evaluated.
+    pub decisions_total: u32,
+    /// Candidates where ratio >= threshold.
+    pub decisions_accepted: u32,
+    /// Candidates where ratio < threshold.
+    pub decisions_rejected: u32,
+    /// Sum of decision ratios (for computing mean).
+    pub decision_ratio_sum: f64,
 }
 
 /// Result of evaluating a single node for consolidation.
@@ -268,6 +282,106 @@ fn find_underutilized_nodes(
     actions
 }
 
+/// Compute the decision ratio for a candidate node.
+///
+/// `decision_ratio = normalized_cost_savings / normalized_disruption_cost`
+///
+/// - `normalized_cost_savings`: `(node_cost - replacement_cost) / max_cost_in_pool`
+///   For deletion candidates (no replacement), replacement_cost = 0.
+/// - `normalized_disruption_cost`: weighted combination of pod count, PDB coverage,
+///   max priority, and node age (reuses `candidate_score` factors).
+fn decision_ratio(state: &ClusterState, node: &Node, max_cost_in_pool: f64) -> f64 {
+    if max_cost_in_pool <= 0.0 {
+        return 0.0;
+    }
+    let normalized_savings = node.cost_per_hour / max_cost_in_pool;
+
+    // Compute disruption cost from candidate_score factors
+    let (_, disruption_cost, non_ds_count, _) = candidate_score(state, node);
+    // Normalize: pod_count contributes linearly, disruption_cost (priority + pdb) adds weight
+    let disruption = (non_ds_count as f64 * 0.5 + disruption_cost as f64 * 0.01).max(0.01);
+
+    normalized_savings / disruption
+}
+
+/// Find nodes eligible for consolidation under the WhenCostJustifiesDisruption policy.
+///
+/// Evaluates each candidate's decision ratio and only includes those above the threshold.
+/// Returns actions sorted by decision ratio descending (best savings first).
+fn find_cost_justified_nodes(
+    state: &ClusterState,
+    pool_name: &str,
+    strategy: ConsolidationStrategy,
+    consolidate_after_ns: u64,
+    max_candidates: usize,
+    _timeout_candidates: usize,
+    threshold: f64,
+    metrics: &mut ConsolidationDecisionMetrics,
+) -> Vec<ConsolidationAction> {
+    // Compute max cost in pool for normalization
+    let max_cost = state.nodes.iter()
+        .filter(|(_, n)| n.pool_name == pool_name && n.conditions.ready)
+        .map(|(_, n)| n.cost_per_hour)
+        .fold(0.0f64, f64::max);
+
+    let candidates: Vec<(NodeId, &Node)> = state
+        .nodes
+        .iter()
+        .filter(|(_, n)| {
+            n.conditions.ready && !n.cordoned && n.pool_name == pool_name
+                && state.time.0 >= n.created_at.0.saturating_add(consolidate_after_ns)
+                && n.pods.iter().any(|&pid| {
+                    state.pods.get(pid).map_or(false, |p| !p.is_daemonset)
+                })
+        })
+        .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
+        .collect();
+
+    // Score and filter by decision ratio
+    let mut scored: Vec<(NodeId, f64)> = Vec::new();
+    for &(nid, node) in &candidates {
+        let ratio = decision_ratio(state, node, max_cost);
+        metrics.decisions_total += 1;
+        metrics.decision_ratio_sum += ratio;
+        if ratio >= threshold {
+            metrics.decisions_accepted += 1;
+            scored.push((nid, ratio));
+        } else {
+            metrics.decisions_rejected += 1;
+        }
+    }
+
+    // Sort by ratio descending (best savings first)
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    if max_candidates > 0 && scored.len() > max_candidates {
+        scored.truncate(max_candidates);
+    }
+
+    // Now check reschedulability like find_underutilized_nodes
+    let mut actions = Vec::new();
+    let mut nodes_being_removed: HashSet<NodeId> = HashSet::new();
+
+    for (nid, _ratio) in &scored {
+        if let Some(pod_ids) = pods_can_reschedule(state, *nid, &nodes_being_removed) {
+            if pod_ids.is_empty() {
+                actions.push(ConsolidationAction::TerminateEmpty(*nid));
+            } else {
+                actions.push(ConsolidationAction::DrainAndTerminate {
+                    node_id: *nid,
+                    pod_ids,
+                });
+            }
+            nodes_being_removed.insert(*nid);
+            if strategy == ConsolidationStrategy::SingleNode {
+                break;
+            }
+        }
+    }
+
+    actions
+}
+
 /// Find nodes that can't be deleted (pods don't fit elsewhere) but could be
 /// replaced with a cheaper instance type from the EC2 catalog.
 ///
@@ -393,6 +507,23 @@ pub fn evaluate_versioned(
     overhead: &Resources,
     daemonset_pct: u32,
 ) -> Vec<ConsolidationAction> {
+    evaluate_versioned_with_metrics(state, policy, max_disrupted, profile, catalog, pool_name, consolidate_after_ns, overhead, daemonset_pct, 1.0, None)
+}
+
+/// Version-aware consolidation evaluation with decision ratio threshold and metrics output.
+pub fn evaluate_versioned_with_metrics(
+    state: &ClusterState,
+    policy: ConsolidationPolicy,
+    max_disrupted: u32,
+    profile: Option<&VersionProfile>,
+    catalog: Option<(&Catalog, &NodePool)>,
+    pool_name: &str,
+    consolidate_after_ns: u64,
+    overhead: &Resources,
+    daemonset_pct: u32,
+    decision_ratio_threshold: f64,
+    decision_metrics: Option<&mut ConsolidationDecisionMetrics>,
+) -> Vec<ConsolidationAction> {
     let strategy = profile
         .map(|p| p.consolidation_strategy)
         .unwrap_or(ConsolidationStrategy::MultiNode);
@@ -482,6 +613,20 @@ pub fn evaluate_versioned(
                     total_used += 1;
                 }
             }
+        }
+    }
+
+    if policy == ConsolidationPolicy::WhenCostJustifiesDisruption && total_used < max_disrupted {
+        let mut dummy_metrics = ConsolidationDecisionMetrics::default();
+        let metrics = decision_metrics.unwrap_or(&mut dummy_metrics);
+        let mut cost_used: u32 = 0;
+        for action in find_cost_justified_nodes(state, pool_name, strategy, consolidate_after_ns, max_candidates, timeout_candidates, decision_ratio_threshold, metrics) {
+            if cost_used >= underutilized_budget || total_used >= max_disrupted {
+                break;
+            }
+            actions.push(action);
+            cost_used += 1;
+            total_used += 1;
         }
     }
 
@@ -684,6 +829,10 @@ pub struct ConsolidationHandler {
     last_state_hash: u64,
     /// Whether this handler is operating in logical time mode.
     logical_mode: bool,
+    /// Decision ratio threshold for WhenCostJustifiesDisruption policy.
+    pub decision_ratio_threshold: f64,
+    /// Accumulated decision metrics from the last evaluation round.
+    pub last_decision_metrics: ConsolidationDecisionMetrics,
 }
 
 impl ConsolidationHandler {
@@ -702,6 +851,8 @@ impl ConsolidationHandler {
             daemonset_pct: 0,
             last_state_hash: 0,
             logical_mode: false,
+            decision_ratio_threshold: 1.0,
+            last_decision_metrics: ConsolidationDecisionMetrics::default(),
         }
     }
 
@@ -773,7 +924,9 @@ impl EventHandler for ConsolidationHandler {
         let total_nodes = state.nodes.len();
         let max_d = disruption_budget(&self.pool, total_nodes);
         let catalog_ref = self.catalog.as_ref().map(|c| (c, &self.pool));
-        let actions = evaluate_versioned(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after, &self.overhead, self.daemonset_pct);
+        let mut metrics = ConsolidationDecisionMetrics::default();
+        let actions = evaluate_versioned_with_metrics(state, self.policy, max_d, self.version_profile.as_ref(), catalog_ref, &self.pool.name, self.consolidate_after, &self.overhead, self.daemonset_pct, self.decision_ratio_threshold, Some(&mut metrics));
+        self.last_decision_metrics = metrics;
 
         // PLAN phase: validate via scheduling simulation — shrink candidate set
         // until all displaced pods can be placed on remaining nodes.

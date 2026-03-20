@@ -17,7 +17,7 @@ pub mod version;
 
 pub use kubesim_core;
 pub use conformance::{BehaviorSpec, ConformanceReport, SpecResult, VersionRange, run_conformance};
-pub use consolidation::{ConsolidationAction, ConsolidationHandler, ConsolidationPolicy, DrainHandler};
+pub use consolidation::{ConsolidationAction, ConsolidationHandler, ConsolidationPolicy, ConsolidationDecisionMetrics, DrainHandler};
 pub use drift::{DriftConfig, DriftHandler};
 pub use handler::ProvisioningHandler;
 pub use nodepool::{NodePool, NodePoolLimits, NodePoolUsage};

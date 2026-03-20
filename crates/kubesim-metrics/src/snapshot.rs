@@ -70,6 +70,14 @@ pub struct MetricsSnapshot {
     pub total_vcpu_allocated: f64,
     /// Total memory allocated across all nodes (in GiB).
     pub total_memory_allocated_gib: f64,
+    /// Consolidation decisions evaluated this interval.
+    pub consolidation_decisions_total: u32,
+    /// Consolidation candidates accepted (ratio >= threshold).
+    pub consolidation_decisions_accepted: u32,
+    /// Consolidation candidates rejected (ratio < threshold).
+    pub consolidation_decisions_rejected: u32,
+    /// Mean decision ratio across evaluated candidates.
+    pub consolidation_decision_ratio_mean: f64,
 }
 
 #[cfg(test)]

@@ -258,12 +258,17 @@ pub struct KarpenterConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsolidationConfig {
     pub policy: ConsolidationPolicy,
+    /// Decision ratio threshold for WhenCostJustifiesDisruption (default 1.0).
+    #[serde(default)]
+    pub decision_ratio_threshold: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsolidationPolicy {
     WhenEmpty,
     WhenUnderutilized,
+    WhenEmptyOrUnderutilized,
+    WhenCostJustifiesDisruption,
 }
 
 // ── Workload definitions ────────────────────────────────────────
@@ -597,6 +602,17 @@ pub struct Variant {
     /// Per-variant disruption budget override (overrides pool-level budget).
     #[serde(default)]
     pub disruption_budget: Option<DisruptionBudgetDef>,
+    /// Per-variant consolidation policy override.
+    #[serde(default)]
+    pub consolidate_when: Option<ConsolidateWhenVariant>,
+}
+
+/// Per-variant consolidation policy override.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsolidateWhenVariant {
+    pub policy: ConsolidationPolicy,
+    #[serde(default)]
+    pub decision_ratio_threshold: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
