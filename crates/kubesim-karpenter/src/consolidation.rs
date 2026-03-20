@@ -286,20 +286,29 @@ fn find_underutilized_nodes(
 ///
 /// `decision_ratio = normalized_cost_savings / normalized_disruption_cost`
 ///
-/// - `normalized_cost_savings`: `(node_cost - replacement_cost) / max_cost_in_pool`
-///   For deletion candidates (no replacement), replacement_cost = 0.
-/// - `normalized_disruption_cost`: weighted combination of pod count, PDB coverage,
-///   max priority, and node age (reuses `candidate_score` factors).
-fn decision_ratio(state: &ClusterState, node: &Node, max_cost_in_pool: f64) -> f64 {
+/// Both numerator and denominator are normalized to comparable [0,1] ranges so
+/// the threshold has consistent meaning regardless of cluster size or pod count.
+///
+/// - `normalized_cost_savings`: `node_cost / max_cost_in_pool` — fraction of the
+///   most expensive node's cost that would be saved by removing this node.
+/// - `normalized_disruption_cost`: `(pod_fraction * 0.7 + priority_fraction * 0.2 + pdb_fraction * 0.1)`
+///   where each component is normalized to [0,1] using pool-wide maximums.
+///   Floor of 0.01 prevents division by zero for empty-ish nodes.
+fn decision_ratio(state: &ClusterState, node: &Node, max_cost_in_pool: f64, max_pods_in_pool: usize) -> f64 {
     if max_cost_in_pool <= 0.0 {
         return 0.0;
     }
     let normalized_savings = node.cost_per_hour / max_cost_in_pool;
 
-    // Compute disruption cost from candidate_score factors
     let (_, disruption_cost, non_ds_count, _) = candidate_score(state, node);
-    // Normalize: pod_count contributes linearly, disruption_cost (priority + pdb) adds weight
-    let disruption = (non_ds_count as f64 * 0.5 + disruption_cost as f64 * 0.01).max(0.01);
+    let pod_fraction = if max_pods_in_pool > 0 {
+        non_ds_count as f64 / max_pods_in_pool as f64
+    } else {
+        0.0
+    };
+    // priority + pdb contribution, capped at 1.0
+    let priority_fraction = (disruption_cost as f64 / 1000.0).min(1.0);
+    let disruption = (pod_fraction * 0.7 + priority_fraction * 0.3).max(0.01);
 
     normalized_savings / disruption
 }
@@ -324,6 +333,13 @@ fn find_cost_justified_nodes(
         .map(|(_, n)| n.cost_per_hour)
         .fold(0.0f64, f64::max);
 
+    // Compute max non-daemonset pod count in pool for disruption normalization
+    let max_pods = state.nodes.iter()
+        .filter(|(_, n)| n.pool_name == pool_name && n.conditions.ready)
+        .map(|(_, n)| n.pods.iter().filter(|&&pid| state.pods.get(pid).map_or(false, |p| !p.is_daemonset)).count())
+        .max()
+        .unwrap_or(1);
+
     let candidates: Vec<(NodeId, &Node)> = state
         .nodes
         .iter()
@@ -340,7 +356,7 @@ fn find_cost_justified_nodes(
     // Score and filter by decision ratio
     let mut scored: Vec<(NodeId, f64)> = Vec::new();
     for &(nid, node) in &candidates {
-        let ratio = decision_ratio(state, node, max_cost);
+        let ratio = decision_ratio(state, node, max_cost, max_pods);
         metrics.decisions_total += 1;
         metrics.decision_ratio_sum += ratio;
         if ratio >= threshold {
