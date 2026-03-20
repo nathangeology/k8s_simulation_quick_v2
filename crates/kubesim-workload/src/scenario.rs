@@ -200,6 +200,7 @@ impl SystemOverhead {
 pub struct NodePoolDef {
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(deserialize_with = "deserialize_instance_types")]
     pub instance_types: Vec<String>,
     #[serde(default = "default_min_nodes")]
     pub min_nodes: u32,
@@ -640,4 +641,50 @@ pub enum ScoringStrategy {
 pub struct MetricsConfig {
     #[serde(default)]
     pub compare: Vec<String>,
+}
+
+// ── Instance type shorthand expansion ───────────────────────────
+
+/// Deserialize `instance_types` as either a single string shorthand or a list of strings.
+fn deserialize_instance_types<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        Single(String),
+        List(Vec<String>),
+    }
+    match StringOrVec::deserialize(deserializer)? {
+        StringOrVec::Single(s) => Ok(vec![s]),
+        StringOrVec::List(v) => Ok(v),
+    }
+}
+
+/// Expand shorthand instance type values (`all-ec2`, `all-kwok`) into full catalog lists.
+/// Returns an error if a shorthand catalog fails to load.
+pub fn resolve_instance_type_shorthands(study: &mut Study) -> Result<(), String> {
+    for pool in &mut study.cluster.node_pools {
+        if pool.instance_types.len() == 1 {
+            match pool.instance_types[0].as_str() {
+                "all-ec2" => {
+                    let catalog = kubesim_ec2::Catalog::embedded()
+                        .map_err(|e| format!("failed to load EC2 catalog: {e}"))?;
+                    pool.instance_types = catalog.all().iter()
+                        .map(|t| t.instance_type.clone())
+                        .collect();
+                }
+                "all-kwok" => {
+                    let catalog = kubesim_ec2::Catalog::kwok()
+                        .map_err(|e| format!("failed to load KWOK catalog: {e}"))?;
+                    pool.instance_types = catalog.all().iter()
+                        .map(|t| t.instance_type.clone())
+                        .collect();
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
 }

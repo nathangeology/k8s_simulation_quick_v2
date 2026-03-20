@@ -39,7 +39,9 @@ pub fn load_scenario_from_str(yaml: &str) -> Result<(ScenarioFile, Vec<Event>), 
 /// in workload `count` and resource request fields are expanded into concrete
 /// pod submission events.
 pub fn load_scenario_from_str_seeded(yaml: &str, seed: u64) -> Result<(ScenarioFile, Vec<Event>), LoadError> {
-    let scenario: ScenarioFile = serde_yaml::from_str(yaml)?;
+    let mut scenario: ScenarioFile = serde_yaml::from_str(yaml)?;
+    resolve_instance_type_shorthands(&mut scenario.study)
+        .map_err(LoadError::Invalid)?;
     validate(&scenario.study)?;
     let mut rng = StdRng::seed_from_u64(seed);
     let events = emit_events(&scenario.study, &mut rng);
