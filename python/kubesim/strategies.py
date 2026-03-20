@@ -23,17 +23,50 @@ from hypothesis.strategies import SearchStrategy
 # ── Constants ────────────────────────────────────────────────────
 
 INSTANCE_TYPES = [
-    "m5.large", "m5.xlarge", "m5.2xlarge", "m5.4xlarge",
-    "c5.large", "c5.xlarge", "c5.2xlarge", "c5.4xlarge",
-    "r5.large", "r5.xlarge", "r5.2xlarge",
-    "m6i.large", "m6i.xlarge", "m6i.2xlarge",
-    "c6i.large", "c6i.xlarge", "c6i.2xlarge",
-    "p3.2xlarge", "p3.8xlarge", "g4dn.xlarge", "g4dn.2xlarge",
+    "c5.12xlarge", "c5.16xlarge", "c5.24xlarge", "c5.2xlarge", "c5.4xlarge", "c5.8xlarge",
+    "c5.large", "c5.xlarge", "c5a.12xlarge", "c5a.16xlarge", "c5a.24xlarge", "c5a.2xlarge",
+    "c5a.4xlarge", "c5a.8xlarge", "c5a.large", "c5a.xlarge", "c5n.18xlarge", "c5n.2xlarge",
+    "c5n.4xlarge", "c5n.9xlarge", "c5n.large", "c5n.xlarge", "c6a.12xlarge", "c6a.16xlarge",
+    "c6a.24xlarge", "c6a.2xlarge", "c6a.4xlarge", "c6a.8xlarge", "c6a.large", "c6a.xlarge",
+    "c6i.12xlarge", "c6i.16xlarge", "c6i.24xlarge", "c6i.2xlarge", "c6i.4xlarge", "c6i.8xlarge",
+    "c6i.large", "c6i.xlarge", "c7a.12xlarge", "c7a.16xlarge", "c7a.24xlarge", "c7a.2xlarge",
+    "c7a.4xlarge", "c7a.8xlarge", "c7a.large", "c7a.xlarge", "c7i.12xlarge", "c7i.16xlarge",
+    "c7i.24xlarge", "c7i.2xlarge", "c7i.4xlarge", "c7i.8xlarge", "c7i.large", "c7i.xlarge",
+    "d3.2xlarge", "d3.4xlarge", "d3.8xlarge", "d3.xlarge", "hpc6a.48xlarge", "hpc7g.16xlarge",
+    "hpc7g.4xlarge", "hpc7g.8xlarge", "i3.16xlarge", "i3.2xlarge", "i3.4xlarge", "i3.8xlarge",
+    "i3.large", "i3.xlarge", "i4i.16xlarge", "i4i.2xlarge", "i4i.32xlarge", "i4i.4xlarge",
+    "i4i.8xlarge", "i4i.large", "i4i.xlarge", "m5.12xlarge", "m5.16xlarge", "m5.24xlarge",
+    "m5.2xlarge", "m5.4xlarge", "m5.8xlarge", "m5.large", "m5.xlarge", "m5a.12xlarge",
+    "m5a.16xlarge", "m5a.24xlarge", "m5a.2xlarge", "m5a.4xlarge", "m5a.8xlarge", "m5a.large",
+    "m5a.xlarge", "m6a.12xlarge", "m6a.16xlarge", "m6a.24xlarge", "m6a.2xlarge", "m6a.4xlarge",
+    "m6a.8xlarge", "m6a.large", "m6a.xlarge", "m6i.12xlarge", "m6i.16xlarge", "m6i.24xlarge",
+    "m6i.2xlarge", "m6i.4xlarge", "m6i.8xlarge", "m6i.large", "m6i.xlarge", "m7a.12xlarge",
+    "m7a.16xlarge", "m7a.24xlarge", "m7a.2xlarge", "m7a.4xlarge", "m7a.8xlarge", "m7a.large",
+    "m7a.xlarge", "m7i.12xlarge", "m7i.16xlarge", "m7i.24xlarge", "m7i.2xlarge", "m7i.4xlarge",
+    "m7i.8xlarge", "m7i.large", "m7i.xlarge", "r5.12xlarge", "r5.16xlarge", "r5.24xlarge",
+    "r5.2xlarge", "r5.4xlarge", "r5.8xlarge", "r5.large", "r5.xlarge", "r5a.12xlarge",
+    "r5a.16xlarge", "r5a.24xlarge", "r5a.2xlarge", "r5a.4xlarge", "r5a.8xlarge", "r5a.large",
+    "r5a.xlarge", "r5n.16xlarge", "r5n.24xlarge", "r5n.2xlarge", "r5n.4xlarge", "r5n.8xlarge",
+    "r5n.large", "r5n.xlarge", "r6a.12xlarge", "r6a.16xlarge", "r6a.24xlarge", "r6a.2xlarge",
+    "r6a.4xlarge", "r6a.8xlarge", "r6a.large", "r6a.xlarge", "r6i.12xlarge", "r6i.16xlarge",
+    "r6i.24xlarge", "r6i.2xlarge", "r6i.4xlarge", "r6i.8xlarge", "r6i.large", "r6i.xlarge",
+    "r7a.12xlarge", "r7a.16xlarge", "r7a.24xlarge", "r7a.2xlarge", "r7a.4xlarge", "r7a.8xlarge",
+    "r7a.large", "r7a.xlarge", "r7i.12xlarge", "r7i.16xlarge", "r7i.24xlarge", "r7i.2xlarge",
+    "r7i.4xlarge", "r7i.8xlarge", "r7i.large", "r7i.xlarge", "t3.2xlarge", "t3.large",
+    "t3.medium", "t3.micro", "t3.nano", "t3.small", "t3.xlarge", "x2idn.16xlarge",
+    "x2idn.24xlarge", "x2idn.32xlarge", "z1d.12xlarge", "z1d.2xlarge", "z1d.3xlarge",
+    "z1d.6xlarge", "z1d.large", "z1d.xlarge",
 ]
 
-TINY_INSTANCE_TYPES = ["t3.micro", "t3.small", "t3.medium"]
+TINY_INSTANCE_TYPES = ["t3.nano", "t3.micro", "t3.small", "t3.medium"]
 
-GPU_INSTANCE_TYPES = ["p3.2xlarge", "p3.8xlarge", "g4dn.xlarge", "g4dn.2xlarge"]
+GPU_INSTANCE_TYPES = [
+    "g5.xlarge", "g5.2xlarge", "g5.4xlarge", "g5.8xlarge", "g5.12xlarge", "g5.16xlarge",
+    "g5.24xlarge", "g5.48xlarge", "g6.xlarge", "g6.2xlarge", "g6.4xlarge", "g6.8xlarge",
+    "g6.12xlarge", "g6.16xlarge", "g6.24xlarge", "g6.48xlarge", "inf2.xlarge", "inf2.8xlarge",
+    "inf2.24xlarge", "inf2.48xlarge", "p4d.24xlarge", "p5.48xlarge", "trn1.2xlarge",
+    "trn1.32xlarge",
+]
 
 WORKLOAD_TYPES = ["web_app", "ml_training", "batch_job", "saas_microservice"]
 
