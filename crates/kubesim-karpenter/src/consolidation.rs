@@ -1065,6 +1065,23 @@ impl EventHandler for ConsolidationHandler {
 ///   detect actual < desired and create replacement pods if needed
 pub struct DrainHandler;
 
+/// Check if evicting one pod matching a PDB still satisfies min_available.
+fn pdb_allows_eviction(state: &ClusterState, pod: &Pod) -> bool {
+    for pdb in &state.pdbs {
+        if !pod.labels.matches(&pdb.selector) {
+            continue;
+        }
+        // Count running pods matching this PDB's selector
+        let running = state.pods.iter()
+            .filter(|(_, p)| p.phase == PodPhase::Running && p.labels.matches(&pdb.selector))
+            .count() as u32;
+        if running <= pdb.min_available {
+            return false;
+        }
+    }
+    true
+}
+
 impl EventHandler for DrainHandler {
     fn handle(
         &mut self,
@@ -1083,21 +1100,29 @@ impl EventHandler for DrainHandler {
 
         // Collect unique owners before eviction (skip daemonset pods)
         let mut owners = Vec::new();
+        let mut evictable = Vec::new();
         for &pid in &pod_ids {
             if let Some(pod) = state.pods.get(pid) {
                 if pod.is_daemonset { continue; }
                 if !owners.contains(&pod.owner) {
                     owners.push(pod.owner);
                 }
+                if pdb_allows_eviction(state, pod) {
+                    evictable.push(pid);
+                }
             }
         }
 
-        for pid in pod_ids {
-            if state.pods.get(pid).map_or(false, |p| p.is_daemonset) { continue; }
+        let mut follow_ups = Vec::new();
+
+        for pid in evictable {
+            // Emit PodTerminating so MetricsCollector counts the disruption
+            follow_ups.push(ScheduledEvent {
+                time: SimTime(time.0),
+                event: Event::PodTerminating(pid),
+            });
             state.evict_pod(pid);
         }
-
-        let mut follow_ups = Vec::new();
 
         // Trigger RS reconcile for each affected owner so the controller
         // can create replacement pods if actual < desired
