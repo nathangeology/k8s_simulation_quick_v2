@@ -1,0 +1,8 @@
+{
+  "variant": "when-underutilized",
+  "final_node_count": 14,
+  "final_pod_count": 4,
+  "pods_evicted": 00,
+  "collected_at": "2026-03-23T17:04:22Z",
+  "mode": "fast"
+}

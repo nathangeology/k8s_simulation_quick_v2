@@ -1,0 +1,8 @@
+{
+  "variant": "cost-justified-1.00",
+  "final_node_count": 1,
+  "final_pod_count": 4,
+  "pods_evicted": 00,
+  "collected_at": "2026-03-23T17:12:46Z",
+  "mode": "fast"
+}

@@ -1,0 +1,11 @@
+{"ts":"2026-03-23T17:02:31Z","nodes":1,"pods":2,"pending":2}
+{"ts":"2026-03-23T17:02:41Z","nodes":14,"pods":100,"pending":100}
+{"ts":"2026-03-23T17:02:51Z","nodes":14,"pods":100,"pending":100}
+{"ts":"2026-03-23T17:03:02Z","nodes":14,"pods":100,"pending":100}
+{"ts":"2026-03-23T17:03:12Z","nodes":14,"pods":60,"pending":60}
+{"ts":"2026-03-23T17:03:22Z","nodes":14,"pods":60,"pending":60}
+{"ts":"2026-03-23T17:03:32Z","nodes":14,"pods":60,"pending":60}
+{"ts":"2026-03-23T17:03:43Z","nodes":14,"pods":4,"pending":4}
+{"ts":"2026-03-23T17:03:53Z","nodes":14,"pods":4,"pending":4}
+{"ts":"2026-03-23T17:04:03Z","nodes":14,"pods":4,"pending":4}
+{"ts":"2026-03-23T17:04:13Z","nodes":14,"pods":4,"pending":4}
