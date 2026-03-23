@@ -132,7 +132,7 @@ run_variant() {
 
   # 8. Count evictions
   local evictions
-  evictions=$(grep -c 'disrupting node' "$variant_dir/karpenter-consolidation.log" 2>/dev/null || echo "0")
+  evictions=$(grep -c 'disrupting node' "$variant_dir/karpenter-consolidation.log" 2>/dev/null) || evictions=0
 
   # 9. Collect final snapshot
   collect_final_snapshot "$variant_dir" "$evictions"

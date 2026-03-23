@@ -20,5 +20,5 @@ spec:
     cpu: "1000"
   disruption:
     consolidateWhen: WhenCostJustifiesDisruption
-    decisionRatioThreshold: "3.00"
+    decisionRatioThreshold: 3.00
     consolidateAfter: 30s

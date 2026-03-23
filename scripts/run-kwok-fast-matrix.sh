@@ -80,8 +80,7 @@ run_variant() {
 
   # Count evictions
   local evictions
-  evictions=$(grep -c 'disrupting node' "$vdir/karpenter-consolidation.log" 2>/dev/null || echo "0")
-  evictions=$(echo "$evictions" | tr -d '[:space:]')
+  evictions=$(grep -c 'disrupting node' "$vdir/karpenter-consolidation.log" 2>/dev/null) || evictions=0
 
   # Final snapshot
   local nodes pods

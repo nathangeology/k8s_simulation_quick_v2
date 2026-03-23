@@ -9,16 +9,16 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 log "t=0: Workloads deployed at 1 replica each"
 sleep 5
 
-log "t=5s: Scaling to 50 replicas"
-kubectl scale deployment workload-a workload-b --replicas=50 -n "$NAMESPACE"
+log "t=5s: Scaling to 500 replicas"
+kubectl scale deployment workload-a workload-b --replicas=500 -n "$NAMESPACE"
 sleep 30
 
-log "t=35s: Scaling down to 30 replicas"
-kubectl scale deployment workload-a workload-b --replicas=30 -n "$NAMESPACE"
+log "t=35s: Scaling down to 350 replicas"
+kubectl scale deployment workload-a workload-b --replicas=350 -n "$NAMESPACE"
 sleep 30
 
-log "t=65s: Scaling down to 2 replicas"
-kubectl scale deployment workload-a workload-b --replicas=2 -n "$NAMESPACE"
+log "t=65s: Scaling down to 10 replicas"
+kubectl scale deployment workload-a workload-b --replicas=10 -n "$NAMESPACE"
 sleep 45
 
 log "t=110s: Scale sequence complete"
