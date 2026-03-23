@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload-b
+  labels:
+    kubesim-scenario: consolidate-when-verify
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: workload-b}
+  template:
+    metadata:
+      labels: {app: workload-b}
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: pause
+        image: registry.k8s.io/pause:3.9
+        resources:
+          requests:
+            cpu: 950m
+            memory: 6.5Gi
