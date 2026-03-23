@@ -133,9 +133,6 @@ spec:
         - key: karpenter.sh/capacity-type
           operator: In
           values: ["on-demand"]
-        - key: node.kubernetes.io/instance-type
-          operator: In
-          values: ["m5.xlarge", "m5.2xlarge"]
       nodeClassRef:
         name: default
         kind: KWOKNodeClass
