@@ -1,8 +1,8 @@
 {
   "variant": "when-empty",
-  "final_node_count": 14,
-  "final_pod_count": 4,
-  "pods_evicted": 0,
-  "collected_at": "2026-03-23T17:02:15Z",
-  "mode": "fast"
+  "final_node_count": 20,
+  "final_pod_count": 20,
+  "pods_evicted": 2,
+  "collected_at": "2026-03-23T20:31:55Z",
+  "mode": "full"
 }

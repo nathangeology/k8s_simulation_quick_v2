@@ -1,0 +1,102 @@
+{
+  "CostJustified-0.25": {
+    "cumulative_cost": 13.304467354017273,
+    "disruption_count": 54.3,
+    "node_count": 1.0,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 13608.0,
+    "total_cost_per_hour": 3.3909874999296,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-0.50": {
+    "cumulative_cost": 13.304467354017273,
+    "disruption_count": 54.3,
+    "node_count": 1.0,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 13608.0,
+    "total_cost_per_hour": 3.3909874999296,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-0.75": {
+    "cumulative_cost": 13.304467354017273,
+    "disruption_count": 54.3,
+    "node_count": 1.0,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 13608.0,
+    "total_cost_per_hour": 3.3909874999296,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-1.00": {
+    "cumulative_cost": 13.304467354017273,
+    "disruption_count": 54.3,
+    "node_count": 1.0,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 13608.0,
+    "total_cost_per_hour": 3.3909874999296,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-1.50": {
+    "cumulative_cost": 14.744545244299948,
+    "disruption_count": 40.9,
+    "node_count": 2.65,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 16253.25,
+    "total_cost_per_hour": 6.2253621364736,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-2.00": {
+    "cumulative_cost": 14.938420378743464,
+    "disruption_count": 30.7,
+    "node_count": 2.9,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 16443.0,
+    "total_cost_per_hour": 7.1240327759872,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-3.00": {
+    "cumulative_cost": 15.149314979031043,
+    "disruption_count": 2.05,
+    "node_count": 2.95,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 16827.75,
+    "total_cost_per_hour": 6.7490571945984,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "CostJustified-5.00": {
+    "cumulative_cost": 15.175094550251524,
+    "disruption_count": 1.95,
+    "node_count": 3.0,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 16852.5,
+    "total_cost_per_hour": 6.9365449852928,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "WhenEmpty": {
+    "cumulative_cost": 15.702810136477016,
+    "disruption_count": 0.0,
+    "node_count": 3.85,
+    "peak_node_count": 9.0,
+    "time_weighted_node_count": 17306.25,
+    "total_cost_per_hour": 10.4811787061248,
+    "cumulative_pending_pod_seconds": 66262.5,
+    "runs": 20
+  },
+  "WhenEmptyOrUnderutilized": {
+    "cumulative_cost": 13.456627741595725,
+    "disruption_count": 438.25,
+    "node_count": 1.0,
+    "peak_node_count": 11.4,
+    "time_weighted_node_count": 13777.5,
+    "total_cost_per_hour": 0.937438953472,
+    "cumulative_pending_pod_seconds": 4444.5,
+    "runs": 20
+  }
+}
