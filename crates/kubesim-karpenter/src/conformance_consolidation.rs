@@ -243,7 +243,7 @@ fn consolidation_counts_evictions_spec() -> BehaviorSpec {
             let events = handler.handle(&EngineEvent::NodeDrained(na), SimTime(10), &mut state);
 
             let terminating_count = events.iter()
-                .filter(|e| matches!(e.event, EngineEvent::PodTerminating(_)))
+                .filter(|e| matches!(e.event, EngineEvent::PodTerminating(_, _)))
                 .count();
 
             if terminating_count != 3 {
@@ -286,7 +286,7 @@ fn consolidation_respects_pdb_spec() -> BehaviorSpec {
             let events = handler.handle(&EngineEvent::NodeDrained(na), SimTime(10), &mut state);
 
             let terminating_count = events.iter()
-                .filter(|e| matches!(e.event, EngineEvent::PodTerminating(_)))
+                .filter(|e| matches!(e.event, EngineEvent::PodTerminating(_, _)))
                 .count();
 
             if terminating_count > 1 {

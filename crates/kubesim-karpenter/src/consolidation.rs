@@ -1120,7 +1120,7 @@ impl EventHandler for DrainHandler {
             if !can_evict { continue; }
             follow_ups.push(ScheduledEvent {
                 time: SimTime(time.0),
-                event: Event::PodTerminating(pid),
+                event: Event::PodTerminating(pid, kubesim_engine::TerminationSource::Consolidation),
             });
             state.evict_pod(pid);
         }

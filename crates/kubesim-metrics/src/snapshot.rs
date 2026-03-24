@@ -40,7 +40,8 @@ pub struct MetricsSnapshot {
     pub time: SimTime,
     /// Total hourly cost of all running nodes.
     pub total_cost_per_hour: f64,
-    /// Cumulative pod disruptions (evictions + preemptions + spot interruptions).
+    /// Cumulative pod disruptions (consolidation evictions + spot interruptions only).
+    /// Scale-down terminations are excluded.
     pub disruption_count: u64,
     /// Scheduling latency percentiles (pending → running, in SimTime nanos).
     pub scheduling_latency: Percentiles,
@@ -78,6 +79,10 @@ pub struct MetricsSnapshot {
     pub consolidation_decisions_rejected: u32,
     /// Mean decision ratio across evaluated candidates.
     pub consolidation_decision_ratio_mean: f64,
+    /// Cumulative scale-down terminations (deployment-initiated, NOT disruptions).
+    pub scale_down_terminations: u64,
+    /// Cumulative consolidation evictions (Karpenter-initiated disruptions).
+    pub consolidation_evictions: u64,
 }
 
 #[cfg(test)]

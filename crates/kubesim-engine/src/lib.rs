@@ -45,13 +45,27 @@ pub struct PodSpec {
     pub duration_ns: Option<u64>,
 }
 
+/// Source of a pod termination — distinguishes voluntary disruptions from
+/// normal lifecycle events like deployment scale-down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminationSource {
+    /// Karpenter consolidation drain (actual eviction — counts as disruption).
+    Consolidation,
+    /// Spot instance interruption.
+    SpotInterruption,
+    /// Deployment scale-down or other controller-initiated removal (NOT a disruption).
+    ScaleDown,
+    /// Unknown / legacy (treated as disruption for backward compatibility).
+    Unknown,
+}
+
 /// All discrete events in the simulation.
 #[derive(Debug, Clone)]
 pub enum Event {
     PodSubmitted(PodSpec),
     PodScheduled(PodId, NodeId),
     PodRunning(PodId),
-    PodTerminating(PodId),
+    PodTerminating(PodId, TerminationSource),
     PodDeleted(PodId),
     NodeLaunching(NodeSpec),
     NodeReady(NodeId),

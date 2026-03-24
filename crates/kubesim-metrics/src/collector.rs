@@ -29,8 +29,12 @@ pub struct MetricsCollector {
     config: MetricsConfig,
     /// Collected snapshots over time.
     snapshots: Vec<MetricsSnapshot>,
-    /// Cumulative disruption count.
+    /// Cumulative disruption count (consolidation evictions + spot interruptions only).
     disruption_count: u64,
+    /// Cumulative scale-down terminations (NOT counted as disruptions).
+    scale_down_count: u64,
+    /// Cumulative consolidation evictions.
+    consolidation_eviction_count: u64,
     /// Tracks when each pod entered Pending (for scheduling latency).
     pending_since: HashMap<PodId, SimTime>,
     /// Recent scheduling latencies (cleared each snapshot).
@@ -43,6 +47,8 @@ impl MetricsCollector {
             config,
             snapshots: Vec::new(),
             disruption_count: 0,
+            scale_down_count: 0,
+            consolidation_eviction_count: 0,
             pending_since: HashMap::new(),
             recent_latencies: Vec::new(),
         }
@@ -68,11 +74,11 @@ impl MetricsCollector {
         let mut out = String::from(
             "time,total_cost_per_hour,disruption_count,sched_lat_p50,sched_lat_p90,sched_lat_p99,\
              cpu_p50,cpu_p90,cpu_p99,mem_p50,mem_p90,mem_p99,availability,node_count,pod_count,pending_count,\
-             total_vcpu_allocated,total_memory_allocated_gib,detail_level\n",
+             total_vcpu_allocated,total_memory_allocated_gib,detail_level,scale_down_terminations,consolidation_evictions\n",
         );
         for s in &self.snapshots {
             out.push_str(&format!(
-                "{},{:.4},{},{:.1},{:.1},{:.1},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{},{},{},{:.4},{:.4},{}\n",
+                "{},{:.4},{},{:.1},{:.1},{:.1},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{},{},{},{:.4},{:.4},{},{},{}\n",
                 s.time.0,
                 s.total_cost_per_hour,
                 s.disruption_count,
@@ -92,6 +98,8 @@ impl MetricsCollector {
                 s.total_vcpu_allocated,
                 s.total_memory_allocated_gib,
                 s.detail_level,
+                s.scale_down_terminations,
+                s.consolidation_evictions,
             ));
         }
         out
@@ -214,6 +222,8 @@ impl MetricsCollector {
             consolidation_decisions_accepted: 0,
             consolidation_decisions_rejected: 0,
             consolidation_decision_ratio_mean: 0.0,
+            scale_down_terminations: self.scale_down_count,
+            consolidation_evictions: self.consolidation_eviction_count,
         });
 
         self.recent_latencies.clear();
@@ -242,9 +252,24 @@ impl EventHandler for MetricsCollector {
                     self.recent_latencies.push(latency);
                 }
             }
-            Event::PodTerminating(_) | Event::PodDeleted(_) => {
-                // Disruption: pod removed unexpectedly.
-                self.disruption_count += 1;
+            Event::PodTerminating(_, source) => {
+                use kubesim_engine::TerminationSource;
+                match source {
+                    TerminationSource::Consolidation => {
+                        self.disruption_count += 1;
+                        self.consolidation_eviction_count += 1;
+                    }
+                    TerminationSource::SpotInterruption | TerminationSource::Unknown => {
+                        self.disruption_count += 1;
+                    }
+                    TerminationSource::ScaleDown => {
+                        self.scale_down_count += 1;
+                    }
+                }
+            }
+            Event::PodDeleted(_) => {
+                // PodDeleted without a preceding PodTerminating is a direct removal;
+                // don't double-count — the source-tagged PodTerminating handles it.
             }
             Event::SpotInterruption(_) => {
                 self.disruption_count += 1;

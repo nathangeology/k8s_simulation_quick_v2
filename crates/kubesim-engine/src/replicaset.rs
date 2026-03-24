@@ -25,7 +25,7 @@ impl EventHandler for ReplicaSetController {
     ) -> Vec<ScheduledEvent> {
         match event {
             Event::ReplicaSetReconcile(owner_id) => reconcile(*owner_id, state, time),
-            Event::PodTerminating(pod_id) | Event::PodDeleted(pod_id) => {
+            Event::PodTerminating(pod_id, _) | Event::PodDeleted(pod_id) => {
                 if let Some(pod) = state.pods.get(*pod_id) {
                     let owner = pod.owner;
                     if find_rs(state, owner).is_some() {

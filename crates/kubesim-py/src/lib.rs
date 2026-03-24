@@ -1205,6 +1205,8 @@ fn snapshot_to_dict<'py>(py: Python<'py>, s: &kubesim_metrics::MetricsSnapshot) 
     d.set_item("consolidation_decisions_accepted", s.consolidation_decisions_accepted)?;
     d.set_item("consolidation_decisions_rejected", s.consolidation_decisions_rejected)?;
     d.set_item("consolidation_decision_ratio_mean", s.consolidation_decision_ratio_mean)?;
+    d.set_item("scale_down_terminations", s.scale_down_terminations)?;
+    d.set_item("consolidation_evictions", s.consolidation_evictions)?;
     Ok(d)
 }
 
