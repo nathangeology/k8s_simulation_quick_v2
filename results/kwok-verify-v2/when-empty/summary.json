@@ -1,0 +1,10 @@
+{
+  "variant": "when-empty",
+  "final_node_count": 19,
+  "final_pod_count": 20,
+  "pods_evicted": 0,
+  "collected_at": "2026-03-24T20:58:10Z",
+  "mode": "full",
+  "karpenter_commit": "013941a",
+  "source": "pr-2893"
+}

@@ -1,0 +1,10 @@
+{
+  "variant": "cost-justified-3.00",
+  "final_node_count": 20,
+  "final_pod_count": 20,
+  "pods_evicted": 2,
+  "collected_at": "2026-03-25T16:05:17Z",
+  "mode": "full",
+  "karpenter_commit": "013941a",
+  "source": "pr-2893"
+}
