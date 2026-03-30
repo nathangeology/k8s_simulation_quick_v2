@@ -73,7 +73,7 @@ impl EventHandler for DaemonSetHandler {
                 labels: LabelSet::default(),
                 do_not_disrupt: true,
                 duration_ns: None,
-                is_daemonset: true,
+                is_daemonset: true, resize_policy: ResizePolicy::default(), resize_status: None,
             };
             let pod_id = state.submit_pod(pod);
             state.bind_pod(pod_id, node_id);

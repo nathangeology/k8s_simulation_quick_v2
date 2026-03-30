@@ -112,6 +112,36 @@ impl ClusterState {
             .collect()
     }
 
+    /// Resize a running pod in-place, updating node allocated resources atomically.
+    /// Returns the resulting ResizeStatus.
+    pub fn resize_pod(&mut self, pod_id: PodId, new_requests: Resources) -> Option<ResizeStatus> {
+        let (node_id, old_requests) = {
+            let pod = self.pods.get(pod_id)?;
+            if pod.phase != PodPhase::Running {
+                return None;
+            }
+            (pod.node?, pod.requests)
+        };
+
+        let node = self.nodes.get(node_id)?;
+        // Check if resize-up fits: available = allocatable - allocated + old_requests
+        let available_after = node.allocatable.saturating_sub(&node.allocated).saturating_add(&old_requests);
+        if !new_requests.fits_in(&available_after) {
+            let pod = self.pods.get_mut(pod_id)?;
+            pod.resize_status = Some(ResizeStatus::Infeasible);
+            return Some(ResizeStatus::Infeasible);
+        }
+
+        // Update node allocated: sub old, add new
+        let node = self.nodes.get_mut(node_id)?;
+        node.allocated = node.allocated.saturating_sub(&old_requests).saturating_add(&new_requests);
+
+        let pod = self.pods.get_mut(pod_id)?;
+        pod.requests = new_requests;
+        pod.resize_status = Some(ResizeStatus::Completed);
+        Some(ResizeStatus::Completed)
+    }
+
     /// Evict a running pod: unbind from node, set to Pending, re-add to pending queue.
     /// Returns true if the pod was evicted.
     pub fn evict_pod(&mut self, pod_id: PodId) -> bool {
@@ -170,7 +200,7 @@ mod tests {
             labels: LabelSet::default(),
             do_not_disrupt: false,
             duration_ns: None,
-            is_daemonset: false,
+            is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
         }
     }
 

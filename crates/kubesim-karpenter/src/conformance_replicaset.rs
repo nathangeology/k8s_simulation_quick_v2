@@ -321,7 +321,7 @@ fn mk_pod(owner: kubesim_core::OwnerId) -> kubesim_core::Pod {
         priority: 0,
         labels: kubesim_core::LabelSet::default(),
         do_not_disrupt: false,
-        duration_ns: None, is_daemonset: false,
+        duration_ns: None, is_daemonset: false, resize_policy: kubesim_core::ResizePolicy::default(), resize_status: None,
     }
 }
 

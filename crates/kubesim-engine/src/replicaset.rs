@@ -9,6 +9,7 @@
 
 use kubesim_core::{
     ClusterState, DeletionCostStrategy, OwnerId, Pod, PodPhase, QoSClass, ReplicaSetId,
+    ResizePolicy,
 };
 
 use crate::{Event, EventHandler, ScheduledEvent, SimTime};
@@ -114,7 +115,7 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState, time: SimTime) -> Vec<
                 priority: rs.pod_template.priority,
                 labels: rs.pod_template.labels.clone(),
                 do_not_disrupt: false,
-                duration_ns: None, is_daemonset: false,
+                duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
             };
             state.submit_pod(pod);
         }

@@ -157,6 +157,25 @@ pub enum PodPhase {
     Terminating,
 }
 
+/// In-place pod vertical scaling resize policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ResizePolicy {
+    #[default]
+    InPlace,
+    RestartRequired,
+}
+
+/// Status of an in-place resize operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResizeStatus {
+    Proposed,
+    InProgress,
+    Completed,
+    Infeasible,
+}
+
 /// Node lifecycle type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NodeLifecycle {
@@ -274,6 +293,10 @@ pub struct Pod {
     pub duration_ns: Option<u64>,
     /// Daemonset pods are non-evictable and auto-created on NodeReady.
     pub is_daemonset: bool,
+    /// In-place vertical scaling resize policy.
+    pub resize_policy: ResizePolicy,
+    /// Current resize status (None if no resize has been attempted).
+    pub resize_status: Option<ResizeStatus>,
 }
 
 // ── Deletion cost strategy ──────────────────────────────────────

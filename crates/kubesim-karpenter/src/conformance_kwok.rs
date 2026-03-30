@@ -237,7 +237,7 @@ fn run_kwok_benchmark(seed: u64) -> Result<(u32, Vec<Snapshot>, u32), String> {
                         labels: spec.labels.clone(),
                         do_not_disrupt: spec.do_not_disrupt,
                         duration_ns: None,
-                        is_daemonset: false,
+                        is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                     };
                     let pod_id = state.submit_pod(pod);
                     if let ScheduleResult::Bound(nid) = self.scheduler.schedule_one(state, pod_id) {

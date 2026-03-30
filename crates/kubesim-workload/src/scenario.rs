@@ -329,6 +329,12 @@ pub struct WorkloadDef {
     /// Scale-up events: increase replicas at specified times.
     #[serde(default)]
     pub scale_up: Option<Vec<ScaleUpEvent>>,
+    /// In-place vertical scaling resource changes at specified times.
+    #[serde(default)]
+    pub resource_changes: Option<Vec<ResourceChangeEvent>>,
+    /// Resize policy for in-place vertical scaling (default: InPlace).
+    #[serde(default)]
+    pub resize_policy: Option<String>,
 }
 
 /// A scale-down event that reduces replicas at a given time.
@@ -347,6 +353,19 @@ pub struct ScaleUpEvent {
     pub at: String,
     /// Target replica count to scale up to.
     pub increase_to: u32,
+}
+
+/// An in-place resource change event for vertical scaling.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceChangeEvent {
+    /// Time offset (e.g. "2m", "5m") from simulation start.
+    pub at: String,
+    /// New CPU request (e.g. "1000m", "500m").
+    #[serde(default)]
+    pub cpu_request: Option<String>,
+    /// New memory request (e.g. "2Gi", "1Gi").
+    #[serde(default)]
+    pub memory_request: Option<String>,
 }
 
 /// Either a fixed integer or a distribution.
@@ -439,7 +458,7 @@ impl QuantityValue {
     }
 }
 
-fn parse_cpu_millis(s: &str) -> Option<u64> {
+pub(crate) fn parse_cpu_millis(s: &str) -> Option<u64> {
     if let Some(v) = s.strip_suffix('m') {
         v.parse::<u64>().ok()
     } else {
@@ -447,7 +466,7 @@ fn parse_cpu_millis(s: &str) -> Option<u64> {
     }
 }
 
-fn parse_memory_bytes(s: &str) -> Option<u64> {
+pub(crate) fn parse_memory_bytes(s: &str) -> Option<u64> {
     if let Some(v) = s.strip_suffix("Gi") {
         v.parse::<f64>().ok().map(|v| (v * 1024.0 * 1024.0 * 1024.0) as u64)
     } else if let Some(v) = s.strip_suffix("Mi") {
