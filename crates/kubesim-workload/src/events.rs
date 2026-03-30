@@ -91,6 +91,12 @@ pub enum Event {
         owner_id: u32,
         increase_to: u32,
     },
+    /// In-place resize of all pods owned by a workload.
+    PodResize {
+        time: SimTime,
+        owner_id: u32,
+        new_requests: Resources,
+    },
 }
 
 impl Event {
@@ -109,6 +115,7 @@ impl Event {
             Event::ReplicaSetSubmitted { time, .. }
             | Event::ReplicaSetScaleDown { time, .. } => *time,
             | Event::ReplicaSetScaleUp { time, .. } => *time,
+            | Event::PodResize { time, .. } => *time,
         }
     }
 }

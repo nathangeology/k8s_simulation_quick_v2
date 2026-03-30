@@ -245,6 +245,30 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     }
                 }
             }
+
+            // Emit PodResize events from resource_changes
+            if let Some(ref changes) = workload.resource_changes {
+                for rc in changes {
+                    if let Some(time_ns) = parse_duration_ns(&rc.at) {
+                        let cpu = rc.cpu_request.as_deref()
+                            .and_then(parse_cpu_millis)
+                            .unwrap_or(requests.cpu_millis);
+                        let mem = rc.memory_request.as_deref()
+                            .and_then(parse_memory_bytes)
+                            .unwrap_or(requests.memory_bytes);
+                        events.push(Event::PodResize {
+                            time: SimTime(time_ns),
+                            owner_id,
+                            new_requests: Resources {
+                                cpu_millis: cpu,
+                                memory_bytes: mem,
+                                gpu: requests.gpu,
+                                ephemeral_bytes: requests.ephemeral_bytes,
+                            },
+                        });
+                    }
+                }
+            }
         }
     }
 

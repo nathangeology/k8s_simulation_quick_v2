@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use kubesim_core::{
     AffinityType, ClusterState, DeletionCostStrategy, LabelSet, Node, NodeConditions, NodeId, NodeLifecycle, OwnerId, Pod, PodId, PodPhase,
-    PodTemplate, QoSClass, ReplicaSet, Resources, SchedulingConstraints, SimTime, WhenUnsatisfiable,
+    PodTemplate, QoSClass, ReplicaSet, ResizePolicy, Resources, SchedulingConstraints, SimTime, WhenUnsatisfiable,
 };
 use kubesim_ec2::Catalog;
 use kubesim_engine::{DaemonSetHandler, DaemonSetSpec, DeletionCostController, Engine, Event as EngineEvent, PodSpec, ReplicaSetController, TimeMode};
@@ -330,7 +330,7 @@ impl kubesim_engine::EventHandler for SimHandler {
                     labels: spec.labels.clone(),
                     do_not_disrupt: spec.do_not_disrupt,
                     duration_ns,
-                    is_daemonset: false,
+                    is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 };
                 let pod_id = state.submit_pod(pod);
 
@@ -698,6 +698,17 @@ impl kubesim_engine::EventHandler for SimHandler {
                 }
                 Vec::new()
             }
+            EngineEvent::PodResize(pod_id, new_requests) => {
+                state.resize_pod(*pod_id, *new_requests);
+                Vec::new()
+            }
+            EngineEvent::PodResizeByOwner(owner_id, new_requests) => {
+                let pod_ids = state.running_pods_for_owner(*owner_id);
+                for pid in pod_ids {
+                    state.resize_pod(pid, *new_requests);
+                }
+                Vec::new()
+            }
             _ => Vec::new(),
         };
         result.append(&mut follow_ups);
@@ -917,6 +928,12 @@ fn run_single(
                 engine.schedule(
                     *time,
                     EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *increase_to),
+                );
+            }
+            WorkloadEvent::PodResize { time, owner_id, new_requests } => {
+                engine.schedule(
+                    *time,
+                    EngineEvent::PodResizeByOwner(OwnerId(*owner_id), *new_requests),
                 );
             }
             _ => {}
@@ -1665,6 +1682,12 @@ impl StepSimulation {
                     engine.schedule(
                         *time,
                         EngineEvent::ScaleUp(kubesim_engine::DeploymentId(*owner_id), *increase_to),
+                    );
+                }
+                WorkloadEvent::PodResize { time, owner_id, new_requests } => {
+                    engine.schedule(
+                        *time,
+                        EngineEvent::PodResizeByOwner(OwnerId(*owner_id), *new_requests),
                     );
                 }
                 _ => {}

@@ -60,7 +60,7 @@ fn ffd_bin_packing_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None, is_daemonset: false,
+                    duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
             for _ in 0..2 {
@@ -81,7 +81,7 @@ fn ffd_bin_packing_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None, is_daemonset: false,
+                    duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
 
@@ -149,7 +149,7 @@ fn deletion_cost_victim_selection_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None, is_daemonset: false,
+                    duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 };
                 let pid = state.submit_pod(pod);
                 state.bind_pod(pid, nid);
@@ -239,7 +239,7 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     do_not_disrupt: false,
-                    duration_ns: None, is_daemonset: false,
+                    duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 };
                 let pid = state.submit_pod(pod);
                 state.bind_pod(pid, drain_nid);
@@ -341,7 +341,7 @@ fn spread_creates_multiple_nodes_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner,
                     qos_class: QoSClass::Burstable, priority: 0, labels: labels.clone(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
             let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
@@ -395,7 +395,7 @@ fn antiaffinity_spreads_replicas_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner,
                     qos_class: QoSClass::Burstable, priority: 0, labels: labels.clone(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
             let decisions = provision_versioned(&state, &catalog, &pool, &usage, Some(profile), &Resources::default(), 0);
@@ -452,7 +452,7 @@ fn cross_antiaffinity_separates_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(1),
                     qos_class: QoSClass::Burstable, priority: 0, labels: labels_a.clone(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
             // Deploy B: anti-affinity against A
@@ -469,7 +469,7 @@ fn cross_antiaffinity_separates_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(2),
                     qos_class: QoSClass::Burstable, priority: 0, labels: labels_b.clone(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
 
@@ -520,7 +520,7 @@ fn nodeselector_routes_to_pool_spec() -> BehaviorSpec {
                 limits: Resources::default(), phase: PodPhase::Pending, node: None,
                 scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(1),
                 qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
             });
             // Pod requiring on-demand pool
             let mut sc2 = SchedulingConstraints::default();
@@ -533,7 +533,7 @@ fn nodeselector_routes_to_pool_spec() -> BehaviorSpec {
                 limits: Resources::default(), phase: PodPhase::Pending, node: None,
                 scheduling_constraints: sc2, deletion_cost: None, owner: OwnerId(2),
                 qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
             });
 
             let spot_pool = NodePool {
@@ -599,7 +599,7 @@ fn nodeselector_routes_to_correct_pool_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(1),
                     qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
             // 5 pods requiring on-demand
@@ -614,7 +614,7 @@ fn nodeselector_routes_to_correct_pool_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(2),
                     qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
 
@@ -686,7 +686,7 @@ fn multi_pool_weight_preference_spec() -> BehaviorSpec {
                     scheduling_constraints: SchedulingConstraints::default(),
                     deletion_cost: None, owner: OwnerId(1),
                     qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
 
@@ -766,7 +766,7 @@ fn multi_pool_isolation_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(1),
                     qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
 
@@ -802,7 +802,7 @@ fn multi_pool_isolation_spec() -> BehaviorSpec {
                     limits: Resources::default(), phase: PodPhase::Pending, node: None,
                     scheduling_constraints: sc, deletion_cost: None, owner: OwnerId(2),
                     qos_class: QoSClass::Burstable, priority: 0, labels: LabelSet::default(),
-                    do_not_disrupt: false, duration_ns: None, is_daemonset: false,
+                    do_not_disrupt: false, duration_ns: None, is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
                 });
             }
 

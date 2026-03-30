@@ -83,6 +83,8 @@ pub enum Event {
     PodCompleted(PodId),
     DeletionCostReconcile,
     MetricsSnapshot,
+    PodResize(PodId, kubesim_core::Resources),
+    PodResizeByOwner(OwnerId, kubesim_core::Resources),
 }
 
 // ── Scheduled event (time-tagged) ───────────────────────────────

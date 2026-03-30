@@ -1184,7 +1184,7 @@ mod tests {
             labels: LabelSet::default(),
             do_not_disrupt: false,
             duration_ns: None,
-            is_daemonset: false,
+            is_daemonset: false, resize_policy: ResizePolicy::default(), resize_status: None,
         }
     }
 
