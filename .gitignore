@@ -9,3 +9,4 @@ target/
 *.so
 .hypothesis/
 config.json
+CLAUDE.md
