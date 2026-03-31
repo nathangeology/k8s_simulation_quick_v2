@@ -1,0 +1,13 @@
+{
+  "variant": "mid-cost",
+  "disruption_count": 130,
+  "peak_node_count": 5,
+  "final_node_count": 1,
+  "cumulative_cost": 13.865698060138673,
+  "time_weighted_node_count": 6480.0,
+  "consolidation_evictions": 130,
+  "consolidation_decisions_total": 0,
+  "consolidation_decisions_accepted": 0,
+  "window_500_350_min_nodes": 3,
+  "window_350_10_min_nodes": 1
+}

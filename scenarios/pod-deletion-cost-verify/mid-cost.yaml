@@ -1,0 +1,50 @@
+# mid-cost: deployment-a pods with deletion_cost=50 (moderate protection)
+# Expect moderate protection — some consolidation but less aggressive.
+study:
+  name: pod-deletion-cost-mid
+  runs: 100
+  time_mode: wall_clock
+  catalog_provider: kwok
+  cluster:
+    node_pools:
+      - instance_types: all-kwok
+        min_nodes: 0
+        max_nodes: 200
+        karpenter:
+          consolidation:
+            policy: WhenCostJustifiesDisruption
+            decision_ratio_threshold: 0.5
+    daemonsets:
+      - {name: kube-proxy, cpu_request: "100m", memory_request: "256Mi"}
+      - {name: node-agent, cpu_request: "50m", memory_request: "256Mi"}
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+      provisioner_batch_jitter: "5s"
+      pod_startup: "2s"
+  workloads:
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "950m", max: "950m"}
+      memory_request: {dist: uniform, min: "3.5Gi", max: "3.5Gi"}
+      labels: {app: deployment-a}
+      deletion_cost: 50
+      scale_up: [{at: "10s", increase_to: 500}]
+      scale_down: [{at: "15m", reduce_by: 150}, {at: "25m", reduce_by: 340}]
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "950m", max: "950m"}
+      memory_request: {dist: uniform, min: "6.5Gi", max: "6.5Gi"}
+      labels: {app: deployment-b}
+      scale_up: [{at: "10s", increase_to: 500}]
+      scale_down: [{at: "15m", reduce_by: 150}, {at: "25m", reduce_by: 340}]
+  measurement_windows:
+    - {name: transition-500-to-350, start: "15m", end: "25m"}
+    - {name: transition-350-to-10, start: "25m", end: "40m"}
+  variants:
+    - name: mid-cost
+      scheduler: {scoring: LeastAllocated, weight: 1}
