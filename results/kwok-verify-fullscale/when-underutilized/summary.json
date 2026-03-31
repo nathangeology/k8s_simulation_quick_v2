@@ -1,0 +1,13 @@
+{
+  "variant": "when-underutilized",
+  "final_node_count": 7,
+  "final_pod_count": 20,
+  "pods_evicted": 36,
+  "cost_justified_path": 0,
+  "decision_ratio_entries": 0,
+  "collected_at": "2026-03-31T06:25:29Z",
+  "mode": "fullscale",
+  "replicas": 500,
+  "sequence_minutes": 35,
+  "metrics_interval_s": 60
+}
