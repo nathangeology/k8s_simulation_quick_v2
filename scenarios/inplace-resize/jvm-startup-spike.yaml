@@ -1,0 +1,80 @@
+# JVM startup spike: models idealo's Spring Boot / JVM use case (karpenter#829)
+# 200 pods burst at t=10s with high startup resources (4 CPU, 8Gi),
+# then resize down to steady-state (1 CPU, 2Gi) at t=2m.
+# Tests whether consolidation causes thrash cycles after resize-down.
+# A dummy scale-down at t=25m extends sim duration to ensure consolidation has time to act.
+study:
+  name: jvm-startup-spike
+  runs: 20
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+        min_nodes: 0
+        max_nodes: 500
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    - type: web_app
+      count: 1
+      replicas: {fixed: 1}
+      cpu_request: {dist: uniform, min: "4000m", max: "4000m"}
+      memory_request: {dist: uniform, min: "8Gi", max: "8Gi"}
+      scale_up:
+        - {at: "10s", increase_to: 200}
+      resource_changes:
+        - {at: "2m", cpu_request: "1000m", memory_request: "2Gi"}
+      # Extend sim duration so consolidation has 20+ min to act after resize
+      scale_down:
+        - {at: "25m", reduce_by: 1}
+
+  variants:
+    - name: when-empty
+      consolidate_when:
+        policy: WhenEmpty
+
+    - name: when-underutilized
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
+
+    - name: cost-justified-0.50
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.50
+
+    - name: cost-justified-1.00
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.00
+
+    - name: cost-justified-2.00
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 2.00
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - cumulative_cost
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted
+      - disruption_count
+      - time_weighted_node_count
+      - peak_node_count

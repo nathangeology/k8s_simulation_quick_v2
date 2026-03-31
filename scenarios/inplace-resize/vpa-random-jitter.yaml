@@ -1,0 +1,98 @@
+# VPA random jitter: worst-case unpredictable resize patterns.
+# 100 pods with a fixed sequence of resize events at irregular intervals,
+# alternating between high and low resource requests.
+# Tests consolidation stability under chaotic resize patterns.
+study:
+  name: vpa-random-jitter
+  runs: 20
+  time_mode: wall_clock
+  catalog_provider: kwok
+
+  cluster:
+    node_pools:
+      - instance_types:
+          - m-4x-amd64-linux
+          - m-8x-amd64-linux
+        min_nodes: 0
+        max_nodes: 500
+        karpenter:
+          consolidation:
+            policy: WhenUnderutilized
+    daemonsets:
+      - name: kube-proxy
+        cpu_request: "100m"
+        memory_request: "256Mi"
+    delays:
+      node_startup: "30s"
+      node_startup_jitter: "10s"
+      node_shutdown: "5s"
+      provisioner_batch: "10s"
+
+  workloads:
+    # Group A: 50 pods with jitter pattern A (high→low→high→low)
+    - type: web_app
+      count: 1
+      replicas: {fixed: 50}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "2Gi", max: "2Gi"}
+      resource_changes:
+        - {at: "2m", cpu_request: "500m", memory_request: "1Gi"}
+        - {at: "5m", cpu_request: "1500m", memory_request: "3Gi"}
+        - {at: "8m", cpu_request: "750m", memory_request: "1.5Gi"}
+        - {at: "12m", cpu_request: "2000m", memory_request: "4Gi"}
+        - {at: "16m", cpu_request: "600m", memory_request: "1Gi"}
+        - {at: "20m", cpu_request: "1200m", memory_request: "2.5Gi"}
+      scale_down:
+        - {at: "35m", reduce_by: 1}
+
+    # Group B: 50 pods with jitter pattern B (offset timing, inverse pattern)
+    - type: web_app
+      count: 1
+      replicas: {fixed: 50}
+      cpu_request: {dist: uniform, min: "1000m", max: "1000m"}
+      memory_request: {dist: uniform, min: "2Gi", max: "2Gi"}
+      resource_changes:
+        - {at: "3m", cpu_request: "1800m", memory_request: "3.5Gi"}
+        - {at: "6m", cpu_request: "700m", memory_request: "1.5Gi"}
+        - {at: "10m", cpu_request: "1300m", memory_request: "2.5Gi"}
+        - {at: "14m", cpu_request: "500m", memory_request: "1Gi"}
+        - {at: "18m", cpu_request: "1600m", memory_request: "3Gi"}
+        - {at: "22m", cpu_request: "800m", memory_request: "1.5Gi"}
+      scale_down:
+        - {at: "35m", reduce_by: 1}
+
+  variants:
+    - name: when-empty
+      consolidate_when:
+        policy: WhenEmpty
+
+    - name: when-underutilized
+      consolidate_when:
+        policy: WhenEmptyOrUnderutilized
+
+    - name: cost-justified-0.50
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 0.50
+
+    - name: cost-justified-1.00
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 1.00
+
+    - name: cost-justified-2.00
+      consolidate_when:
+        policy: WhenCostJustifiesDisruption
+        decision_ratio_threshold: 2.00
+
+  metrics:
+    compare:
+      - total_cost_per_hour
+      - cumulative_cost
+      - node_count
+      - running_pods
+      - pending_pods
+      - pods_evicted
+      - disruption_count
+      - time_weighted_node_count
+      - peak_node_count
