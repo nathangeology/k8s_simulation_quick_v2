@@ -23,14 +23,20 @@ kubectl scale deployment workload-a workload-b --replicas=500 -n "$NAMESPACE"
 log "Waiting 14m50s for scale-down phase 1..."
 sleep 890
 
-log "t=15m: Scaling down to 350 replicas"
-kubectl scale deployment workload-a workload-b --replicas=350 -n "$NAMESPACE"
+log "t=15m: Scaling workload-a down to 350 replicas"
+kubectl scale deployment workload-a --replicas=350 -n "$NAMESPACE"
+sleep 60
+log "t=16m: Scaling workload-b down to 350 replicas"
+kubectl scale deployment workload-b --replicas=350 -n "$NAMESPACE"
 
-log "Waiting 10m for scale-down phase 2..."
-sleep 600
+log "Waiting 9m for scale-down phase 2..."
+sleep 540
 
-log "t=25m: Scaling down to 10 replicas"
-kubectl scale deployment workload-a workload-b --replicas=10 -n "$NAMESPACE"
+log "t=25m: Scaling workload-a down to 10 replicas"
+kubectl scale deployment workload-a --replicas=10 -n "$NAMESPACE"
+sleep 60
+log "t=26m: Scaling workload-b down to 10 replicas"
+kubectl scale deployment workload-b --replicas=10 -n "$NAMESPACE"
 
 log "Waiting 10m for consolidation to settle..."
 sleep 600

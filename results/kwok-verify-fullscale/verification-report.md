@@ -107,7 +107,9 @@ DID show CostJustified path, but the matrix run did not consistently activate it
 
 1. **Node count gradient validates the approach** — even without CostJustified path,
    the threshold parameter influences consolidation behavior
-2. **Investigate CostJustified path activation** — the controller may need specific
-   conditions (e.g., nodes that are utilized but not cost-efficient) to trigger
-3. **The smoke test conditions** that activated CostJustified path should be replicated
-   at full scale to understand the activation criteria
+2. **Scale-down stagger fix applied** — deployments now scale down 60s apart instead
+   of simultaneously, creating partially-filled nodes (one deployment's pods remain)
+   that give CostJustified/ a window to evaluate before Empty/ claims everything
+3. **Root cause**: simultaneous scale-down of both deployments removed 680 pods at once
+   from ~88 nodes, emptying most nodes instantly so Empty/ path dominated
+4. **Re-run needed** to verify CostJustified path activates with staggered scale-down
