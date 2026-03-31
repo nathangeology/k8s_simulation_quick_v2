@@ -35,6 +35,8 @@ pub struct Study {
     pub variants: Vec<Variant>,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub measurement_windows: Vec<MeasurementWindow>,
 }
 
 /// Scheduling strategy controlling how SimHandler schedules pods on NodeReady.
@@ -660,6 +662,18 @@ pub enum ScoringStrategy {
 pub struct MetricsConfig {
     #[serde(default)]
     pub compare: Vec<String>,
+}
+
+// ── Measurement windows ─────────────────────────────────────────
+
+/// A named time window for per-transition metrics comparison.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeasurementWindow {
+    pub name: String,
+    pub start: String,
+    pub end: String,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 // ── Instance type shorthand expansion ───────────────────────────

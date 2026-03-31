@@ -1024,8 +1024,8 @@ fn run_single(
 
             // Variant-level consolidate_when override
             let (effective_policy, effective_threshold) = match variant.and_then(|v| v.consolidate_when.as_ref()) {
-                Some(cw) => (map_consolidation_policy(cw.policy), cw.decision_ratio_threshold.unwrap_or(1.0)),
-                None => (consolidation_policy, karpenter.consolidation.as_ref().and_then(|c| c.decision_ratio_threshold).unwrap_or(1.0)),
+                Some(cw) => (map_consolidation_policy(cw.policy), cw.decision_ratio_threshold.unwrap_or(0.5)),
+                None => (consolidation_policy, karpenter.consolidation.as_ref().and_then(|c| c.decision_ratio_threshold).unwrap_or(0.5)),
             };
 
             let mut consol = ConsolidationHandler::new(pool, effective_policy)

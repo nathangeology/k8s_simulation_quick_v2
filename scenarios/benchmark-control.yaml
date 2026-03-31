@@ -2,10 +2,11 @@ study:
   name: benchmark-control
   runs: 1000
   time_mode: wall_clock
+  catalog_provider: kwok
 
   cluster:
     node_pools:
-      - instance_types: all-ec2
+      - instance_types: all-kwok
         min_nodes: 0
         max_nodes: 1000
         karpenter:
@@ -35,6 +36,17 @@ study:
       scale_down:
         - {at: "15m", reduce_by: 150}      # 500 → 350
         - {at: "25m", reduce_by: 340}      # 350 → 10
+
+  # Per-transition measurement windows for sim vs KWOK comparison
+  measurement_windows:
+    - name: transition-500-to-350
+      start: "15m"
+      end: "25m"
+      description: "Partial scale-down: CostJustified/Balanced should activate"
+    - name: transition-350-to-10
+      start: "25m"
+      end: "40m"
+      description: "Near-empty scale-down: Emptiness method should dominate"
 
   variants:
     - name: baseline

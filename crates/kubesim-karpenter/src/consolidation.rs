@@ -282,40 +282,70 @@ fn find_underutilized_nodes(
     actions
 }
 
-/// Compute the decision ratio for a candidate node.
+/// Compute the decision ratio for a consolidation move per the Balanced Consolidation RFC.
 ///
-/// `decision_ratio = normalized_cost_savings / normalized_disruption_cost`
+/// `score = savings_fraction / disruption_fraction`
 ///
-/// Both numerator and denominator are normalized to comparable [0,1] ranges so
-/// the threshold has consistent meaning regardless of cluster size or pod count.
-///
-/// - `normalized_cost_savings`: `node_cost / max_cost_in_pool` — fraction of the
-///   most expensive node's cost that would be saved by removing this node.
-/// - `normalized_disruption_cost`: `(pod_fraction * 0.7 + priority_fraction * 0.2 + pdb_fraction * 0.1)`
-///   where each component is normalized to [0,1] using pool-wide maximums.
-///   Floor of 0.01 prevents division by zero for empty-ish nodes.
-fn decision_ratio(state: &ClusterState, node: &Node, max_cost_in_pool: f64, max_pods_in_pool: usize) -> f64 {
-    if max_cost_in_pool <= 0.0 {
+/// - `savings_fraction = (deleted_node_cost - created_node_cost) / nodepool_total_cost`
+///   For DELETE moves, created_node_cost = 0.
+///   For REPLACE moves, created_node_cost = replacement node cost.
+/// - `disruption_fraction = move_disruption_cost / nodepool_total_disruption_cost`
+///   Per-pod disruption cost from `pod-deletion-cost` annotation (default 1.0 per pod).
+/// - Floor of 0.001 on disruption_fraction prevents division by zero.
+fn decision_ratio(
+    state: &ClusterState,
+    node: &Node,
+    nodepool_total_cost: f64,
+    nodepool_total_disruption: f64,
+    replacement_cost: f64,
+) -> f64 {
+    if nodepool_total_cost <= 0.0 {
         return 0.0;
     }
-    let normalized_savings = node.cost_per_hour / max_cost_in_pool;
+    let savings = node.cost_per_hour - replacement_cost;
+    if savings <= 0.0 {
+        return 0.0;
+    }
+    let savings_fraction = savings / nodepool_total_cost;
 
-    let (_, disruption_cost, non_ds_count, _) = candidate_score(state, node);
-    let pod_fraction = if max_pods_in_pool > 0 {
-        non_ds_count as f64 / max_pods_in_pool as f64
+    // Per-pod disruption cost: use deletion_cost annotation if set, else 1.0
+    let move_disruption: f64 = node.pods.iter()
+        .filter(|&&pid| state.pods.get(pid).map_or(false, |p| !p.is_daemonset))
+        .map(|&pid| {
+            state.pods.get(pid)
+                .and_then(|p| p.deletion_cost.map(|c| c.max(0) as f64))
+                .unwrap_or(1.0)
+        })
+        .sum();
+
+    let disruption_fraction = if nodepool_total_disruption > 0.0 {
+        (move_disruption / nodepool_total_disruption).max(0.001)
     } else {
-        0.0
+        0.001
     };
-    // priority + pdb contribution, capped at 1.0
-    let priority_fraction = (disruption_cost as f64 / 1000.0).min(1.0);
-    let disruption = (pod_fraction * 0.7 + priority_fraction * 0.3).max(0.01);
 
-    normalized_savings / disruption
+    savings_fraction / disruption_fraction
+}
+
+/// Compute total disruption cost across all non-daemonset pods in the pool.
+fn nodepool_total_disruption_cost(state: &ClusterState, pool_name: &str) -> f64 {
+    state.nodes.iter()
+        .filter(|(_, n)| n.pool_name == pool_name && n.conditions.ready)
+        .flat_map(|(_, n)| n.pods.iter())
+        .filter(|&&pid| state.pods.get(pid).map_or(false, |p| !p.is_daemonset))
+        .map(|&pid| {
+            state.pods.get(pid)
+                .and_then(|p| p.deletion_cost.map(|c| c.max(0) as f64))
+                .unwrap_or(1.0)
+        })
+        .sum()
 }
 
 /// Find nodes eligible for consolidation under the WhenCostJustifiesDisruption policy.
 ///
-/// Evaluates each candidate's decision ratio and only includes those above the threshold.
+/// Scores each candidate as a DELETE move using the RFC formula:
+/// score = savings_fraction / disruption_fraction
+/// Only includes candidates above the threshold (default k=2, threshold=0.5).
 /// Returns actions sorted by decision ratio descending (best savings first).
 fn find_cost_justified_nodes(
     state: &ClusterState,
@@ -327,18 +357,14 @@ fn find_cost_justified_nodes(
     threshold: f64,
     metrics: &mut ConsolidationDecisionMetrics,
 ) -> Vec<ConsolidationAction> {
-    // Compute max cost in pool for normalization
-    let max_cost = state.nodes.iter()
+    // Compute nodepool total cost for normalization
+    let nodepool_total_cost: f64 = state.nodes.iter()
         .filter(|(_, n)| n.pool_name == pool_name && n.conditions.ready)
         .map(|(_, n)| n.cost_per_hour)
-        .fold(0.0f64, f64::max);
+        .sum();
 
-    // Compute max non-daemonset pod count in pool for disruption normalization
-    let max_pods = state.nodes.iter()
-        .filter(|(_, n)| n.pool_name == pool_name && n.conditions.ready)
-        .map(|(_, n)| n.pods.iter().filter(|&&pid| state.pods.get(pid).map_or(false, |p| !p.is_daemonset)).count())
-        .max()
-        .unwrap_or(1);
+    // Compute nodepool total disruption cost
+    let total_disruption = nodepool_total_disruption_cost(state, pool_name);
 
     let candidates: Vec<(NodeId, &Node)> = state
         .nodes
@@ -353,10 +379,10 @@ fn find_cost_justified_nodes(
         .filter(|(_, n)| !node_has_do_not_disrupt(state, n))
         .collect();
 
-    // Score and filter by decision ratio
+    // Score each candidate as a DELETE move (replacement_cost = 0)
     let mut scored: Vec<(NodeId, f64)> = Vec::new();
     for &(nid, node) in &candidates {
-        let ratio = decision_ratio(state, node, max_cost, max_pods);
+        let ratio = decision_ratio(state, node, nodepool_total_cost, total_disruption, 0.0);
         metrics.decisions_total += 1;
         metrics.decision_ratio_sum += ratio;
         if ratio >= threshold {
@@ -846,6 +872,7 @@ pub struct ConsolidationHandler {
     /// Whether this handler is operating in logical time mode.
     logical_mode: bool,
     /// Decision ratio threshold for WhenCostJustifiesDisruption policy.
+    /// Default k=2 per RFC: approve when score >= 1/k = 0.5.
     pub decision_ratio_threshold: f64,
     /// Accumulated decision metrics from the last evaluation round.
     pub last_decision_metrics: ConsolidationDecisionMetrics,
@@ -867,7 +894,7 @@ impl ConsolidationHandler {
             daemonset_pct: 0,
             last_state_hash: 0,
             logical_mode: false,
-            decision_ratio_threshold: 1.0,
+            decision_ratio_threshold: 0.5,
             last_decision_metrics: ConsolidationDecisionMetrics::default(),
         }
     }
