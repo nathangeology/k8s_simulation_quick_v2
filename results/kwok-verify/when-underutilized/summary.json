@@ -1,8 +1,12 @@
 {
   "variant": "when-underutilized",
-  "final_node_count": 7,
+  "final_node_count": 72,
   "final_pod_count": 20,
-  "pods_evicted": 2,
-  "collected_at": "2026-03-23T21:09:42Z",
-  "mode": "full"
+  "pods_evicted": 0,
+  "decision_ratio_entries": 0,
+  "cost_justified_path": 0,
+  "collected_at": "2026-03-31T02:30:11Z",
+  "mode": "fast",
+  "karpenter_commit": "013941a",
+  "karpenter_branch": "pr-2893"
 }

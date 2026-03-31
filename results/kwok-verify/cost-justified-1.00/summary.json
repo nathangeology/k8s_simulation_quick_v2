@@ -1,8 +1,12 @@
 {
   "variant": "cost-justified-1.00",
-  "final_node_count": 11,
+  "final_node_count": 89,
   "final_pod_count": 20,
-  "pods_evicted": 2,
-  "collected_at": "2026-03-24T10:12:22Z",
-  "mode": "full"
+  "pods_evicted": 0,
+  "decision_ratio_entries": 0,
+  "cost_justified_path": 0,
+  "collected_at": "2026-03-31T02:48:09Z",
+  "mode": "fast",
+  "karpenter_commit": "013941a",
+  "karpenter_branch": "pr-2893"
 }
