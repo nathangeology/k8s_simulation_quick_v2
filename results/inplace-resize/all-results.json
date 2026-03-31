@@ -1,0 +1,413 @@
+{
+  "jvm-startup-spike": {
+    "when-empty": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 34.88426673827851,
+        "std": 7.105427357601002e-15,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 467340.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 201.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "when-underutilized": {
+      "disruption_count": {
+        "mean": 281.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 10.24493005056002,
+        "std": 1.7763568394002505e-15,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 137250.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 201.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-0.50": {
+      "disruption_count": {
+        "mean": 281.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 10.24493005056002,
+        "std": 1.7763568394002505e-15,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 137250.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 201.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-1.00": {
+      "disruption_count": {
+        "mean": 281.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 10.24493005056002,
+        "std": 1.7763568394002505e-15,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 137250.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 201.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-2.00": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 34.88426673827851,
+        "std": 7.105427357601002e-15,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 467340.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 201.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    }
+  },
+  "vpa-gradual-scaleup": {
+    "when-empty": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.3794266472447974,
+        "std": 4.440892098500626e-16,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 18480.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 7.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "when-underutilized": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.3794266472447974,
+        "std": 4.440892098500626e-16,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 18480.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 7.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-0.50": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.3794266472447974,
+        "std": 4.440892098500626e-16,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 18480.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 7.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-1.00": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.3794266472447974,
+        "std": 4.440892098500626e-16,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 18480.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 7.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-2.00": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.3794266472447974,
+        "std": 4.440892098500626e-16,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 18480.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 7.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    }
+  },
+  "vpa-random-jitter": {
+    "when-empty": {
+      "disruption_count": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 3.182086470348807,
+        "std": 0.0,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 44100.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 15.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "when-underutilized": {
+      "disruption_count": {
+        "mean": 51.3,
+        "std": 2.282542442102666,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.914514305295357,
+        "std": 0.03946463929451295,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 25772.25,
+        "std": 490.73790102253156,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 15.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-0.50": {
+      "disruption_count": {
+        "mean": 50.6,
+        "std": 2.4576411454889016,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.9085241002931173,
+        "std": 0.03852601823421773,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 25691.25,
+        "std": 478.4947100021065,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 15.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-1.00": {
+      "disruption_count": {
+        "mean": 50.6,
+        "std": 2.4576411454889016,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 1.9085241002931173,
+        "std": 0.03852601823421773,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 25691.25,
+        "std": 478.4947100021065,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 15.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    },
+    "cost-justified-2.00": {
+      "disruption_count": {
+        "mean": 0.1,
+        "std": 0.4358898943540673,
+        "n": 20
+      },
+      "cumulative_cost": {
+        "mean": 3.176852038874886,
+        "std": 0.022816357821709026,
+        "n": 20
+      },
+      "time_weighted_node_count": {
+        "mean": 43959.75,
+        "std": 611.3355768315795,
+        "n": 20
+      },
+      "peak_node_count": {
+        "mean": 15.0,
+        "std": 0.0,
+        "n": 20
+      },
+      "pods_evicted": {
+        "mean": 0.0,
+        "std": 0.0,
+        "n": 20
+      }
+    }
+  }
+}
