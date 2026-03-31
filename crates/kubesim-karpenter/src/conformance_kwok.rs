@@ -323,6 +323,7 @@ fn run_kwok_benchmark(seed: u64) -> Result<(u32, Vec<Snapshot>, u32), String> {
         priority: 0,
         labels: LabelSet::default(),
         scheduling_constraints: SchedulingConstraints::default(),
+        deletion_cost: None,
     };
     let template_b = PodTemplate {
         requests: Resources { cpu_millis: 950, memory_bytes: 6_979_321_856, gpu: 0, ephemeral_bytes: 0 }, // 6.5Gi
@@ -330,6 +331,7 @@ fn run_kwok_benchmark(seed: u64) -> Result<(u32, Vec<Snapshot>, u32), String> {
         priority: 0,
         labels: LabelSet::default(),
         scheduling_constraints: SchedulingConstraints::default(),
+        deletion_cost: None,
     };
 
     state.add_replica_set(ReplicaSet {

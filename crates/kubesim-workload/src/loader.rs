@@ -175,6 +175,7 @@ fn emit_events(study: &Study, rng: &mut StdRng) -> Vec<Event> {
                     limits: requests,
                     priority,
                     deletion_cost_strategy: DeletionCostStrategy::None,
+                    deletion_cost: workload.deletion_cost,
                     scheduling_constraints: constraints,
                     labels: pod_labels,
                 });

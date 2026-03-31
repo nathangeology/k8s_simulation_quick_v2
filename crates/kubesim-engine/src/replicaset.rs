@@ -109,7 +109,7 @@ fn reconcile(owner_id: OwnerId, state: &mut ClusterState, time: SimTime) -> Vec<
                 phase: PodPhase::Pending,
                 node: None,
                 scheduling_constraints: rs.pod_template.scheduling_constraints.clone(),
-                deletion_cost: None,
+                deletion_cost: rs.pod_template.deletion_cost,
                 owner: owner_id,
                 qos_class: QoSClass::Burstable,
                 priority: rs.pod_template.priority,

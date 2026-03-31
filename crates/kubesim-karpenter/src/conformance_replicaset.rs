@@ -335,6 +335,7 @@ fn mk_rs(owner: kubesim_core::OwnerId, replicas: u32) -> kubesim_core::ReplicaSe
             priority: 0,
             labels: kubesim_core::LabelSet::default(),
             scheduling_constraints: kubesim_core::SchedulingConstraints::default(),
+            deletion_cost: None,
         },
         deletion_cost_strategy: kubesim_core::DeletionCostStrategy::None,
     }

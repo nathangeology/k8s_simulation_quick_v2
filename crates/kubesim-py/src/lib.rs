@@ -899,7 +899,7 @@ fn run_single(
                 engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
             }
             WorkloadEvent::ReplicaSetSubmitted {
-                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, scheduling_constraints, labels,
+                time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, deletion_cost, scheduling_constraints, labels,
             } => {
                 let owner = OwnerId(*owner_id);
                 state.add_replica_set(ReplicaSet {
@@ -911,6 +911,7 @@ fn run_single(
                         priority: *priority,
                         labels: labels.clone(),
                         scheduling_constraints: scheduling_constraints.clone(),
+                        deletion_cost: *deletion_cost,
                     },
                     deletion_cost_strategy: *deletion_cost_strategy,
                 });
@@ -1655,7 +1656,7 @@ impl StepSimulation {
                     engine.schedule(*time, EngineEvent::SpotInterruptionCheck);
                 }
                 WorkloadEvent::ReplicaSetSubmitted {
-                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, scheduling_constraints, labels,
+                    time, owner_id, desired_replicas, requests, limits, priority, deletion_cost_strategy, deletion_cost, scheduling_constraints, labels,
                 } => {
                     let owner = OwnerId(*owner_id);
                     state.add_replica_set(ReplicaSet {
@@ -1667,6 +1668,7 @@ impl StepSimulation {
                             priority: *priority,
                             labels: labels.clone(),
                             scheduling_constraints: scheduling_constraints.clone(),
+                            deletion_cost: *deletion_cost,
                         },
                         deletion_cost_strategy: *deletion_cost_strategy,
                     });

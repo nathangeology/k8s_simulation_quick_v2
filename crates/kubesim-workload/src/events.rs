@@ -75,6 +75,9 @@ pub enum Event {
         limits: Resources,
         priority: i32,
         deletion_cost_strategy: DeletionCostStrategy,
+        /// Fixed per-pod deletion cost from `controller.kubernetes.io/pod-deletion-cost`.
+        #[serde(default)]
+        deletion_cost: Option<i32>,
         #[serde(default)]
         scheduling_constraints: SchedulingConstraints,
         #[serde(default)]

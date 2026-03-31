@@ -337,6 +337,9 @@ pub struct WorkloadDef {
     /// Resize policy for in-place vertical scaling (default: InPlace).
     #[serde(default)]
     pub resize_policy: Option<String>,
+    /// Fixed per-pod deletion cost (`controller.kubernetes.io/pod-deletion-cost` annotation).
+    #[serde(default)]
+    pub deletion_cost: Option<i32>,
 }
 
 /// A scale-down event that reduces replicas at a given time.

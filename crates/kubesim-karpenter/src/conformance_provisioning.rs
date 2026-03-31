@@ -165,6 +165,7 @@ fn deletion_cost_victim_selection_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     scheduling_constraints: SchedulingConstraints::default(),
+                    deletion_cost: None,
                 },
                 deletion_cost_strategy: DeletionCostStrategy::None,
             });
@@ -254,6 +255,7 @@ fn drain_triggers_rs_reconcile_spec() -> BehaviorSpec {
                     priority: 0,
                     labels: LabelSet::default(),
                     scheduling_constraints: SchedulingConstraints::default(),
+                    deletion_cost: None,
                 },
                 deletion_cost_strategy: DeletionCostStrategy::None,
             });

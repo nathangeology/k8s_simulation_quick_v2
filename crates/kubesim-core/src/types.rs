@@ -337,4 +337,6 @@ pub struct PodTemplate {
     pub priority: i32,
     pub labels: LabelSet,
     pub scheduling_constraints: SchedulingConstraints,
+    /// Fixed per-pod deletion cost from `controller.kubernetes.io/pod-deletion-cost` annotation.
+    pub deletion_cost: Option<i32>,
 }
