@@ -1,0 +1,162 @@
+[2026-03-31T05:11:54Z] Full-scale 4-variant KWOK verification (500 replicas, 35min each, ~2h20m total)
+[2026-03-31T05:11:55Z] Karpenter build: "commit":"013941a"
+[2026-03-31T05:11:55Z] === START: when-empty ===
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-03-31T05:12:07Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-03-31T05:12:13Z] All 1 pods Running (1a/1b)
+[2026-03-31T05:12:23Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T05:12:24Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-03-31T05:13:36Z] All 500 pods Running (500a/500b)
+[2026-03-31T05:13:37Z] Waiting 14m50s...
+[2026-03-31T05:28:27Z] t=15m: Scaling down to 350
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T05:28:27Z] Waiting 10m...
+[2026-03-31T05:38:27Z] t=25m: Scaling down to 10
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T05:38:28Z] Waiting 10m for consolidation...
+[2026-03-31T05:48:28Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "admiring-montalcini-3222226843" deleted
+node "admiring-shtern-884719623" deleted
+node "affectionate-hamilton-2065100900" deleted
+node "angry-cerf-784250261" deleted
+node "brave-carver-1159879402" deleted
+node "distracted-bardeen-109394541" deleted
+node "ecstatic-swartz-2577881674" deleted
+node "eloquent-wiles-432338664" deleted
+node "epic-colden-1268721570" deleted
+node "jolly-ptolemy-227167958" deleted
+node "jovial-elgamal-2900940121" deleted
+node "kind-germain-3500180002" deleted
+node "mystifying-antonelli-3124557367" deleted
+node "optimistic-napier-4183078219" deleted
+node "sad-wiles-1255904803" deleted
+node "upbeat-poitras-4260470148" deleted
+node "wizardly-bhaskara-3297692519" deleted
+node "zealous-bose-581617230" deleted
+node "zealous-hawking-2086499547" deleted
+node "zen-cerf-3126315399" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-03-31T05:48:49Z] === DONE: when-empty — evictions=32 nodes=20 ===
+[2026-03-31T05:48:49Z] === START: when-underutilized ===
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-03-31T05:49:01Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-03-31T05:49:07Z] All 1 pods Running (1a/1b)
+[2026-03-31T05:49:17Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T05:49:18Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-03-31T05:50:36Z] All 500 pods Running (500a/500b)
+[2026-03-31T05:50:36Z] Waiting 14m50s...
+[2026-03-31T06:05:26Z] t=15m: Scaling down to 350
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T06:05:27Z] Waiting 10m...
+[2026-03-31T06:15:27Z] t=25m: Scaling down to 10
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T06:15:28Z] Waiting 10m for consolidation...
+[2026-03-31T06:25:28Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "angry-goldwasser-661859333" deleted
+node "charming-shaw-3554231094" deleted
+node "charming-williams-102928100" deleted
+node "gallant-mclean-1275219593" deleted
+node "nervous-feynman-3907181726" deleted
+node "nervous-napier-712619837" deleted
+node "priceless-lehmann-2554899246" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-03-31T06:25:46Z] === DONE: when-underutilized — evictions=36 nodes=7 ===
+[2026-03-31T06:25:47Z] === START: cost-justified-1.00 ===
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-03-31T06:25:59Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-03-31T06:26:06Z] All 1 pods Running (1a/1b)
+[2026-03-31T06:26:16Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T06:26:17Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-03-31T06:27:31Z] All 500 pods Running (500a/500b)
+[2026-03-31T06:27:31Z] Waiting 14m50s...
+[2026-03-31T06:42:21Z] t=15m: Scaling down to 350
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T06:42:21Z] Waiting 10m...
+[2026-03-31T06:52:22Z] t=25m: Scaling down to 10
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T06:52:22Z] Waiting 10m for consolidation...
+[2026-03-31T07:02:22Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "admiring-tesla-2127646997" deleted
+node "adoring-newton-1037445176" deleted
+node "determined-kepler-2777540266" deleted
+node "intelligent-bell-543176713" deleted
+node "laughing-galileo-4261195012" deleted
+node "nice-wright-3746557497" deleted
+node "nostalgic-villani-3294826930" deleted
+node "serene-heisenberg-1288631591" deleted
+node "stoic-easley-3454651204" deleted
+node "stoic-feynman-1263589793" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-03-31T07:02:40Z] === DONE: cost-justified-1.00 — evictions=49 nodes=10 ===
+[2026-03-31T07:02:40Z] === START: cost-justified-5.00 ===
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-03-31T07:02:52Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-03-31T07:02:58Z] All 1 pods Running (1a/1b)
+[2026-03-31T07:03:09Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T07:03:09Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-03-31T07:04:25Z] All 500 pods Running (500a/500b)
+[2026-03-31T07:04:25Z] Waiting 14m50s...
+[2026-03-31T07:19:16Z] t=15m: Scaling down to 350
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T07:19:16Z] Waiting 10m...
+[2026-03-31T07:29:21Z] t=25m: Scaling down to 10
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-03-31T07:29:30Z] Waiting 10m for consolidation...
+[2026-03-31T07:39:35Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "awesome-chandrasekhar-2429534757" deleted
+node "blissful-keldysh-3367033262" deleted
+node "charming-cerf-921184081" deleted
+node "clever-elion-904874579" deleted
+node "clever-hofstadter-3481383139" deleted
+node "cranky-matsumoto-2527723247" deleted
+node "crazy-cray-1441339404" deleted
+node "determined-yonath-2169047309" deleted
+node "epic-hypatia-4071914648" deleted
+node "epic-wu-269454066" deleted
+node "exciting-yonath-2272696570" deleted
+node "focused-galois-2250327879" deleted
+node "keen-knuth-3543240901" deleted
+node "modest-ganguly-2916026950" deleted
+node "objective-lalande-3609335609" deleted
+node "objective-shockley-855070189" deleted
+node "romantic-haibt-2816401708" deleted
+node "silly-swartz-635748263" deleted
+node "vibrant-knuth-1598474162" deleted
+node "wizardly-dirac-678700521" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-03-31T07:39:55Z] === DONE: cost-justified-5.00 — evictions=16 nodes=20 ===
+[2026-03-31T07:39:55Z] Complete: 4/4 succeeded
+[2026-03-31T07:39:55Z] Results: /Users/jonesflp/gt/k8s/polecats/chrome/k8s/results/kwok-verify-fullscale
+Report written to: /Users/jonesflp/gt/k8s/polecats/chrome/k8s/results/kwok-verify-fullscale/comparison-report.md
