@@ -1,0 +1,19 @@
+{
+  "variant": "when-empty",
+  "final_node_count": 4,
+  "final_pod_count": 20,
+  "total_disruption_events": 3,
+  "disrupted_nodes_total": 3,
+  "pod_evictions_total": 0,
+  "path_empty": 3,
+  "path_underutilized": 0,
+  "path_balanced": 0,
+  "path_cost_justified": 0,
+  "decision_ratio_entries": 0,
+  "collected_at": "2026-04-01T02:01:13Z",
+  "mode": "balanced-threshold-verify",
+  "replicas": 500,
+  "sequence_minutes": 35,
+  "metrics_interval_s": 60,
+  "heterogeneous_fleet": true
+}

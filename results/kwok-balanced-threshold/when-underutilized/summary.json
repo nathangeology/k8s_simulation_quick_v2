@@ -1,0 +1,19 @@
+{
+  "variant": "when-underutilized",
+  "final_node_count": 1,
+  "final_pod_count": 20,
+  "total_disruption_events": 11,
+  "disrupted_nodes_total": 11,
+  "pod_evictions_total": 218,
+  "path_empty": 3,
+  "path_underutilized": 8,
+  "path_balanced": 0,
+  "path_cost_justified": 0,
+  "decision_ratio_entries": 0,
+  "collected_at": "2026-04-01T03:17:41Z",
+  "mode": "balanced-threshold-verify",
+  "replicas": 500,
+  "sequence_minutes": 35,
+  "metrics_interval_s": 60,
+  "heterogeneous_fleet": true
+}

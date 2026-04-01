@@ -1,0 +1,19 @@
+{
+  "variant": "balanced-k2",
+  "final_node_count": 1,
+  "final_pod_count": 20,
+  "total_disruption_events": 8,
+  "disrupted_nodes_total": 8,
+  "pod_evictions_total": 385,
+  "path_empty": 1,
+  "path_underutilized": 7,
+  "path_balanced": 0,
+  "path_cost_justified": 0,
+  "decision_ratio_entries": 0,
+  "collected_at": "2026-04-01T02:39:27Z",
+  "mode": "balanced-threshold-verify",
+  "replicas": 500,
+  "sequence_minutes": 35,
+  "metrics_interval_s": 60,
+  "heterogeneous_fleet": true
+}

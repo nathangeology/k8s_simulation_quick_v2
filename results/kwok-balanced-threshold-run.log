@@ -1,0 +1,96 @@
+[2026-04-01T01:23:55Z] 3-variant Balanced threshold KWOK verification (500 replicas, 35min each, ~1h45m total)
+[2026-04-01T01:23:55Z] Karpenter build: "commit":"036efb2-dirty"
+[2026-04-01T01:23:55Z] === START: when-empty (template: when-empty-hetero) ===
+No resources found
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-04-01T01:24:11Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-04-01T01:24:16Z] All 1 pods Running (1a/1b)
+[2026-04-01T01:24:26Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-04-01T01:24:26Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-04-01T01:25:23Z] All 500 pods Running (500a/500b)
+[2026-04-01T01:25:23Z] Waiting 14m50s...
+[2026-04-01T01:40:13Z] t=15m: Scaling workload-a down to 350
+deployment.apps/workload-a scaled
+[2026-04-01T01:41:13Z] t=16m: Scaling workload-b down to 350
+deployment.apps/workload-b scaled
+[2026-04-01T01:41:13Z] Waiting 9m...
+[2026-04-01T01:50:13Z] t=25m: Scaling workload-a down to 10
+deployment.apps/workload-a scaled
+[2026-04-01T01:51:13Z] t=26m: Scaling workload-b down to 10
+deployment.apps/workload-b scaled
+[2026-04-01T01:51:13Z] Waiting 10m for consolidation...
+[2026-04-01T02:01:13Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "gracious-williams-418433976" deleted
+node "silly-jones-2528867238" deleted
+node "upbeat-almeida-2040148501" deleted
+node "youthful-stonebraker-3500567852" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-04-01T02:02:04Z] === DONE: when-empty — disruptions=3 disrupted_nodes=3 final_nodes=4 ===
+[2026-04-01T02:02:04Z] === START: balanced-k2 (template: balanced-k2) ===
+No resources found
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-04-01T02:02:19Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-04-01T02:02:25Z] All 1 pods Running (1a/1b)
+[2026-04-01T02:02:35Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-04-01T02:02:35Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-04-01T02:03:36Z] All 500 pods Running (500a/500b)
+[2026-04-01T02:03:36Z] Waiting 14m50s...
+[2026-04-01T02:18:26Z] t=15m: Scaling workload-a down to 350
+deployment.apps/workload-a scaled
+[2026-04-01T02:19:26Z] t=16m: Scaling workload-b down to 350
+deployment.apps/workload-b scaled
+[2026-04-01T02:19:27Z] Waiting 9m...
+[2026-04-01T02:28:27Z] t=25m: Scaling workload-a down to 10
+deployment.apps/workload-a scaled
+[2026-04-01T02:29:27Z] t=26m: Scaling workload-b down to 10
+deployment.apps/workload-b scaled
+[2026-04-01T02:29:27Z] Waiting 10m for consolidation...
+[2026-04-01T02:39:27Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "trusting-hertz-2033931395" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-04-01T02:40:17Z] === DONE: balanced-k2 — disruptions=8 disrupted_nodes=8 final_nodes=1 ===
+[2026-04-01T02:40:18Z] === START: when-underutilized (template: when-underutilized-hetero) ===
+No resources found
+nodepool.karpenter.sh/default created
+deployment.apps/workload-a created
+deployment.apps/workload-b created
+[2026-04-01T02:40:33Z] Waiting for 1 pods Running (timeout 120s)...
+[2026-04-01T02:40:38Z] All 1 pods Running (1a/1b)
+[2026-04-01T02:40:48Z] t=10s: Scaling to 500 replicas
+deployment.apps/workload-a scaled
+deployment.apps/workload-b scaled
+[2026-04-01T02:40:48Z] Waiting for 500 pods Running (timeout 600s)...
+[2026-04-01T02:41:50Z] All 500 pods Running (500a/500b)
+[2026-04-01T02:41:50Z] Waiting 14m50s...
+[2026-04-01T02:56:40Z] t=15m: Scaling workload-a down to 350
+deployment.apps/workload-a scaled
+[2026-04-01T02:57:40Z] t=16m: Scaling workload-b down to 350
+deployment.apps/workload-b scaled
+[2026-04-01T02:57:40Z] Waiting 9m...
+[2026-04-01T03:06:40Z] t=25m: Scaling workload-a down to 10
+deployment.apps/workload-a scaled
+[2026-04-01T03:07:40Z] t=26m: Scaling workload-b down to 10
+deployment.apps/workload-b scaled
+[2026-04-01T03:07:40Z] Waiting 10m for consolidation...
+[2026-04-01T03:17:40Z] t=35m: Sequence complete
+deployment.apps "workload-a" deleted
+deployment.apps "workload-b" deleted
+node "affectionate-engelbart-33042939" deleted
+nodepool.karpenter.sh "default" deleted
+[2026-04-01T03:18:31Z] === DONE: when-underutilized — disruptions=11 disrupted_nodes=11 final_nodes=1 ===
+[2026-04-01T03:18:31Z] Complete: 3/3 succeeded
+[2026-04-01T03:18:31Z] Results: /Users/jonesflp/gt/k8s/results/kwok-balanced-threshold
+[2026-04-01T03:18:31Z] Generating comparison report: /Users/jonesflp/gt/k8s/results/kwok-balanced-threshold/comparison.md
+[2026-04-01T03:18:32Z] Report written to /Users/jonesflp/gt/k8s/results/kwok-balanced-threshold/comparison.md
