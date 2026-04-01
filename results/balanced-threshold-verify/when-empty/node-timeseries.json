@@ -1,0 +1,318 @@
+[
+  {
+    "time_min": 1.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 1.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 2.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 2.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 3.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 3.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 4.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 4.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 5.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 5.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 6.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 6.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 7.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 7.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 8.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 8.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 9.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 9.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 10.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 10.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 11.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 11.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 12.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 12.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 13.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 13.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 14.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 14.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 15.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 15.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 16.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 16.5,
+    "nodes": 126
+  },
+  {
+    "time_min": 17.0,
+    "nodes": 126
+  },
+  {
+    "time_min": 17.5,
+    "nodes": 124
+  },
+  {
+    "time_min": 18.0,
+    "nodes": 120
+  },
+  {
+    "time_min": 18.5,
+    "nodes": 114
+  },
+  {
+    "time_min": 19.0,
+    "nodes": 108
+  },
+  {
+    "time_min": 19.5,
+    "nodes": 102
+  },
+  {
+    "time_min": 20.0,
+    "nodes": 96
+  },
+  {
+    "time_min": 20.5,
+    "nodes": 92
+  },
+  {
+    "time_min": 21.0,
+    "nodes": 90
+  },
+  {
+    "time_min": 21.5,
+    "nodes": 90
+  },
+  {
+    "time_min": 22.0,
+    "nodes": 90
+  },
+  {
+    "time_min": 22.5,
+    "nodes": 90
+  },
+  {
+    "time_min": 23.0,
+    "nodes": 90
+  },
+  {
+    "time_min": 23.5,
+    "nodes": 90
+  },
+  {
+    "time_min": 24.0,
+    "nodes": 90
+  },
+  {
+    "time_min": 24.5,
+    "nodes": 90
+  },
+  {
+    "time_min": 25.0,
+    "nodes": 90
+  },
+  {
+    "time_min": 25.5,
+    "nodes": 90
+  },
+  {
+    "time_min": 26.0,
+    "nodes": 88
+  },
+  {
+    "time_min": 26.5,
+    "nodes": 84
+  },
+  {
+    "time_min": 27.0,
+    "nodes": 78
+  },
+  {
+    "time_min": 27.5,
+    "nodes": 70
+  },
+  {
+    "time_min": 28.0,
+    "nodes": 61
+  },
+  {
+    "time_min": 28.5,
+    "nodes": 53
+  },
+  {
+    "time_min": 29.0,
+    "nodes": 46
+  },
+  {
+    "time_min": 29.5,
+    "nodes": 39
+  },
+  {
+    "time_min": 30.0,
+    "nodes": 34
+  },
+  {
+    "time_min": 30.5,
+    "nodes": 31
+  },
+  {
+    "time_min": 31.0,
+    "nodes": 28
+  },
+  {
+    "time_min": 31.5,
+    "nodes": 25
+  },
+  {
+    "time_min": 32.0,
+    "nodes": 23
+  },
+  {
+    "time_min": 32.5,
+    "nodes": 21
+  },
+  {
+    "time_min": 33.0,
+    "nodes": 19
+  },
+  {
+    "time_min": 33.5,
+    "nodes": 18
+  },
+  {
+    "time_min": 34.0,
+    "nodes": 17
+  },
+  {
+    "time_min": 34.5,
+    "nodes": 16
+  },
+  {
+    "time_min": 35.0,
+    "nodes": 15
+  },
+  {
+    "time_min": 35.5,
+    "nodes": 14
+  },
+  {
+    "time_min": 36.0,
+    "nodes": 13
+  },
+  {
+    "time_min": 36.5,
+    "nodes": 12
+  },
+  {
+    "time_min": 37.0,
+    "nodes": 11
+  },
+  {
+    "time_min": 37.5,
+    "nodes": 10
+  },
+  {
+    "time_min": 38.0,
+    "nodes": 9
+  },
+  {
+    "time_min": 38.5,
+    "nodes": 8
+  },
+  {
+    "time_min": 39.0,
+    "nodes": 7
+  },
+  {
+    "time_min": 39.5,
+    "nodes": 6
+  },
+  {
+    "time_min": 40.0,
+    "nodes": 5
+  }
+]

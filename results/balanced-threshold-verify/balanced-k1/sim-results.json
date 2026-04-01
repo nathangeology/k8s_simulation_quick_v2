@@ -1,0 +1,21 @@
+{
+  "variant": "balanced-k1",
+  "final_node_count": 9,
+  "peak_node_count": 126,
+  "disruption_count": 6,
+  "disruptions_per_transition": {
+    "transition_500_350": 2,
+    "transition_350_10": 0,
+    "total": 6
+  },
+  "consolidation_decisions": {
+    "total": 0,
+    "accepted": 0,
+    "rejected": 0
+  },
+  "cumulative_cost": 15.59972545676798,
+  "time_weighted_node_count": 208995.0,
+  "running_pods": 146,
+  "pending_pods": 0,
+  "events_processed": 1058
+}

@@ -1,0 +1,17 @@
+{"ts":"2026-04-01T00:53:52Z","nodes":1,"pods":28,"pending":26}
+{"ts":"2026-04-01T00:54:07Z","nodes":29,"pods":329,"pending":158}
+{"ts":"2026-04-01T00:54:23Z","nodes":61,"pods":633,"pending":151}
+{"ts":"2026-04-01T00:54:38Z","nodes":95,"pods":939,"pending":190}
+{"ts":"2026-04-01T00:54:53Z","nodes":126,"pods":1000,"pending":5}
+{"ts":"2026-04-01T00:55:09Z","nodes":126,"pods":1000,"pending":0}
+{"ts":"2026-04-01T00:55:24Z","nodes":126,"pods":700,"pending":0}
+{"ts":"2026-04-01T00:55:39Z","nodes":126,"pods":700,"pending":0}
+{"ts":"2026-04-01T00:55:55Z","nodes":126,"pods":700,"pending":0}
+{"ts":"2026-04-01T00:56:10Z","nodes":123,"pods":700,"pending":0}
+{"ts":"2026-04-01T00:56:25Z","nodes":123,"pods":700,"pending":0}
+{"ts":"2026-04-01T00:56:40Z","nodes":123,"pods":639,"pending":0}
+{"ts":"2026-04-01T00:56:56Z","nodes":123,"pods":333,"pending":0}
+{"ts":"2026-04-01T00:57:11Z","nodes":123,"pods":28,"pending":0}
+{"ts":"2026-04-01T00:57:26Z","nodes":123,"pods":20,"pending":0}
+{"ts":"2026-04-01T00:57:41Z","nodes":110,"pods":20,"pending":0}
+{"ts":"2026-04-01T00:57:57Z","nodes":110,"pods":20,"pending":0}

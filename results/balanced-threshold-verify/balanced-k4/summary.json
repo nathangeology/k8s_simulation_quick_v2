@@ -1,0 +1,11 @@
+{
+  "variant": "balanced-k4",
+  "final_node_count": 77,
+  "mid_node_count": 100,
+  "final_pod_count": 20,
+  "evictions": 1,
+  "empty_decisions": 1,
+  "cj_decisions": 0,
+  "underutil_decisions": 0,
+  "collected_at": "2026-04-01T01:13:07Z"
+}

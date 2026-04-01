@@ -1,0 +1,21 @@
+{
+  "variant": "when-empty",
+  "final_node_count": 5,
+  "peak_node_count": 126,
+  "disruption_count": 0,
+  "disruptions_per_transition": {
+    "transition_500_350": 0,
+    "transition_350_10": 0,
+    "total": 0
+  },
+  "consolidation_decisions": {
+    "total": 0,
+    "accepted": 0,
+    "rejected": 0
+  },
+  "cumulative_cost": 14.713511015782409,
+  "time_weighted_node_count": 198285.0,
+  "running_pods": 146,
+  "pending_pods": 0,
+  "events_processed": 1048
+}
