@@ -1,0 +1,13 @@
+{
+  "variant": "when-empty",
+  "peak_node_count": 127,
+  "mid_node_count": 127,
+  "final_node_count": 20,
+  "final_pod_count": 20,
+  "node_disruptions": 2,
+  "pod_evictions": 14,
+  "empty_decisions": 2,
+  "balanced_decisions": 0,
+  "underutil_decisions": 0,
+  "collected_at": "2026-04-01T04:48:44Z"
+}

@@ -1,0 +1,13 @@
+{
+  "variant": "balanced-k2",
+  "peak_node_count": 128,
+  "mid_node_count": 107,
+  "final_node_count": 9,
+  "final_pod_count": 20,
+  "node_disruptions": 2,
+  "pod_evictions": 102,
+  "empty_decisions": 0,
+  "balanced_decisions": 2,
+  "underutil_decisions": 0,
+  "collected_at": "2026-04-01T05:24:55Z"
+}
