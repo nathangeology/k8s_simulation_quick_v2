@@ -1,0 +1,14 @@
+{
+  "variant": "when-empty",
+  "final_node_count": 5,
+  "final_pod_count": 20,
+  "window1_nodes_before": 8,
+  "window1_nodes_after": 8,
+  "window2_nodes_before": 8,
+  "node_disruptions": 3,
+  "pod_evictions": 0,
+  "empty_path_entries": 3,
+  "underutil_path_entries": 0,
+  "balanced_path_entries": 0,
+  "collected_at": "2026-04-15T02:34:45Z"
+}

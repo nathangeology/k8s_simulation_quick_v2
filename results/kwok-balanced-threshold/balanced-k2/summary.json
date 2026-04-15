@@ -1,0 +1,14 @@
+{
+  "variant": "balanced-k2",
+  "final_node_count": 1,
+  "final_pod_count": 20,
+  "window1_nodes_before": 6,
+  "window1_nodes_after": 4,
+  "window2_nodes_before": 4,
+  "node_disruptions": 8,
+  "pod_evictions": 0,
+  "empty_path_entries": 2,
+  "underutil_path_entries": 0,
+  "balanced_path_entries": 6,
+  "collected_at": "2026-04-15T03:10:22Z"
+}

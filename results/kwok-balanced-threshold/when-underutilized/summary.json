@@ -1,0 +1,14 @@
+{
+  "variant": "when-underutilized",
+  "final_node_count": 1,
+  "final_pod_count": 20,
+  "window1_nodes_before": 8,
+  "window1_nodes_after": 4,
+  "window2_nodes_before": 4,
+  "node_disruptions": 9,
+  "pod_evictions": 0,
+  "empty_path_entries": 3,
+  "underutil_path_entries": 5,
+  "balanced_path_entries": 1,
+  "collected_at": "2026-04-15T03:45:57Z"
+}
