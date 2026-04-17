@@ -101,6 +101,11 @@ fn has_do_not_disrupt(state: &ClusterState, pod_ids: &[PodId]) -> bool {
 }
 
 fn reconcile(state: &mut ClusterState, strategy: DeletionCostStrategy) {
+    if strategy == DeletionCostStrategy::PodDeletionCostController {
+        reconcile_pod_deletion_cost_controller(state);
+        return;
+    }
+
     let nodes = active_nodes(state);
     if nodes.is_empty() {
         return;
@@ -142,6 +147,69 @@ fn reconcile(state: &mut ClusterState, strategy: DeletionCostStrategy) {
     }
 }
 
+/// Maximum number of consolidation-candidate nodes annotated per cycle (PR #2894).
+const TOP_N_CANDIDATES: usize = 50;
+
+/// Models the pod-deletion-cost controller from Karpenter PR #2894.
+///
+/// Three-tier ranking:
+///   Tier 0 (lowest cost): cordoned nodes (proxy for drifted — being consolidated)
+///   Tier 1 (middle):      normal nodes
+///   Tier 2 (highest cost): do-not-disrupt nodes
+///
+/// Within each tier, nodes are sorted by pod count ascending (fewest pods = lowest
+/// deletion cost = deleted first by RS). Only the top 50 candidates get annotated.
+fn reconcile_pod_deletion_cost_controller(state: &mut ClusterState) {
+    let nodes = active_nodes(state);
+    if nodes.is_empty() {
+        return;
+    }
+
+    // Three-tier partition
+    let mut drifted: Vec<(NodeId, Vec<PodId>)> = Vec::new();
+    let mut normal: Vec<(NodeId, Vec<PodId>)> = Vec::new();
+    let mut protected: Vec<(NodeId, Vec<PodId>)> = Vec::new();
+
+    for (nid, pods) in nodes {
+        let node = match state.nodes.get(nid) {
+            Some(n) => n,
+            None => continue,
+        };
+        if has_do_not_disrupt(state, &pods) || node.do_not_disrupt {
+            protected.push((nid, pods));
+        } else if node.cordoned {
+            drifted.push((nid, pods));
+        } else {
+            normal.push((nid, pods));
+        }
+    }
+
+    // Sort each tier by pod count ascending (fewest pods = best consolidation target)
+    let sort_by_pod_count = |v: &mut Vec<(NodeId, Vec<PodId>)>| {
+        v.sort_by_key(|(_, pods)| pods.len());
+    };
+    sort_by_pod_count(&mut drifted);
+    sort_by_pod_count(&mut normal);
+    sort_by_pod_count(&mut protected);
+
+    // Chain tiers: drifted (lowest cost) → normal → protected (highest cost)
+    // Only annotate the top TOP_N_CANDIDATES nodes
+    let all: Vec<&(NodeId, Vec<PodId>)> = drifted.iter()
+        .chain(normal.iter())
+        .chain(protected.iter())
+        .take(TOP_N_CANDIDATES)
+        .collect();
+
+    for (i, (_, pod_ids)) in all.iter().enumerate() {
+        let cost = BASE_RANK + i as i32;
+        for pid in pod_ids.iter().copied() {
+            if let Some(pod) = state.pods.get_mut(pid) {
+                pod.deletion_cost = Some(cost);
+            }
+        }
+    }
+}
+
 /// Sort nodes in-place according to the ranking strategy.
 /// After sorting, index 0 = most preferred for deletion (lowest cost).
 fn rank_nodes(
@@ -150,7 +218,7 @@ fn rank_nodes(
     strategy: DeletionCostStrategy,
 ) {
     match strategy {
-        DeletionCostStrategy::None => {}
+        DeletionCostStrategy::None | DeletionCostStrategy::PodDeletionCostController => {}
         DeletionCostStrategy::Random => {
             // Deterministic "random" — use node id index as pseudo-random key
             // Real randomness would need an Rng, but for simulation reproducibility

@@ -316,6 +316,11 @@ pub enum DeletionCostStrategy {
     LargestFirst,
     /// Rank by unallocated_cpu / pod_count descending — targets inefficiently packed nodes.
     UnallocatedVcpu,
+    /// Models the pod-deletion-cost controller from Karpenter PR #2894.
+    /// Three-tier ranking: drifted nodes (lowest cost) → normal → do-not-disrupt (highest).
+    /// Within each tier, sorted by pod count ascending (fewest pods = lowest cost).
+    /// Only the top 50 consolidation candidates get annotated per cycle.
+    PodDeletionCostController,
 }
 
 // ── ReplicaSet ──────────────────────────────────────────────────

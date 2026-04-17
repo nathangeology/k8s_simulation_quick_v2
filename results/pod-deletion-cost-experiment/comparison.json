@@ -1,0 +1,27 @@
+{
+  "disruption_count": {
+    "baseline": 266.9,
+    "controller": 346,
+    "delta_pct": 29.636568002997386
+  },
+  "cumulative_cost": {
+    "baseline": 13.111544844292242,
+    "controller": 13.428843633053862,
+    "delta_pct": 2.419995450801116
+  },
+  "time_weighted_node_count": {
+    "baseline": 6780.0,
+    "controller": 6930.0,
+    "delta_pct": 2.2123893805309733
+  },
+  "node_count": {
+    "baseline": 1,
+    "controller": 1,
+    "delta_pct": 0.0
+  },
+  "time_to_stable": {
+    "baseline": 1740.0,
+    "controller": 1800.0,
+    "delta_pct": 3.4482758620689653
+  }
+}
