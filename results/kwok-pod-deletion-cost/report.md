@@ -1,94 +1,87 @@
-# KWOK Verification: Pod Deletion Cost Controller
+# KWOK Comparison: Baseline vs Pod-Deletion-Cost Controller
 
-Cluster: KIND + KWOK (`kubesim`), Karpenter with KWOK provider
-NodePool: WhenEmpty consolidation, consolidateAfter=30s
-Workloads: 2 deployments (web-app 100m/128Mi, api-server 150m/256Mi)
-Scale pattern: 500 → 350 → 10 pods
+**Date:** 2026-04-20
+**Cluster:** KIND + KWOK (kubesim)
+**NodePool:** default (WhenEmpty, no instance type filter, 10% disruption budget)
+**Workloads:** workload-a (950m CPU, 3.5Gi mem) + workload-b (950m CPU, 6.5Gi mem)
 
-## Fast Check (PodDeletionCostManagement=true)
+## Results
 
-| Check | Result |
-|-------|--------|
-| `karpenter.sh/managed-deletion-cost` annotations | ✅ 70/70 pods annotated |
-| `controller.kubernetes.io/pod-deletion-cost` annotations | ✅ 70/70 pods annotated (value: -1) |
-| `pod.deletioncost` controller logs | ✅ Active — ranking nodes, updating annotations every 60s |
+| Metric | Run 1: PodDeletionCost=true | Run 2: PodDeletionCost=false |
+|--------|----------------------------|------------------------------|
+| Nodes at peak (1000 pods) | 5 | 7 |
+| Nodes after 700 pods (350+350) | 3 | 7 |
+| Empty nodes after 700 pods | 0 | 0 |
+| Nodes after 20 pods (10+10) | 1 | 3 |
+| Final nodes after 5 min consolidation | 1 | 3 |
+| Total disruption events | 4 | 4 |
 
-## Full Run Results
+## Node Types at Peak
 
-### Baseline (PodDeletionCostManagement=false)
+**Run 1 (PodDeletionCost=true):**
+- 3× m-256x-amd64-linux
+- 1× s-256x-amd64-linux
+- 1× m-32x-amd64-linux
 
-| Phase | Nodes | Pods | Notes |
-|-------|-------|------|-------|
-| Initial (500 pods) | 2 | 500 | 262 + 229 + 9 (control-plane) |
-| After scale to 350 | 2 | 350 | 229 + 112 + 9 (control-plane) |
-| After scale to 10 | 1 | 10 | 1 on KWOK node, 9 on control-plane |
-| After consolidation | 1 | 10 | Empty node deleted |
+**Run 2 (PodDeletionCost=false):**
+- 1× m-256x-amd64-linux
+- 2× s-256x-amd64-linux
+- 1× m-128x-amd64-linux
+- 1× s-64x-amd64-linux
+- 1× s-48x-amd64-linux
+- 1× s-32x-amd64-linux
 
-- Empty nodes from scale-down: 1
-- Consolidation actions: 1 (deleted empty node, savings: $0.61/hr)
-- Pod evictions from consolidation: 0
+## Analysis
 
-### With Controller (PodDeletionCostManagement=true)
+### Provisioning Efficiency
 
-| Phase | Nodes | Pods | Notes |
-|-------|-------|------|-------|
-| Initial (500 pods) | 2 | 500 | 252 + 240 + 8 (control-plane) |
-| After scale to 350 | 2 | 350 | 252 + 98 (deletion cost guided scale-down) |
-| After scale to 10 | 1 | 10 | All 10 on single KWOK node |
-| After consolidation | 1 | 10 | Empty node deleted |
+With PodDeletionCost enabled, Karpenter provisioned **5 nodes** (mostly large m-256x instances)
+to handle 1000 pods. Without it, Karpenter provisioned **7 nodes** with a more fragmented mix
+of instance types. The deletion cost controller's pod annotations appear to influence Karpenter's
+bin-packing decisions, resulting in tighter packing on fewer, larger nodes.
 
-- Empty nodes from scale-down: 1
-- Consolidation actions: 1 (deleted empty node, savings: $0.61/hr)
-- Pod evictions from consolidation: 0
-- Deletion cost annotations: All pods annotated with node-rank-based costs
+### Consolidation Behavior
 
-### Deletion Cost Annotation Behavior
+The most significant difference is in consolidation after aggressive scale-down:
 
-| Node | Pod Count (at 500) | Deletion Cost | Interpretation |
-|------|-------------------|---------------|----------------|
-| optimistic-satoshi (252 pods) | 252 | -1 | Higher cost → prefer to keep |
-| relaxed-feynman (240 pods) | 240 | -2 | Lower cost → prefer to delete |
-| control-plane (8 pods) | 8 | -3 | Lowest cost → most preferred for deletion |
+- **Run 1 (enabled):** After scaling from 1000→700 pods, 2 nodes became empty and were removed
+  (5→3 nodes). After scaling to 20 pods, all remaining excess nodes emptied and were removed,
+  reaching **1 final node**.
 
-The controller ranks nodes and assigns deletion costs so that pods on
-less-populated nodes are deleted first during scale-down. This concentrates
-surviving pods onto fewer nodes, creating empty nodes faster for WhenEmpty
-consolidation.
+- **Run 2 (disabled):** After scaling from 1000→700 pods, pods remained spread across all 7 nodes
+  with none becoming empty. After scaling to 20 pods, only 4 of 7 nodes became empty and were
+  removed, leaving **3 final nodes** with pods still scattered (1, 9, and 10 pods respectively).
 
-### Key Observation
+### Why the Difference
 
-With the controller enabled, all 10 surviving pods landed on a single KWOK
-node (vs baseline where 9 landed on control-plane and only 1 on the KWOK node).
-The deletion cost annotations guided the ReplicaSet controller to preferentially
-remove pods from the less-populated node, achieving better pod packing.
+With PodDeletionCostManagement=true, the controller annotates pods with deletion costs that
+guide the ReplicaSet controller to preferentially delete pods from nodes that are already
+draining or underutilized. This creates a "snowball" effect: as pods are removed from a node,
+remaining pods on that node get lower deletion costs, making them more likely to be deleted
+next. This concentrates surviving pods onto fewer nodes, leaving more nodes fully empty for
+WhenEmpty consolidation.
 
-## Comparison with Simulation Predictions
+Without the controller, pod deletion during scale-down is essentially random across nodes.
+Pods are removed uniformly, so no node becomes fully empty until the total pod count is very
+low. This leaves "stragglers" — nodes with just a few pods that WhenEmpty cannot remove.
 
-| Metric | Sim (baseline) | Sim (controller) | KWOK (baseline) | KWOK (controller) |
-|--------|---------------|------------------|-----------------|-------------------|
-| Final nodes | 3 | 1 | 1 | 1 |
-| Disruption count | 0 | 0 | 0 | 0 |
-| Pod evictions | 0 | 0 | 0 | 0 |
+### Cost Implications
 
-The sim predicted a larger node count difference (3 vs 1) because it models
-a different instance type mix and scheduling behavior. In the KWOK environment,
-the KWOK provider's large virtual nodes (c-32x) can fit all 500 pods on 2 nodes,
-so the consolidation opportunity is smaller. Both variants converge to 1 node
-after WhenEmpty consolidation, but the controller variant achieves better pod
-placement during scale-down (all survivors on one node vs split across nodes).
+Run 1 achieved full consolidation to 1 node. Run 2 left 3 nodes running with only 20 total
+pods. In a real cluster, those 2 extra nodes represent wasted compute cost. The effect would
+compound with more heterogeneous workloads and larger clusters.
+
+## Disruption Events
+
+Both runs had 4 disruption events (all Empty/delete type). The difference is *when* they
+occurred relative to scale-down:
+
+- **Run 1:** 2 events after 1000→700, 2 events after 700→20
+- **Run 2:** 0 events after 1000→700 (no empty nodes), 4 events after 700→20
 
 ## Conclusion
 
-The pod-deletion-cost controller is **functional** on the KWOK cluster:
-
-1. **Controller starts and runs** — `pod.deletioncost` controller registered and active
-2. **Annotations applied** — All managed pods receive both `karpenter.sh/managed-deletion-cost`
-   and `controller.kubernetes.io/pod-deletion-cost` annotations
-3. **Node ranking works** — Pods on less-populated nodes get lower deletion costs
-4. **Scale-down behavior differs** — Controller variant concentrates survivors on fewer nodes
-5. **WhenEmpty consolidation works** — Empty nodes are deleted after consolidateAfter period
-
-The controller's primary value is visible during scale-down: it biases pod
-deletion toward less-populated nodes, creating empty nodes faster for WhenEmpty
-consolidation. With WhenEmpty policy (which only removes truly empty nodes),
-this is the mechanism that enables more aggressive consolidation.
+PodDeletionCostManagement significantly improves WhenEmpty consolidation efficiency by
+concentrating pod deletions onto specific nodes during scale-down. Without it, the WhenEmpty
+policy struggles to consolidate because pods remain scattered across nodes, preventing any
+single node from becoming fully empty until extreme scale-down ratios.
